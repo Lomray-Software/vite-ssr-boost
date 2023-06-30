@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - prod
+      - staging
 jobs:
   release:
     name: Release
