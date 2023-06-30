@@ -1,0 +1,58 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "allowUnreachableCode": false,
+    "noFallthroughCasesInSwitch": true,
+    "allowSyntheticDefaultImports": true,
+    "downlevelIteration": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "lib": [
+      "es6",
+      "es2015",
+      "es2017",
+      "es2019",
+      "es2021",
+      "dom",
+      "webworker"
+    ],
+    "module": "ES2022",
+    "moduleResolution": "Node",
+    "target": "ESNext",
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "declaration": true,
+    "noImplicitThis": true,
+    "noUnusedLocals": false,
+    "sourceMap": true,
+    "strictNullChecks": true,
+    "strict": false,
+    "pretty": true,
+    "suppressImplicitAnyIndexErrors": true,
+    "useDefineForClassFields": true,
+    "jsx": "react",
+    "baseUrl": "./src",
+    "paths": {
+      "@browser/*": ["./browser/*"],
+      "@cli/*": ["./cli/*"],
+      "@components/*": ["./components/*"],
+      "@constants/*": ["./constants/*"],
+      "@context/*": ["./context/*"],
+      "@helpers/*": ["./helpers/*"],
+      "@node/*": ["./node/*"],
+      "@services/*": ["./services/*"]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "jest",
+    "node_modules",
+    "lib",
+    "commitlint.config.js",
+    "nyc.config.js",
+    "rollup.config.js"
+  ]
+}
