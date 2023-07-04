@@ -24,6 +24,7 @@
 - [Getting started](#getting-started)
 - [How to use](#how-to-use)
 - [CLI](#cli)
+- [Demo](#demo)
 - [Bugs and feature requests](#bugs-and-feature-requests)
 - [License](#license)
 
@@ -159,6 +160,9 @@ Explore all commands and options:
 ```shell
 ssr-boost -h
 ```
+
+## Demo
+Explore [demo app](https://github.com/Lomray-Software/vite-template) to more understand.
 
 ## Bugs and feature requests
 
