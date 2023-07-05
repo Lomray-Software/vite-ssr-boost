@@ -47,15 +47,15 @@ export interface IRenderOptions<TAppProps = Record<string, any>> {
   onShellError?: (params: {
     context: IRequestContext<TAppProps>;
     error: Error;
-  }) => string | undefined; // return html or undefined
+  }) => string | undefined | void; // return html or undefined
   onError?: (params: { context: IRequestContext<TAppProps>; error: IObtainStreamErrorOut }) => void;
   onResponse?: (params: {
     context: IRequestContext<TAppProps>;
     html: string;
-  }) => string | undefined;
+  }) => string | undefined | void;
   getState?: (params: {
     context: IRequestContext<TAppProps>;
-  }) => Record<string, Record<string, any>> | undefined;
+  }) => Record<string, Record<string, any>> | undefined | void;
 }
 
 export interface IRouterReadyOut {
