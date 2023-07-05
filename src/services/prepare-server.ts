@@ -80,7 +80,7 @@ class PrepareServer {
       resolvedEntrypoint = (await import(entrypointPath)).default;
     }
 
-    const { render, initServer } = resolvedEntrypoint;
+    const { render, init } = resolvedEntrypoint;
     const {
       onServerCreated,
       onRequest,
@@ -91,7 +91,7 @@ class PrepareServer {
       onError,
       getState,
     } =
-      (await initServer?.({
+      (await init?.({
         config: this.config,
       })) ?? {};
 

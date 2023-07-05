@@ -19,7 +19,7 @@ import type ServerConfig from '@services/server-config';
 export interface IRequestContext<TAppProps = Record<any, any>> {
   req: Request;
   res: ExpressResponse;
-  appProps: TAppProps;
+  appProps: NonNullable<TAppProps>;
   html: { header: string; footer: string };
   routerContext?: StaticHandlerContext;
   serverContext?: IServerContext;
@@ -43,7 +43,7 @@ export interface IRenderOptions<TAppProps = Record<string, any>> {
   onRouterReady?: (params: {
     context: IRequestContext<TAppProps>;
   }) => Promise<IRouterReadyOut> | IRouterReadyOut;
-  onShellReady?: (params: { context: IRequestContext }) => IShellReadyOut;
+  onShellReady?: (params: { context: IRequestContext<TAppProps> }) => IShellReadyOut;
   onShellError?: (params: {
     context: IRequestContext<TAppProps>;
     error: Error;

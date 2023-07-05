@@ -26,20 +26,17 @@ export interface IEntrypointOptions<TAppProps = Record<string, any>> {
 
 export interface IPrepareRenderOut<TAppProps = Record<string, any>> {
   render: TRender;
-  initServer: IEntryServerOptions<TAppProps>['initServer'];
+  init: IEntryServerOptions<TAppProps>['init'];
 }
 
 export interface IAppServerProps<T = Record<string, any>> {
-  server: T & {
-    req: Request;
-  };
+  server: T;
 }
 
-export type TApp<T> = FC<PropsWithChildren<IAppServerProps<T>>>;
+export type TApp<T> = FC<PropsWithChildren<Record<string, any> & IAppServerProps<T>>>;
 
 export interface IEntryServerOptions<TAppProps = Record<string, any>> {
-  routes: RouteObject[];
-  initServer?: (params: {
+  init?: (params: {
     config: ServerConfig;
   }) => IEntrypointOptions<TAppProps> | Promise<IEntrypointOptions<TAppProps>>;
 }
@@ -48,14 +45,15 @@ export interface IEntryServerOptions<TAppProps = Record<string, any>> {
  * Render server side application
  */
 function entry<TAppProps>(
-  { routes, initServer }: IEntryServerOptions<TAppProps>,
   App: TApp<TAppProps>,
+  routes: RouteObject[],
+  { init }: IEntryServerOptions<TAppProps> = {},
 ): IPrepareRenderOut<TAppProps> {
   const handler = createStaticHandler(routes);
 
   return {
     render: render.bind(null, { handler, App } as IRenderParams<TAppProps>) as TRender,
-    initServer,
+    init,
   };
 }
 

@@ -1,3 +1,4 @@
+import type { Router as RemixRouter } from '@remix-run/router/dist/router';
 import type { FC, PropsWithChildren } from 'react';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -5,29 +6,28 @@ import type { RouteObject } from 'react-router-dom';
 import { createBrowserRouter, matchRoutes, RouterProvider } from 'react-router-dom';
 import { IS_SSR_MODE } from '@constants/common';
 
-export interface IEntryClientOptions {
-  routes: RouteObject[];
-}
-
 export interface IAppClientProps<T = undefined> {
   client: T;
 }
 
 export interface IInitPropsParams {
   isSSRMode: boolean;
+  router: RemixRouter;
 }
 
 export type TApp<T> = FC<PropsWithChildren<IAppClientProps<T>>>;
 
-export type TAppGetProps<T> = (params: IInitPropsParams) => Promise<T>;
+export interface IEntryClientOptions<T> {
+  init?: (params: IInitPropsParams) => Promise<T>;
+}
 
 /**
  * Render client side application
  */
 async function entry<TAppProps>(
-  { routes }: IEntryClientOptions,
   App: TApp<TAppProps>,
-  initProps?: TAppGetProps<TAppProps>,
+  routes: RouteObject[],
+  { init }: IEntryClientOptions<TAppProps> = {},
 ): Promise<ReactDOM.Root | void> {
   const lazyMatches = matchRoutes(routes, window.location)?.filter((m) => m.route.lazy);
 
@@ -46,9 +46,9 @@ async function entry<TAppProps>(
     );
   }
 
-  const appProps = (await initProps?.({ isSSRMode: IS_SSR_MODE })) as TAppProps;
   const router = createBrowserRouter(routes);
   const root = document.getElementById('root') as HTMLElement;
+  const appProps = (await init?.({ isSSRMode: IS_SSR_MODE, router })) as TAppProps;
 
   const AppComponent: FC = () => (
     <App client={appProps}>
