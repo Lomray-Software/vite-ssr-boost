@@ -78,7 +78,12 @@ import entryClient from '@lomray/vite-ssr-boost/browser/entry';
 import App from './App.tsx'
 import routes from './routes';
 
-void entryClient({ routes }, App);
+void entryClient(App, routes, {
+  /**
+   * Client configuration (optional)
+   */
+  init: () => {}
+});
 ```
 
 3. Create `server` entrypoint:
@@ -91,12 +96,11 @@ import entryServer from '@lomray/vite-ssr-boost/node/entry';
 import App from './App';
 import routes from './routes';
 
-export default entryServer({
-  routes,
+export default entryServer(App, routes, {
   /**
    * Server configuration (optional)
    */
-  initServer: () => ({
+  init: () => ({
     /**
      * (optional). Called once after express server creation.
      * E.g. use for configure express middlewares
