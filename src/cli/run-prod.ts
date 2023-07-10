@@ -9,6 +9,7 @@ interface IRunProdParams {
   isHost?: boolean;
   isPrintInfo?: boolean;
   onlyClient?: boolean; // SPA mode
+  mode?: string;
 }
 
 interface IRunProdOut {
@@ -24,11 +25,15 @@ async function runProd({
   isHost,
   isPrintInfo,
   port,
+  mode,
   onlyClient = false,
 }: IRunProdParams): Promise<IRunProdOut> {
   global.viteBoostStartTime = performance.now();
 
-  const config = ServerConfig.init({ isHost, isProd: true, isOnlyClient: onlyClient }, { port });
+  const config = ServerConfig.init(
+    { isHost, isProd: true, isOnlyClient: onlyClient, mode },
+    { port },
+  );
   const { run } = await createServer(config);
 
   return {

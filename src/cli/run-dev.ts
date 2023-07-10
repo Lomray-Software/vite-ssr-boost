@@ -7,6 +7,7 @@ interface IRunDevParams {
   version: string;
   isHost?: boolean;
   isPrintInfo?: boolean;
+  mode?: string;
 }
 
 interface IRunDevOut {
@@ -17,10 +18,10 @@ interface IRunDevOut {
 /**
  * Run development server
  */
-async function runDev({ version, isHost, isPrintInfo }: IRunDevParams): Promise<IRunDevOut> {
+async function runDev({ version, isHost, isPrintInfo, mode }: IRunDevParams): Promise<IRunDevOut> {
   global.viteBoostStartTime = performance.now();
 
-  const config = ServerConfig.init({ isHost });
+  const config = ServerConfig.init({ isHost, mode });
   const { run } = await createServer(config);
 
   return {

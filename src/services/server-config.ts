@@ -10,6 +10,7 @@ interface IConfigOptions {
   isHost?: boolean;
   isOnlyClient?: boolean; // SPA mode
   prodParams?: Partial<IConfigParams>;
+  mode?: string;
 }
 
 interface IConfigParams {
@@ -45,6 +46,11 @@ class ServerConfig {
   public readonly isSPA: boolean;
 
   /**
+   * Env mode
+   */
+  public readonly mode?: string;
+
+  /**
    * Vite config - only for development
    */
   protected vite?: ViteDevServer;
@@ -73,12 +79,13 @@ class ServerConfig {
    * @constructor
    */
   protected constructor(
-    { isProd = false, isHost = false, isOnlyClient = false }: IConfigOptions,
+    { isProd = false, isHost = false, isOnlyClient = false, mode }: IConfigOptions,
     prodParams: Partial<IConfigParams>,
   ) {
     this.isProd = isProd;
     this.isHost = isHost;
     this.isSPA = isOnlyClient;
+    this.mode = mode;
     this.prodParams = {
       root: './build',
       publicDir: '/client', // default for production,

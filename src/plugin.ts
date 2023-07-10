@@ -30,10 +30,10 @@ const defaultOptions: IPluginOptions = {
 };
 
 /**
- * Init insane vite ssr plugin
+ * Init plugin
  * @constructor
  */
-function ViteSsrInsanePlugin(options: IPluginOptions = {}): Plugin[] {
+function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
   const dirInfo = new URL(import.meta.url);
   const action = global.viteBoostAction as CliActions;
   const mergedOptions: IPluginOptions = { ...defaultOptions, ...options };
@@ -82,4 +82,4 @@ function ViteSsrInsanePlugin(options: IPluginOptions = {}): Plugin[] {
   return plugins;
 }
 
-export default ViteSsrInsanePlugin;
+export default ViteSsrBoostPlugin;

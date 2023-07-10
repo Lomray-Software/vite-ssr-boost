@@ -10,6 +10,7 @@ interface IBuildParams {
   isWatch?: boolean;
   clientOptions?: string;
   serverOptions?: string;
+  mode?: string;
 }
 
 /**
@@ -38,6 +39,7 @@ async function build({
   isWatch = false,
   clientOptions = '',
   serverOptions = '',
+  mode = '',
 }: IBuildParams): Promise<void | [unknown, unknown]> {
   const perfStart = performance.now();
   const config = await resolveConfig({}, 'build');
@@ -45,18 +47,22 @@ async function build({
   const { outDir } = config.build;
   const types = ['client'];
   const controller = new AbortController();
+  const modeOpt = mode ? `--mode ${mode}` : '';
 
   // build client
   const clientProcess = promisify(
-    childProcess.spawn(`vite build ${clientOptions} --emptyOutDir --outDir ${outDir}/client`, {
-      signal: controller.signal,
-      stdio: 'inherit',
-      shell: true,
-      env: {
-        ...process.env,
-        SSR_BOOST_IS_SSR: isOnlyClient ? '0' : '1',
+    childProcess.spawn(
+      `vite build ${clientOptions} --emptyOutDir --outDir ${outDir}/client ${modeOpt}`,
+      {
+        signal: controller.signal,
+        stdio: 'inherit',
+        shell: true,
+        env: {
+          ...process.env,
+          SSR_BOOST_IS_SSR: isOnlyClient ? '0' : '1',
+        },
       },
-    }),
+    ),
   );
 
   if (!isWatch) {
@@ -69,7 +75,7 @@ async function build({
     // build server
     serverProcess = promisify(
       childProcess.spawn(
-        `vite build ${serverOptions} --emptyOutDir --outDir ${outDir}/server --ssr ${pluginConfig.serverFile}`,
+        `vite build ${serverOptions} --emptyOutDir --outDir ${outDir}/server --ssr ${pluginConfig.serverFile} ${modeOpt}`,
         {
           signal: controller.signal,
           stdio: 'inherit',

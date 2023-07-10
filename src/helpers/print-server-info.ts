@@ -41,6 +41,9 @@ async function printServerInfo(
     isHttps: typeof viteConfig?.server.https === 'boolean' ? viteConfig?.server.https : false,
     rawBase: viteConfig?.['rawBase'],
   });
+  const mode = viteConfig?.mode ?? config.mode ?? 'unknown';
+
+  Logger.info(chalk.dim(chalk.green('  ➜')) + chalk.dim('  Mode:    ') + chalk.bold(mode));
 
   if (!isProd) {
     const vite = config.getVite()!;

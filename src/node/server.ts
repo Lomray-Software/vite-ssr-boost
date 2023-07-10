@@ -36,6 +36,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
         },
       },
       appType: 'custom',
+      mode: config.mode,
     });
 
     // Use vite's connect instance as middleware
