@@ -5,6 +5,7 @@ import ReactDOM from 'react-dom/client';
 import type { RouteObject } from 'react-router-dom';
 import { createBrowserRouter, matchRoutes, RouterProvider } from 'react-router-dom';
 import { IS_SSR_MODE } from '@constants/common';
+import type { TRouteObject } from '@interfaces/route-object';
 
 export interface IAppClientProps<T = undefined> {
   client: T;
@@ -26,10 +27,12 @@ export interface IEntryClientOptions<T> {
  */
 async function entry<TAppProps>(
   App: TApp<TAppProps>,
-  routes: RouteObject[],
+  routes: TRouteObject[],
   { init }: IEntryClientOptions<TAppProps> = {},
 ): Promise<ReactDOM.Root | void> {
-  const lazyMatches = matchRoutes(routes, window.location)?.filter((m) => m.route.lazy);
+  const lazyMatches = matchRoutes(routes as RouteObject[], window.location)?.filter(
+    (m) => m.route.lazy,
+  );
 
   // Load the lazy matches and update the routes before creating router,
   // so we can hydrate the SSR-rendered content synchronously
@@ -46,7 +49,7 @@ async function entry<TAppProps>(
     );
   }
 
-  const router = createBrowserRouter(routes);
+  const router = createBrowserRouter(routes as RouteObject[]);
   const root = document.getElementById('root') as HTMLElement;
   const appProps = (await init?.({ isSSRMode: IS_SSR_MODE, router })) as TAppProps;
 

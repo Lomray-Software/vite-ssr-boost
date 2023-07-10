@@ -24,6 +24,7 @@ export default {
     'express',
     'react',
     'readline',
+    'hjson',
     'node:perf_hooks',
     'node:path',
     'node:dns',
@@ -31,6 +32,7 @@ export default {
     'node:process',
     'node:child_process',
     'node:fs',
+    'node:url',
   ],
   plugins: [
     folderInput(),

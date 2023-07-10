@@ -23,6 +23,7 @@
 ## Table of contents
 - [Getting started](#getting-started)
 - [How to use](#how-to-use)
+- [Plugin options](#plugin-options)
 - [CLI](#cli)
 - [Demo](#demo)
 - [Bugs and feature requests](#bugs-and-feature-requests)
@@ -157,7 +158,35 @@ export default entryServer(App, routes, {
 npm run develop
 ```
 
-__To understand more see the demo app:__ coming soon...
+## Plugin options
+```typescript
+import SsrBoost from '@lomray/vite-ssr-boost/plugin';
+import type { FCRoute } from '@lomray/vite-ssr-boost/interfaces/fc-route';
+
+/**
+ * Configuration
+ */
+SsrBoost({
+  /**
+   * With this option you can export route components like FCRoute or FCCRoute
+   * @example 
+   * const Page: FCRoute = () => <div>Hi</div>;
+   * 
+   * Page.ErrorBoudary = () => <div>Error</div>;
+   * 
+   * export default Page;
+   * 
+   * Routes:
+   * const routes = [{ path: '/', lazyNR: () => import('./pages/home') }]
+   */
+  hasLazyRoutePlugin: true, // default: true
+
+  /**
+   * Add tsconfig aliases to vite config aliases
+   */
+  tsconfigAliases: true, // default: true
+})
+```
 
 ## CLI
 Explore all commands and options:

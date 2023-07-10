@@ -3,11 +3,16 @@ import type { Plugin } from 'vite';
 import CliActions from '@constants/cli-actions';
 import type { ICliContext } from '@constants/cli-context';
 import PLUGIN_NAME from '@constants/plugin-name';
+import ViteMakeAliasesPlugin from '@plugins/make-aliases';
+import type { IPluginOptions as IMakeAliasesPluginOptions } from '@plugins/make-aliases';
+import ViteNormalizeRouterPlugin from '@plugins/normalize-route';
 
 export interface IPluginOptions {
   indexFile?: string; // default: index.html
   serverFile?: string; // default: server.ts
   abortDelay?: number; // How long the server waits for data before giving up. default: 10000 (10 sec)
+  hasLazyRoutePlugin?: boolean; // Possibility to use custom export route component @see FCRoute interface
+  tsconfigAliases?: boolean | IMakeAliasesPluginOptions; // Read aliases from tsconfig
   customShortcuts?: {
     key: string;
     description: string;
@@ -20,6 +25,8 @@ const defaultOptions: IPluginOptions = {
   indexFile: 'index.html',
   serverFile: 'server.ts',
   abortDelay: 10000,
+  hasLazyRoutePlugin: true,
+  tsconfigAliases: true,
 };
 
 /**
@@ -31,7 +38,7 @@ function ViteSsrInsanePlugin(options: IPluginOptions = {}): Plugin[] {
   const action = global.viteBoostAction as CliActions;
   const mergedOptions: IPluginOptions = { ...defaultOptions, ...options };
 
-  return [
+  const plugins: Plugin[] = [
     {
       name: PLUGIN_NAME,
       enforce: 'pre',
@@ -59,6 +66,20 @@ function ViteSsrInsanePlugin(options: IPluginOptions = {}): Plugin[] {
       },
     },
   ];
+
+  const { hasLazyRoutePlugin, tsconfigAliases } = mergedOptions;
+
+  if (hasLazyRoutePlugin) {
+    plugins.push(ViteNormalizeRouterPlugin());
+  }
+
+  if (tsconfigAliases) {
+    plugins.push(
+      ViteMakeAliasesPlugin(typeof tsconfigAliases === 'boolean' ? undefined : tsconfigAliases),
+    );
+  }
+
+  return plugins;
 }
 
 export default ViteSsrInsanePlugin;

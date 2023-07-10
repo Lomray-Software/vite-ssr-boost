@@ -42,7 +42,9 @@
       "@constants/*": ["./constants/*"],
       "@context/*": ["./context/*"],
       "@helpers/*": ["./helpers/*"],
+      "@interfaces/*": ["./interfaces/*"],
       "@node/*": ["./node/*"],
+      "@plugins/*": ["./plugins/*"],
       "@services/*": ["./services/*"]
     }
   },

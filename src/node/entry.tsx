@@ -2,6 +2,7 @@ import type { Express, Request, Response as ExpressResponse } from 'express';
 import type { FC, PropsWithChildren } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { createStaticHandler } from 'react-router-dom/server.mjs';
+import type { TRouteObject } from '@interfaces/route-object';
 import type { IRenderOptions, IRenderParams, TRender } from '@node/render';
 import render from '@node/render';
 import type ServerConfig from '@services/server-config';
@@ -46,10 +47,10 @@ export interface IEntryServerOptions<TAppProps = Record<string, any>> {
  */
 function entry<TAppProps>(
   App: TApp<TAppProps>,
-  routes: RouteObject[],
+  routes: TRouteObject[],
   { init }: IEntryServerOptions<TAppProps> = {},
 ): IPrepareRenderOut<TAppProps> {
-  const handler = createStaticHandler(routes);
+  const handler = createStaticHandler(routes as RouteObject[]);
 
   return {
     render: render.bind(null, { handler, App } as IRenderParams<TAppProps>) as TRender,
