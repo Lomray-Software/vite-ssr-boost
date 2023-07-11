@@ -103,9 +103,16 @@ program
       .env('VITE_BUILD_SERVER_OPTIONS')
       .default(''),
   )
-  .action(async ({ onlyClient, clientOptions, serverOptions, mode }) => {
+  .addOption(
+    new Option(
+      '--unlock-robots',
+      'Change general directive Disallow to Allow in robots.txt',
+    ).default(false),
+  )
+  .action(async ({ onlyClient, clientOptions, serverOptions, mode, unlockRobots }) => {
     await runBuild({
       isOnlyClient: onlyClient,
+      isUnlockRobots: unlockRobots,
       clientOptions,
       serverOptions,
       mode,

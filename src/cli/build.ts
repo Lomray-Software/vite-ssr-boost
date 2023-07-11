@@ -8,10 +8,12 @@ import viteResetCache from '@cli/vite-reset-cache';
 import cliName from '@constants/cli-name';
 import { createDevMarker } from '@helpers/dev-marker';
 import getPluginConfig from '@helpers/plugin-config';
+import unlockRobots from '@helpers/unlock-robots';
 
 interface IBuildParams {
   isOnlyClient?: boolean;
   isWatch?: boolean;
+  isUnlockRobots?: boolean;
   clientOptions?: string;
   serverOptions?: string;
   mode?: string;
@@ -51,6 +53,7 @@ async function build({
   onFinish,
   isOnlyClient = false,
   isWatch = false,
+  isUnlockRobots = false,
   clientOptions = '',
   serverOptions = '',
   mode = '',
@@ -162,6 +165,10 @@ async function build({
     serverProcess?.['command'].stdout.on('data', listener);
 
     return;
+  }
+
+  if (isUnlockRobots) {
+    unlockRobots(config.root, outDir);
   }
 
   createDevMarker(isProd, config);
