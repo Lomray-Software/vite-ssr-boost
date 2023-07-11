@@ -25,7 +25,7 @@
 - [How to use](#how-to-use)
 - [Plugin options](#plugin-options)
 - [CLI](#cli)
-- [Demo](#demo)
+- [Example](#demo)
 - [Bugs and feature requests](#bugs-and-feature-requests)
 - [License](#license)
 

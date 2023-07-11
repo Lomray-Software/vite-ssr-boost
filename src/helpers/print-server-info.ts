@@ -4,6 +4,7 @@ import { performance } from 'node:perf_hooks';
 import chalk from 'chalk';
 import CliActions from '@constants/cli-actions';
 import cliName from '@constants/cli-name';
+import { markerFileName } from '@helpers/dev-marker';
 import printServerUrls from '@helpers/print-server-urls';
 import resolveServerUrls from '@helpers/resolve-server-urls';
 import type ServerConfig from '@services/server-config';
@@ -22,7 +23,7 @@ async function printServerInfo(
 ): Promise<void> {
   const { action } = config.getPluginConfig() ?? {};
   const { isProd, host, root } = config.getParams();
-  const devMarker = `${root}/server/.dev`;
+  const devMarker = `${root}/${markerFileName}`;
 
   const Logger = config.getLogger();
   const perfStart = global.viteBoostStartTime ?? performance.now();
@@ -57,7 +58,7 @@ async function printServerInfo(
     vite.resolvedUrls = resolvedUrls;
     vite.printUrls();
   } else {
-    printServerUrls(resolvedUrls, (msg) => Logger.info(msg));
+    printServerUrls(resolvedUrls, (msg) => Logger.info(`${msg}\n`));
   }
 
   if (action === CliActions.dev) {

@@ -104,7 +104,12 @@ program
       .default(''),
   )
   .action(async ({ onlyClient, clientOptions, serverOptions, mode }) => {
-    await runBuild({ isOnlyClient: onlyClient, clientOptions, serverOptions, mode });
+    await runBuild({
+      isOnlyClient: onlyClient,
+      clientOptions,
+      serverOptions,
+      mode,
+    });
   });
 
 program
@@ -142,6 +147,8 @@ program
   .addOption(portOption)
   .addOption(envModeOption)
   .action(async ({ host, port, onlyClient, mode }) => {
+    global.viteBoostStartTime = performance.now();
+
     const command = async (isPrintInfo?: boolean): Promise<void> => {
       const { server, config } = await runProd({
         version,
@@ -166,15 +173,17 @@ program
     enableShortcuts();
 
     const buildOptions = '-w';
-    const build = runBuild({
+
+    await runBuild({
       mode,
       isWatch: true,
       isOnlyClient: onlyClient,
       clientOptions: buildOptions,
       serverOptions: buildOptions,
+      onFinish: () => {
+        void command();
+      },
     });
-
-    await Promise.all([command(), build]);
   });
 
 program.parse();

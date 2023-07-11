@@ -1,9 +1,12 @@
 import childProcess from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import chalk from 'chalk';
 import { resolveConfig } from 'vite';
+import viteResetCache from '@cli/vite-reset-cache';
 import cliName from '@constants/cli-name';
+import { createDevMarker } from '@helpers/dev-marker';
 import getPluginConfig from '@helpers/plugin-config';
 
 interface IBuildParams {
@@ -12,13 +15,14 @@ interface IBuildParams {
   clientOptions?: string;
   serverOptions?: string;
   mode?: string;
+  onFinish?: () => void;
 }
 
 /**
  * Promisify spawn process
  */
-const promisify = (command: childProcess.ChildProcess) =>
-  new Promise((resolve, reject) => {
+const promisify = (command: childProcess.ChildProcess) => {
+  const promise = new Promise((resolve, reject) => {
     command.on('exit', (code) => {
       resolve(code);
     });
@@ -32,18 +36,32 @@ const promisify = (command: childProcess.ChildProcess) =>
     });
   });
 
+  command.stdout?.pipe(process.stdout);
+  command.stderr?.pipe(process.stderr);
+
+  promise['command'] = command;
+
+  return promise;
+};
+
 /**
  * Build production application
  */
 async function build({
+  onFinish,
   isOnlyClient = false,
   isWatch = false,
   clientOptions = '',
   serverOptions = '',
   mode = '',
-}: IBuildParams): Promise<void | [unknown, unknown]> {
+}: IBuildParams): Promise<void> {
   const perfStart = performance.now();
-  const config = await resolveConfig({}, 'build', mode, 'production');
+  const config = await resolveConfig(
+    {},
+    'build',
+    mode,
+    mode === 'production' ? 'production' : 'development',
+  );
   const pluginConfig = getPluginConfig(config);
   const { outDir } = config.build;
   const types = ['client'];
@@ -51,17 +69,29 @@ async function build({
   const modeOpt = mode ? `--mode ${mode}` : '';
   const nodeEnv = process.env.NODE_ENV || 'development';
   const isProd = nodeEnv === 'production';
+  const buildDir = path.resolve(config.root, outDir);
 
-  // build client
+  // this is required step - build with different env may cause problems
+  await viteResetCache();
+
+  // clear build folder
+  if (fs.existsSync(buildDir)) {
+    fs.rmSync(buildDir, { recursive: true });
+  }
+
+  /**
+   * Build client
+   */
   const clientProcess = promisify(
     childProcess.spawn(
       `vite build ${clientOptions} --emptyOutDir --outDir ${outDir}/client ${modeOpt}`,
       {
         signal: controller.signal,
-        stdio: 'inherit',
+        stdio: [process.stdin, 'pipe', process.stderr],
         shell: true,
         env: {
           ...process.env,
+          FORCE_COLOR: '2',
           SSR_BOOST_IS_SSR: isOnlyClient ? '0' : '1',
         },
       },
@@ -72,19 +102,22 @@ async function build({
     await clientProcess;
   }
 
-  let serverProcess;
+  let serverProcess: Promise<unknown> | undefined;
 
+  /**
+   * Build server
+   */
   if (!isOnlyClient) {
-    // build server
     serverProcess = promisify(
       childProcess.spawn(
         `vite build ${serverOptions} --emptyOutDir --outDir ${outDir}/server --ssr ${pluginConfig.serverFile} ${modeOpt}`,
         {
           signal: controller.signal,
-          stdio: 'inherit',
+          stdio: [process.stdin, 'pipe', process.stderr],
           shell: true,
           env: {
             ...process.env,
+            FORCE_COLOR: '2',
             SSR_BOOST_IS_SSR: isOnlyClient ? '0' : '1',
           },
         },
@@ -93,33 +126,46 @@ async function build({
 
     if (!isWatch) {
       await serverProcess;
-
-      /**
-       * @see printServerInfo
-       */
-      const devMarker = `${config.root}/${outDir}/server/.dev`;
-
-      if (!isProd) {
-        fs.writeFileSync(devMarker, '');
-      } else if (fs.existsSync(devMarker)) {
-        fs.rmSync(devMarker);
-      }
     }
 
     types.push('server');
   }
 
+  /**
+   * Preview mode
+   */
   if (isWatch) {
     process.on('exit', () => {
       controller.abort();
     });
 
-    const buildPromise = Promise.all([clientProcess, serverProcess]);
+    let buildCount = isOnlyClient ? 1 : 2;
+    const listener = (buff: Uint8Array): void => {
+      const msg = Buffer.from(buff).toString();
 
-    buildPromise['controller'] = controller;
+      if (msg.includes('built in')) {
+        buildCount -= 1;
 
-    return buildPromise;
+        if (!buildCount) {
+          clientProcess['command'].stdout.removeListener('data', listener);
+          serverProcess?.['command'].stdout.removeListener('data', listener);
+          createDevMarker(isProd, config);
+          onFinish?.();
+        }
+      }
+    };
+
+    /**
+     * Listen output for call onFinish
+     */
+    clientProcess['command'].stdout.on('data', listener);
+    serverProcess?.['command'].stdout.on('data', listener);
+
+    return;
   }
+
+  createDevMarker(isProd, config);
+  onFinish?.();
 
   const buildDurationString = chalk.dim(
     `${chalk.yellowBright(types.join(','))} built in ${chalk.reset(
