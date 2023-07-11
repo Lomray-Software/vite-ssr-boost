@@ -48,7 +48,7 @@ class ServerConfig {
   /**
    * Env mode
    */
-  public readonly mode?: string;
+  public readonly mode: string;
 
   /**
    * Vite config - only for development
@@ -79,7 +79,7 @@ class ServerConfig {
    * @constructor
    */
   protected constructor(
-    { isProd = false, isHost = false, isOnlyClient = false, mode }: IConfigOptions,
+    { isProd = false, isHost = false, isOnlyClient = false, mode = 'production' }: IConfigOptions,
     prodParams: Partial<IConfigParams>,
   ) {
     this.isProd = isProd;

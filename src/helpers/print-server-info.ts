@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
 import chalk from 'chalk';
@@ -20,7 +21,8 @@ async function printServerInfo(
   { version = 'unknown' }: IPrintServerInfoParams,
 ): Promise<void> {
   const { action } = config.getPluginConfig() ?? {};
-  const { isProd, host } = config.getParams();
+  const { isProd, host, root } = config.getParams();
+  const devMarker = `${root}/server/.dev`;
 
   const Logger = config.getLogger();
   const perfStart = global.viteBoostStartTime ?? performance.now();
@@ -30,20 +32,24 @@ async function printServerInfo(
 
   Logger.info(
     `\n  ${chalk.green(
-      `${chalk.bold(cliName.toUpperCase())} v${version}${isProd ? chalk.blue(' PRODUCTION') : ''}`,
+      `${chalk.bold(cliName.toUpperCase())} v${version}`,
     )}  ${startupDurationString}\n`,
     { clear: !Logger.hasWarned },
   );
 
   const viteConfig = config.getVite()?.config;
+  const isProdBuild = !viteConfig?.mode && !fs.existsSync(devMarker);
   const resolvedUrls = await resolveServerUrls(server, {
     host,
     isHttps: typeof viteConfig?.server.https === 'boolean' ? viteConfig?.server.https : false,
     rawBase: viteConfig?.['rawBase'],
   });
-  const mode = viteConfig?.mode ?? config.mode ?? 'unknown';
+  const mode =
+    viteConfig?.mode || isProdBuild
+      ? config.mode
+      : `production ${chalk.red('NODE_ENV=development')}`;
 
-  Logger.info(chalk.dim(chalk.green('  ➜')) + chalk.dim('  Mode:    ') + chalk.bold(mode));
+  Logger.info(chalk.dim(chalk.green('  ➜')) + chalk.dim('  Mode:    ') + chalk.blue(mode));
 
   if (!isProd) {
     const vite = config.getVite()!;

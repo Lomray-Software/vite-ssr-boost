@@ -1,3 +1,4 @@
+import { extname } from 'node:path';
 import type { Plugin } from 'vite';
 import PLUGIN_NAME from '@constants/plugin-name';
 
@@ -26,7 +27,13 @@ function ViteNormalizeRouterPlugin(): Plugin {
   return {
     name: `${PLUGIN_NAME}-normalize-route`,
     transform: (code, id) => {
-      if (!/^.*\.(js|ts|tsx)$/.test(id) || !isRoutesFile(code)) {
+      const extName = extname(id);
+
+      if (
+        id.includes('node_modules') ||
+        !['.js', '.ts', '.tsx'].includes(extName) ||
+        !isRoutesFile(code)
+      ) {
         return;
       }
 

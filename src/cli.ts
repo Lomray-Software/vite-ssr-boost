@@ -52,7 +52,9 @@ const onlyClientOption = new Option('--only-client', 'Build/run only client side
   false,
 );
 const portOption = new Option('--port [port]', 'Server port.').default(3000);
-const envModeOption = new Option('--mode [mode]', 'Env mode.').env('VITE_ENV_MODE').default('');
+const envModeOption = new Option('--mode [mode]', 'Env mode.')
+  .env('VITE_ENV_MODE')
+  .default('production');
 
 /**
  * Cli commands
@@ -111,8 +113,7 @@ program
   .addOption(hostOption)
   .addOption(portOption)
   .addOption(onlyClientOption)
-  .addOption(envModeOption)
-  .action(({ host, port, onlyClient, mode }) => {
+  .action(({ host, port, onlyClient }) => {
     const command = async (isPrintInfo?: boolean): Promise<void> => {
       const { server, config } = await runProd({
         version,
@@ -120,7 +121,6 @@ program
         isPrintInfo,
         port,
         onlyClient,
-        mode,
       });
 
       cliContext.server = server;
@@ -149,7 +149,6 @@ program
         isPrintInfo,
         port,
         onlyClient,
-        mode,
       });
 
       server.on('listening', () => {

@@ -1,4 +1,5 @@
 import childProcess from 'node:child_process';
+import fs from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import chalk from 'chalk';
 import { resolveConfig } from 'vite';
@@ -42,12 +43,14 @@ async function build({
   mode = '',
 }: IBuildParams): Promise<void | [unknown, unknown]> {
   const perfStart = performance.now();
-  const config = await resolveConfig({}, 'build');
+  const config = await resolveConfig({}, 'build', mode, 'production');
   const pluginConfig = getPluginConfig(config);
   const { outDir } = config.build;
   const types = ['client'];
   const controller = new AbortController();
   const modeOpt = mode ? `--mode ${mode}` : '';
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  const isProd = nodeEnv === 'production';
 
   // build client
   const clientProcess = promisify(
@@ -90,6 +93,17 @@ async function build({
 
     if (!isWatch) {
       await serverProcess;
+
+      /**
+       * @see printServerInfo
+       */
+      const devMarker = `${config.root}/${outDir}/server/.dev`;
+
+      if (!isProd) {
+        fs.writeFileSync(devMarker, '');
+      } else if (fs.existsSync(devMarker)) {
+        fs.rmSync(devMarker);
+      }
     }
 
     types.push('server');
@@ -114,7 +128,9 @@ async function build({
   );
 
   console.info(
-    `\n  ${chalk.green(`${chalk.bold(cliName.toUpperCase())}`)}  ${buildDurationString}\n`,
+    `\n  ${chalk.green(`${chalk.bold(cliName.toUpperCase())}`)}  ${buildDurationString} ${
+      isProd ? '' : chalk.redBright(`NODE_ENV=${nodeEnv}`)
+    }\n`,
   );
 }
 
