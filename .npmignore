@@ -9,12 +9,11 @@ coverage
 .gitattributes
 .editorconfig
 .eslintignore
-.eslintrc.js
+.eslintrc.cjs
 .lintstagedrc.js
 commitlint.config.js
 rollup.config.js
-.prettierrc.js
+.prettierrc.cjs
 sonar-project.properties
 tsconfig.json
 release.config.js
-typings
