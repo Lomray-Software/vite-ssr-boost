@@ -58,7 +58,7 @@ async function printServerInfo(
     vite.resolvedUrls = resolvedUrls;
     vite.printUrls();
   } else {
-    printServerUrls(resolvedUrls, (msg) => Logger.info(`${msg}\n`));
+    printServerUrls(resolvedUrls, (msg) => Logger.info(msg));
   }
 
   if (action === CliActions.dev) {

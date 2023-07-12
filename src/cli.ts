@@ -6,6 +6,7 @@ import { Command, Option } from 'commander';
 import runBuild from '@cli/build';
 import onKeyPress from '@cli/keyboard-input';
 import runDev from '@cli/run-dev';
+import runDockerBuild from '@cli/run-docker-build';
 import runProd from '@cli/run-prod';
 import viteResetCache from '@cli/vite-reset-cache';
 import CliActions from '@constants/cli-actions';
@@ -190,6 +191,34 @@ program
       onFinish: () => {
         void command();
       },
+    });
+  });
+
+program
+  .command(CliActions.buildDocker)
+  .description('Create docker image with production build.')
+  .requiredOption('--image-name <image-name>', 'Docker image name.')
+  .addOption(
+    new Option(
+      '--docker-options [docker-options]',
+      'Extra docker options which pass to docker build command.',
+    ),
+  )
+  .addOption(
+    new Option(
+      '--docker-file [docker-file]',
+      'Name of the Dockerfile (Default is PLUGIN_PATH/workflow/Dockerfile).',
+    ),
+  )
+  .addOption(onlyClientOption)
+  .addOption(envModeOption)
+  .action(async ({ imageName, dockerOptions, dockerFile, onlyClient, mode }) => {
+    await runDockerBuild({
+      imageName,
+      dockerOptions,
+      dockerFile,
+      isOnlyClient: onlyClient,
+      mode,
     });
   });
 

@@ -15,6 +15,8 @@ function printServerUrls(urls: ResolvedServerUrls, info: Logger['info']): void {
   for (const url of urls.network) {
     info(`  ${chalk.green('➜')}  ${chalk.bold('Network')}: ${colorUrl(url)}`);
   }
+
+  info('\n');
 }
 
 export default printServerUrls;

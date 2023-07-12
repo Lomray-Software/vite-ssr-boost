@@ -27,7 +27,7 @@ function ViteNormalizeRouterPlugin(): Plugin {
   return {
     name: `${PLUGIN_NAME}-normalize-route`,
     transform: (code, id) => {
-      const extName = extname(id);
+      const extName = extname(id).split('?')[0]!;
 
       if (
         id.includes('node_modules') ||

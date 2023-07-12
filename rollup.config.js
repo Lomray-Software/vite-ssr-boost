@@ -57,6 +57,7 @@ export default {
     copy({
       targets: [
         { src: 'package.json', dest: 'lib' },
+        { src: 'workflow', dest: 'lib' },
       ]
     })
   ],
