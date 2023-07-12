@@ -36,7 +36,7 @@ async function runDockerBuild({
 
   childProcess.execSync(
     `docker build -f ${docFile}` +
-      ` --build-arg ROOT_PATH=${projectRoot} --build-arg BUILD_PATH=${buildDir}` +
+      ` --build-arg BUILD_PATH=${buildDir}` +
       ` --build-arg RUN_TYPE=${runType} --build-arg ENV_MODE=${nodeEnv}` +
       `${dockerOptions} -t ${imageName} ${projectRoot}`,
     {
