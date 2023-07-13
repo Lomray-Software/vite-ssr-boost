@@ -1,0 +1,73 @@
+name: SSR BOOST Build
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        required: false
+        type: string
+        default: 18.13.0
+      app-build-args:
+        required: false
+        type: string
+      docker-file:
+        required: false
+        type: string
+        default: node_modules/@lomray/vite-ssr-boost/workflow/Dockerfile
+    secrets:
+      github-token:
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.ref }}-build
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - run: echo "//npm.pkg.github.com/:_authToken=${{ secrets.github-token }}" > ~/.npmrc
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.config-path }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run eslint
+        run: npm run lint:check
+
+      - name: Typescript check
+        run: npm run ts:check
+
+      - name: Stylelint check
+        run: npm run style:check
+
+      - name: Build application
+        run: |
+          npm pkg delete scripts.prepare
+          npm run build -- ${{ inputs.app-build-args }}
+
+      - name: Prepare docker file
+        if: ${{ inputs.docker-file != '' }}
+        shell: bash
+        id: prepare-docker
+        run: |
+          # ignore errors
+          set +e
+          cp ${{ inputs.docker-file }} Dockerfile
+          echo "docker-file-name=Dockerfile" >> $GITHUB_OUTPUT
+
+      - name: Archive build
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifact
+          path: |
+            build
+            package.json
+            package-lock.json
+            ${{ steps.prepare-docker.outputs.docker-file-name }}

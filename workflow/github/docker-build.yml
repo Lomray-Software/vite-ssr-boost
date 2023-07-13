@@ -1,0 +1,71 @@
+name: SSR BOOST Docker build
+
+on:
+  workflow_call:
+    inputs:
+      registry:
+        required: true
+        type: string
+      image-name:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      app-build-path:
+        required: true
+        type: string
+    secrets:
+      github-token:
+        required: true
+    outputs:
+      image-tag:
+        description: "Docker image with new tag version"
+        value: ${{ jobs.docker-build.outputs.image-tag }}
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.ref }}-build-docker
+      cancel-in-progress: true
+    outputs:
+      # get docker image tag with version
+      image-tag: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: build-artifact
+
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log into registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.github-token }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ inputs.registry }}/${{ inputs.image-name }}
+          tags: |
+            type=raw,prefix={{branch}}-,value=${{ inputs.version }}
+            type=raw,prefix=latest-,value={{branch}}
+
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_PATH=${{ inputs.app-build-path }}

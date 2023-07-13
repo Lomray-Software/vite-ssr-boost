@@ -1,0 +1,48 @@
+name: SSR BOOST Release
+
+on:
+  workflow_call:
+    inputs:
+      has-release-asset:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      github-token:
+        required: true
+    outputs:
+      version:
+        description: "New package version"
+        value: ${{ jobs.release.outputs.version }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.ref }}-release
+      cancel-in-progress: true
+    outputs:
+      version: ${{ steps.package-version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: build-artifact
+
+      - name: Create release asset
+        if: ${{ inputs.has-release-asset }}
+        run: zip -r build.zip build package.json package-lock.json README.md
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.github-token }}
+        run: npx semantic-release
+
+      - name: Get version
+        id: package-version
+        run: npx @lomray/microservices-cli package-version
