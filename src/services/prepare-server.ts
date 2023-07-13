@@ -1,5 +1,7 @@
 import fs from 'fs';
+import process from 'node:process';
 import path from 'path';
+import chalk from 'chalk';
 import type { Request } from 'express';
 import type { IEntrypointOptions, IPrepareRenderOut } from '@node/entry';
 import type { TRender } from '@node/render';
@@ -43,7 +45,6 @@ class PrepareServer {
 
   /**
    * @constructor
-   * @protected
    */
   protected constructor(config: ServerConfig) {
     this.config = config;
@@ -70,14 +71,30 @@ class PrepareServer {
 
     let resolvedEntrypoint: IPrepareRenderOut;
 
-    if (!isProd) {
-      resolvedEntrypoint = (
-        await this.config.getVite()!.ssrLoadModule(entrypointPath, {
-          fixStacktrace: true,
-        })
-      ).default;
-    } else {
-      resolvedEntrypoint = (await import(entrypointPath)).default;
+    try {
+      if (!isProd) {
+        resolvedEntrypoint = (
+          await this.config.getVite()!.ssrLoadModule(entrypointPath, {
+            fixStacktrace: true,
+          })
+        ).default;
+      } else {
+        resolvedEntrypoint = (await import(entrypointPath)).default;
+      }
+    } catch (e) {
+      if (e.message.includes('Cannot find module') && e.message.includes('/build/')) {
+        this.config
+          .getLogger()
+          .error(
+            `Before starting the server, you need to create a build: ${chalk.yellow(
+              'ssr-boost build',
+            )}`,
+          );
+
+        return process.exit(1);
+      }
+
+      throw e;
     }
 
     const { render, init } = resolvedEntrypoint;
