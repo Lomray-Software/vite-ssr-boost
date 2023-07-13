@@ -3,8 +3,8 @@ import type { Plugin } from 'vite';
 import CliActions from '@constants/cli-actions';
 import type { ICliContext } from '@constants/cli-context';
 import PLUGIN_NAME from '@constants/plugin-name';
-import ViteMakeAliasesPlugin from '@plugins/make-aliases';
 import type { IPluginOptions as IMakeAliasesPluginOptions } from '@plugins/make-aliases';
+import ViteMakeAliasesPlugin from '@plugins/make-aliases';
 import ViteNormalizeRouterPlugin from '@plugins/normalize-route';
 
 export interface IPluginOptions {
@@ -35,7 +35,7 @@ const defaultOptions: IPluginOptions = {
  */
 function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
   const dirInfo = new URL(import.meta.url);
-  const action = global.viteBoostAction as CliActions;
+  const action = (global.viteBoostAction || process.env.SSR_BOOST_ACTION) as CliActions;
   const mergedOptions: IPluginOptions = { ...defaultOptions, ...options };
 
   const plugins: Plugin[] = [
@@ -62,6 +62,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
         return {
           ...config,
           publicDir: false,
+          ...(action === CliActions.build ? { appType: 'custom' } : {}),
         };
       },
     },
