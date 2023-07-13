@@ -66,7 +66,7 @@ program
   .description('Run development server.')
   .addOption(hostOption)
   .addOption(new Option('--reset-cache', 'Clear vite cache before run.').default(false))
-  .addOption(envModeOption)
+  .addOption(new Option('--mode [mode]', 'Env mode.').env('VITE_ENV_MODE').default('development'))
   .action(async ({ host, resetCache, mode }) => {
     if (resetCache) {
       await viteResetCache();
