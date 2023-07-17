@@ -15,6 +15,7 @@ import createFetchRequest from '@node/create-fetch-request';
 import type { TApp } from '@node/entry';
 import writeResponse from '@node/write-response';
 import type ServerConfig from '@services/server-config';
+import SsrManifest from '@services/ssr-manifest';
 
 export interface IRequestContext<TAppProps = Record<any, any>> {
   req: Request;
@@ -39,7 +40,7 @@ export interface IRenderParams<TAppProps = Record<string, any>> {
 }
 
 export interface IRenderOptions<TAppProps = Record<string, any>> {
-  appProps?: TAppProps;
+  abortDelay?: number;
   onRouterReady?: (params: {
     context: IRequestContext<TAppProps>;
   }) => Promise<IRouterReadyOut> | IRouterReadyOut;
@@ -74,7 +75,15 @@ async function render(
   { App, handler }: IRenderParams, // @see entry (bind)
   config: ServerConfig,
   context: IRequestContext,
-  { onRouterReady, onShellReady, onResponse, onShellError, onError, getState }: IRenderOptions,
+  {
+    onRouterReady,
+    onShellReady,
+    onResponse,
+    onShellError,
+    onError,
+    getState,
+    abortDelay = 15000,
+  }: IRenderOptions,
 ): Promise<void> {
   const { req, res } = context;
   const fetchRequest = createFetchRequest(req);
@@ -88,6 +97,8 @@ async function render(
   if (!statusCode) {
     return;
   }
+
+  SsrManifest.get(config.getParams().root).injectAssets(context);
 
   const { isStream = true } = (await onRouterReady?.({ context })) ?? {};
 
@@ -193,7 +204,7 @@ async function render(
   abortTimer = setTimeout(() => {
     context.didError = StreamError.RenderTimeout;
     abort();
-  }, config.getParams().abortDelay);
+  }, abortDelay);
 
   // Detect cancel request
   req.on('close', () => {

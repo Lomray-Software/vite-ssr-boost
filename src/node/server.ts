@@ -15,7 +15,7 @@ export interface ICreateServerOut {
  * Create SSR server
  */
 async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
-  const app = express();
+  const app = express().disable('x-powered-by');
 
   config.setApp(app);
 
@@ -78,6 +78,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
           const [
             {
               render,
+              abortDelay,
               onRequest,
               onRouterReady,
               onShellReady,
@@ -99,6 +100,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
           };
 
           await render(config, context, {
+            abortDelay,
             onRouterReady,
             onShellReady,
             onShellError,

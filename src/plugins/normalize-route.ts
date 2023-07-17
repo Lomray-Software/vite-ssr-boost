@@ -1,18 +1,27 @@
 import { extname } from 'node:path';
 import type { Plugin } from 'vite';
 import PLUGIN_NAME from '@constants/plugin-name';
+import isRoutesFile from '@helpers/is-route-file';
+
+export interface IPluginOptions {
+  isSSR?: boolean;
+}
 
 /**
- * Detect route file
+ * Add normalize wrapper to lazy imports for server build
  */
-const isRoutesFile = (code: string): boolean => /\[.*{.*path:.*lazyNR:.+import/s.test(code);
+const normalizeRoutesSSR = (code: string): string =>
+  `import n from '${PLUGIN_NAME}/helpers/import-route';${code}`.replace(
+    /(lazyNR|lazy)(:\s*)(\(\)\s*=>\s*import\(([^)]+)\))/gs,
+    'lazy$2()=>n($3,$4)',
+  );
 
 /**
- * Add normalize wrapper to lazy imports
+ * Add normalize wrapper to lazy imports for client build
  */
 const normalizeRoutes = (code: string): string =>
   `import n from '${PLUGIN_NAME}/helpers/import-route';${code}`.replace(
-    /(lazyNR)(:\s*)(\(\)\s*=>\s*import\([^)]+\))/gs,
+    /(lazyNR)(:\s*)(\(\)\s*=>\s*import\(([^)]+)\))/gs,
     'lazy$2()=>n($3)',
   );
 
@@ -23,7 +32,9 @@ const normalizeRoutes = (code: string): string =>
  * @see FCCRoute
  * @constructor
  */
-function ViteNormalizeRouterPlugin(): Plugin {
+function ViteNormalizeRouterPlugin(options: IPluginOptions = {}): Plugin {
+  const { isSSR = false } = options;
+
   return {
     name: `${PLUGIN_NAME}-normalize-route`,
     transform: (code, id) => {
@@ -38,7 +49,7 @@ function ViteNormalizeRouterPlugin(): Plugin {
       }
 
       return {
-        code: normalizeRoutes(code),
+        code: isSSR ? normalizeRoutesSSR(code) : normalizeRoutes(code),
         map: { mappings: '' },
       };
     },

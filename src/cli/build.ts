@@ -9,6 +9,7 @@ import cliName from '@constants/cli-name';
 import { createDevMarker } from '@helpers/dev-marker';
 import getPluginConfig from '@helpers/plugin-config';
 import unlockRobots from '@helpers/unlock-robots';
+import SsrManifest from '@services/ssr-manifest';
 
 interface IBuildParams {
   isOnlyClient?: boolean;
@@ -131,6 +132,10 @@ async function build({
 
     if (!isWatch) {
       await serverProcess;
+      await SsrManifest.get(config.root, {
+        alias: config.resolve.alias,
+        buildDir: outDir,
+      }).buildRoutesManifest(pluginConfig.preloadAssets);
     }
 
     types.push('server');

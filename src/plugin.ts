@@ -10,8 +10,7 @@ import ViteNormalizeRouterPlugin from '@plugins/normalize-route';
 export interface IPluginOptions {
   indexFile?: string; // default: index.html
   serverFile?: string; // default: server.ts
-  abortDelay?: number; // How long the server waits for data before giving up. default: 10000 (10 sec)
-  hasLazyRoutePlugin?: boolean; // Possibility to use custom export route component @see FCRoute interface
+  preloadAssets?: boolean; // default: true
   tsconfigAliases?: boolean | IMakeAliasesPluginOptions; // Read aliases from tsconfig
   customShortcuts?: {
     key: string;
@@ -24,8 +23,7 @@ export interface IPluginOptions {
 const defaultOptions: IPluginOptions = {
   indexFile: 'index.html',
   serverFile: 'server.ts',
-  abortDelay: 10000,
-  hasLazyRoutePlugin: true,
+  preloadAssets: true,
   tsconfigAliases: true,
 };
 
@@ -37,6 +35,8 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
   const dirInfo = new URL(import.meta.url);
   const action = (global.viteBoostAction || process.env.SSR_BOOST_ACTION) as CliActions;
   const mergedOptions: IPluginOptions = { ...defaultOptions, ...options };
+  const isSSR = process.env.SSR_BOOST_IS_SSR === '1' || action === 'dev';
+  const isBuild = action === CliActions.build;
 
   const plugins: Plugin[] = [
     {
@@ -49,36 +49,44 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
         action,
         isDev: action === CliActions.dev,
       },
+
       config(config, { ssrBuild }) {
         config.define = {
           ...(config.define ?? {}),
-          __IS_SSR__: process.env.SSR_BOOST_IS_SSR === '1' || action === 'dev',
+          __IS_SSR__: isSSR,
+        };
+
+        config.build = {
+          ...(config.build ?? {}),
+          modulePreload: config.build?.modulePreload ?? false,
         };
 
         if (!ssrBuild) {
+          if (isSSR && isBuild) {
+            config.build!.manifest = true;
+          }
+
           return config;
         }
 
         return {
           ...config,
+          ...(isBuild ? { appType: 'custom' } : {}),
           publicDir: false,
-          ...(action === CliActions.build ? { appType: 'custom' } : {}),
         };
       },
     },
   ];
 
-  const { hasLazyRoutePlugin, tsconfigAliases } = mergedOptions;
-
-  if (hasLazyRoutePlugin) {
-    plugins.push(ViteNormalizeRouterPlugin());
-  }
+  const { tsconfigAliases } = mergedOptions;
 
   if (tsconfigAliases) {
     plugins.push(
       ViteMakeAliasesPlugin(typeof tsconfigAliases === 'boolean' ? undefined : tsconfigAliases),
     );
   }
+
+  plugins.push(ViteNormalizeRouterPlugin({ isSSR }));
 
   return plugins;
 }

@@ -21,7 +21,6 @@ interface IConfigParams {
   isSPA: boolean;
   indexFile: string;
   serverFile: string;
-  abortDelay: number;
   host: string;
   port: number;
 }
@@ -93,7 +92,6 @@ class ServerConfig {
       serverFile: '/server/server.js',
       host: '127.0.0.1',
       port: 3000,
-      abortDelay: 10000,
       ...prodParams,
     };
 
@@ -121,7 +119,7 @@ class ServerConfig {
     const publicDir = config?.publicDir ?? this.prodParams.publicDir!;
     const dirInfo = new URL(import.meta.url);
     const pluginPath =
-      pluginConfig.pluginPath ?? path.resolve(`../${path.dirname(dirInfo.pathname)}`);
+      pluginConfig.pluginPath ?? path.resolve(path.dirname(dirInfo.pathname), '../');
     const indexFile = pluginConfig.indexFile ?? this.prodParams.indexFile!;
     const serverFile = pluginConfig.serverFile ?? this.prodParams.serverFile!;
     const host =
@@ -129,7 +127,6 @@ class ServerConfig {
         ? '0.0.0.0'
         : config?.server.host ?? this.prodParams.host!;
     const port = config?.server.port ?? (this.isProd ? this.prodParams.port! : 5173);
-    const abortDelay = pluginConfig.abortDelay ?? this.prodParams.abortDelay!;
 
     this.params = {
       root,
@@ -139,7 +136,6 @@ class ServerConfig {
       serverFile,
       host,
       port,
-      abortDelay,
       isSPA: this.isSPA,
       isProd: this.isProd,
     };
@@ -160,14 +156,6 @@ class ServerConfig {
    */
   public setApp(express: Express): void {
     this.app = express;
-  }
-
-  /**
-   * Set custom abort delay
-   */
-  public setAbortDelay(ms: number): void {
-    this.prodParams.abortDelay = ms;
-    this.params.abortDelay = ms;
   }
 
   /**

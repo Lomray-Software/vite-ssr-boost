@@ -3,12 +3,15 @@ import process from 'node:process';
 import path from 'path';
 import chalk from 'chalk';
 import type { Request } from 'express';
+import type { TRouteObject } from '@interfaces/route-object';
 import type { IEntrypointOptions, IPrepareRenderOut } from '@node/entry';
 import type { TRender } from '@node/render';
 import type ServerConfig from '@services/server-config';
 
 interface IPrepareServerEntrypointLoadOut<TAppProps = Record<string, any>> {
   render: TRender;
+  routes: TRouteObject[];
+  abortDelay?: number;
   onRequest?: IEntrypointOptions<TAppProps>['onRequest'];
   onRouterReady?: IEntrypointOptions<TAppProps>['onRouterReady'];
   onShellReady?: IEntrypointOptions<TAppProps>['onShellReady'];
@@ -60,7 +63,7 @@ class PrepareServer {
   /**
    * Resolve and return entrypoint params
    */
-  public async loadEntrypoint(): Promise<IPrepareServerEntrypointLoadOut> {
+  public async loadEntrypoint(shouldInit = true): Promise<IPrepareServerEntrypointLoadOut> {
     // load server entrypoint each time only in development mode (for fast refresh)
     if (this.entrypoint && this.config.isProd) {
       return this.entrypoint;
@@ -86,9 +89,11 @@ class PrepareServer {
         this.config
           .getLogger()
           .error(
-            `Before starting the server, you need to create a build: ${chalk.yellow(
-              'ssr-boost build',
-            )}`,
+            chalk.red(
+              `Before starting the server, you need to create a build: ${chalk.yellow(
+                'ssr-boost build',
+              )}`,
+            ),
           );
 
         return process.exit(1);
@@ -97,7 +102,11 @@ class PrepareServer {
       throw e;
     }
 
-    const { render, init } = resolvedEntrypoint;
+    if (!shouldInit && resolvedEntrypoint.init) {
+      delete resolvedEntrypoint.init;
+    }
+
+    const { render, init, routes, abortDelay } = resolvedEntrypoint;
     const {
       onServerCreated,
       onRequest,
@@ -114,6 +123,8 @@ class PrepareServer {
 
     this.entrypoint = {
       render,
+      routes,
+      abortDelay,
       onRequest,
       onRouterReady,
       onShellReady,

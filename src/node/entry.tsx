@@ -28,6 +28,8 @@ export interface IEntrypointOptions<TAppProps = Record<string, any>> {
 export interface IPrepareRenderOut<TAppProps = Record<string, any>> {
   render: TRender;
   init: IEntryServerOptions<TAppProps>['init'];
+  routes: TRouteObject[];
+  abortDelay?: number;
 }
 
 export interface IAppServerProps<T = Record<string, any>> {
@@ -37,6 +39,7 @@ export interface IAppServerProps<T = Record<string, any>> {
 export type TApp<T> = FC<PropsWithChildren<Record<string, any> & IAppServerProps<T>>>;
 
 export interface IEntryServerOptions<TAppProps = Record<string, any>> {
+  abortDelay?: number;
   init?: (params: {
     config: ServerConfig;
   }) => IEntrypointOptions<TAppProps> | Promise<IEntrypointOptions<TAppProps>>;
@@ -48,13 +51,15 @@ export interface IEntryServerOptions<TAppProps = Record<string, any>> {
 function entry<TAppProps>(
   App: TApp<TAppProps>,
   routes: TRouteObject[],
-  { init }: IEntryServerOptions<TAppProps> = {},
+  { init, abortDelay }: IEntryServerOptions<TAppProps> = {},
 ): IPrepareRenderOut<TAppProps> {
   const handler = createStaticHandler(routes as RouteObject[]);
 
   return {
     render: render.bind(null, { handler, App } as IRenderParams<TAppProps>) as TRender,
     init,
+    routes,
+    abortDelay,
   };
 }
 
