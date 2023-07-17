@@ -23,7 +23,7 @@ export interface IPluginOptions {
 const defaultOptions: IPluginOptions = {
   indexFile: 'index.html',
   serverFile: 'server.ts',
-  preloadAssets: true,
+  preloadAssets: false,
   tsconfigAliases: true,
 };
 
@@ -58,7 +58,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
 
         config.build = {
           ...(config.build ?? {}),
-          modulePreload: config.build?.modulePreload ?? false,
+          // modulePreload: config.build?.modulePreload ?? false,
         };
 
         if (!ssrBuild) {
