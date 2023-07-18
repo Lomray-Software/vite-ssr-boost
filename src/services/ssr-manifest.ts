@@ -350,7 +350,7 @@ class SsrManifest {
   /**
    * Inject route assets to head html
    */
-  public injectAssets({ routerContext, html, res, hasEarlyHints = true }: IRequestContext): void {
+  public injectAssets({ routerContext, html, res, hasEarlyHints = false }: IRequestContext): void {
     const assets = this.getAssets(routerContext?.matches).sort((a, b) => {
       const aWeight = this.getAssetWeight(a);
       const bWeight = this.getAssetWeight(b);
