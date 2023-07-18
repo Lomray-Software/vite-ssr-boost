@@ -88,7 +88,10 @@ async function render(
   const { req, res } = context;
   const fetchRequest = createFetchRequest(req);
 
-  context.routerContext = (await handler.query(fetchRequest)) as StaticHandlerContext;
+  context.routerContext = (await handler.query(fetchRequest, {
+    requestContext: context,
+  })) as StaticHandlerContext;
+
   /**
    * Handle response from page loader, router context can be Response
    */

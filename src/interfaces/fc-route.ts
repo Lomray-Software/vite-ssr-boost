@@ -1,5 +1,18 @@
 import type { FC, PropsWithChildren } from 'react';
 import type { RouteObject } from 'react-router/dist/lib/context';
+import type { IRequestContext } from '@node/render';
+
+declare module '@remix-run/router' {
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  export interface LoaderFunctionArgs {
+    context?: IRequestContext;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  export interface ActionFunctionArgs {
+    context?: IRequestContext;
+  }
+}
 
 const keys = ['loader', 'action', 'ErrorBoundary', 'errorElement'] as const;
 
