@@ -110,10 +110,14 @@ program
       'Change general directive Disallow to Allow in robots.txt',
     ).default(false),
   )
-  .action(async ({ onlyClient, clientOptions, serverOptions, mode, unlockRobots }) => {
+  .addOption(
+    new Option('--eject', 'Produces entrypoint file to run app without cli').default(false),
+  )
+  .action(async ({ onlyClient, clientOptions, serverOptions, mode, unlockRobots, eject }) => {
     await runBuild({
       isOnlyClient: onlyClient,
       isUnlockRobots: unlockRobots,
+      isEject: eject,
       clientOptions,
       serverOptions,
       mode,

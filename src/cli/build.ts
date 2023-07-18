@@ -1,51 +1,21 @@
 import childProcess from 'node:child_process';
-import fs from 'node:fs';
-import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import chalk from 'chalk';
-import { resolveConfig } from 'vite';
 import viteResetCache from '@cli/vite-reset-cache';
 import cliName from '@constants/cli-name';
 import { createDevMarker } from '@helpers/dev-marker';
-import getPluginConfig from '@helpers/plugin-config';
-import unlockRobots from '@helpers/unlock-robots';
-import SsrManifest from '@services/ssr-manifest';
+import Build from '@services/build';
 
 interface IBuildParams {
   isOnlyClient?: boolean;
   isWatch?: boolean;
+  isEject?: boolean;
   isUnlockRobots?: boolean;
   clientOptions?: string;
   serverOptions?: string;
   mode?: string;
   onFinish?: () => void;
 }
-
-/**
- * Promisify spawn process
- */
-const promisify = (command: childProcess.ChildProcess) => {
-  const promise = new Promise((resolve, reject) => {
-    command.on('exit', (code) => {
-      resolve(code);
-    });
-
-    command.on('close', (code) => {
-      resolve(code);
-    });
-
-    command.on('error', (message) => {
-      reject(message);
-    });
-  });
-
-  command.stdout?.pipe(process.stdout);
-  command.stderr?.pipe(process.stderr);
-
-  promise['command'] = command;
-
-  return promise;
-};
 
 /**
  * Build production application
@@ -55,40 +25,29 @@ async function build({
   isOnlyClient = false,
   isWatch = false,
   isUnlockRobots = false,
+  isEject = false,
   clientOptions = '',
   serverOptions = '',
   mode = '',
 }: IBuildParams): Promise<void> {
   const perfStart = performance.now();
-  const config = await resolveConfig(
-    {},
-    'build',
-    mode,
-    mode === 'production' ? 'production' : 'development',
-  );
-  const pluginConfig = getPluginConfig(config);
-  const { outDir } = config.build;
+  const buildService = new Build({ mode });
   const types = ['client'];
   const controller = new AbortController();
   const modeOpt = mode ? `--mode ${mode}` : '';
-  const nodeEnv = process.env.NODE_ENV || 'development';
-  const isProd = nodeEnv === 'production';
-  const buildDir = path.resolve(config.root, outDir);
+
+  await buildService.makeConfig();
 
   // this is required step - build with different env may cause problems
   await viteResetCache();
-
-  // clear build folder
-  if (fs.existsSync(buildDir)) {
-    fs.rmSync(buildDir, { recursive: true });
-  }
+  buildService.clearBuildFolder();
 
   /**
    * Build client
    */
-  const clientProcess = promisify(
+  const clientProcess = buildService.promisifyProcess(
     childProcess.spawn(
-      `vite build ${clientOptions} --emptyOutDir --outDir ${outDir}/client ${modeOpt}`,
+      `vite build ${clientOptions} --emptyOutDir --outDir ${buildService.outDir}/client ${modeOpt}`,
       {
         signal: controller.signal,
         stdio: [process.stdin, 'pipe', process.stderr],
@@ -113,9 +72,9 @@ async function build({
    * Build server
    */
   if (!isOnlyClient) {
-    serverProcess = promisify(
+    serverProcess = buildService.promisifyProcess(
       childProcess.spawn(
-        `vite build ${serverOptions} --emptyOutDir --outDir ${outDir}/server --ssr ${pluginConfig.serverFile} ${modeOpt}`,
+        `vite build ${serverOptions} --emptyOutDir --outDir ${buildService.outDir}/server --ssr ${buildService.serverFile} ${modeOpt}`,
         {
           signal: controller.signal,
           stdio: [process.stdin, 'pipe', process.stderr],
@@ -132,10 +91,11 @@ async function build({
 
     if (!isWatch) {
       await serverProcess;
-      await SsrManifest.get(config.root, {
-        alias: config.resolve.alias,
-        buildDir: outDir,
-      }).buildRoutesManifest(pluginConfig.preloadAssets);
+      await buildService.buildManifest();
+
+      if (isEject) {
+        buildService.eject();
+      }
     }
 
     types.push('server');
@@ -159,7 +119,7 @@ async function build({
         if (!buildCount) {
           clientProcess['command'].stdout.removeListener('data', listener);
           serverProcess?.['command'].stdout.removeListener('data', listener);
-          createDevMarker(isProd, config);
+          createDevMarker(buildService.isProd, buildService.viteConfig);
           onFinish?.();
         }
       }
@@ -175,10 +135,10 @@ async function build({
   }
 
   if (isUnlockRobots) {
-    unlockRobots(config.root, outDir);
+    buildService.unlockRobots();
   }
 
-  createDevMarker(isProd, config);
+  createDevMarker(buildService.isProd, buildService.viteConfig);
   onFinish?.();
 
   const buildDurationString = chalk.dim(
@@ -189,7 +149,7 @@ async function build({
 
   console.info(
     `\n  ${chalk.green(`${chalk.bold(cliName.toUpperCase())}`)}  ${buildDurationString} ${
-      isProd ? '' : chalk.redBright(`NODE_ENV=${nodeEnv}`)
+      buildService.isProd ? '' : chalk.redBright(`NODE_ENV=${buildService.nodeEnv}`)
     }\n`,
   );
 }
