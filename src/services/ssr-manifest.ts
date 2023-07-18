@@ -350,8 +350,8 @@ class SsrManifest {
   /**
    * Inject route assets to head html
    */
-  public injectAssets(context: IRequestContext, hasEarlyHits = true): void {
-    const assets = this.getAssets(context.routerContext?.matches).sort((a, b) => {
+  public injectAssets({ routerContext, html, res, hasEarlyHints = true }: IRequestContext): void {
+    const assets = this.getAssets(routerContext?.matches).sort((a, b) => {
       const aWeight = this.getAssetWeight(a);
       const bWeight = this.getAssetWeight(b);
 
@@ -369,10 +369,10 @@ class SsrManifest {
       })
       .filter(Boolean);
 
-    context.html.header = context.html.header.replace('</head>', `${htmlAssets.join('\n')}</head>`);
+    html.header = html.header.replace('</head>', `${htmlAssets.join('\n')}</head>`);
 
-    if (hasEarlyHits && htmlAssets.length && context.res.socket) {
-      this.writeEarlyHits(assets, context.res.socket);
+    if (hasEarlyHints && htmlAssets.length && res.socket) {
+      this.writeEarlyHits(assets, res.socket);
     }
   }
 }

@@ -9,6 +9,7 @@ import type ServerConfig from '@services/server-config';
 
 export interface IInitServerRequestOut<T = Record<string, any>> {
   appProps?: T;
+  hasEarlyHints?: boolean;
 }
 
 export interface IEntrypointOptions<TAppProps = Record<string, any>> {
@@ -30,7 +31,6 @@ export interface IPrepareRenderOut<TAppProps = Record<string, any>> {
   init: IEntryServerOptions<TAppProps>['init'];
   routes: TRouteObject[];
   abortDelay?: number;
-  hasEarlyHints?: boolean;
 }
 
 export interface IAppServerProps<T = Record<string, any>> {
@@ -53,7 +53,7 @@ export interface IEntryServerOptions<TAppProps = Record<string, any>> {
 function entry<TAppProps>(
   App: TApp<TAppProps>,
   routes: TRouteObject[],
-  { init, abortDelay, hasEarlyHints }: IEntryServerOptions<TAppProps> = {},
+  { init, abortDelay }: IEntryServerOptions<TAppProps> = {},
 ): IPrepareRenderOut<TAppProps> {
   const handler = createStaticHandler(routes as RouteObject[]);
 
@@ -62,7 +62,6 @@ function entry<TAppProps>(
     init,
     routes,
     abortDelay,
-    hasEarlyHints,
   };
 }
 

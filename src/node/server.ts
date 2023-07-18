@@ -79,12 +79,13 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
             prepareServer.loadEntrypoint(),
             prepareServer.loadHtml(req),
           ]);
-          const { appProps } = (await onRequest?.(req, res)) ?? {};
+          const { appProps, hasEarlyHints } = (await onRequest?.(req, res)) ?? {};
           const [header, footer] = clientHtml;
 
           const context: IRequestContext = {
             req,
             res,
+            hasEarlyHints,
             appProps: appProps ?? {},
             html: { header, footer },
           };

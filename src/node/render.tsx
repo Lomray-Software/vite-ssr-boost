@@ -25,6 +25,7 @@ export interface IRequestContext<TAppProps = Record<any, any>> {
   routerContext?: StaticHandlerContext;
   serverContext?: IServerContext;
   isStream?: boolean;
+  hasEarlyHints?: boolean;
   didError?: StreamError;
 }
 
@@ -41,7 +42,6 @@ export interface IRenderParams<TAppProps = Record<string, any>> {
 
 export interface IRenderOptions<TAppProps = Record<string, any>> {
   abortDelay?: number;
-  hasEarlyHints?: boolean;
   onRouterReady?: (params: {
     context: IRequestContext<TAppProps>;
   }) => Promise<IRouterReadyOut> | IRouterReadyOut;
@@ -84,7 +84,6 @@ async function render(
     onError,
     getState,
     abortDelay = 15000,
-    hasEarlyHints = true,
   }: IRenderOptions,
 ): Promise<void> {
   const { req, res } = context;
@@ -103,7 +102,7 @@ async function render(
     return;
   }
 
-  SsrManifest.get(config.getParams().root).injectAssets(context, hasEarlyHints);
+  SsrManifest.get(config.getParams().root).injectAssets(context);
 
   const { isStream = true } = (await onRouterReady?.({ context })) ?? {};
 

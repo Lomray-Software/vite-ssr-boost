@@ -12,7 +12,6 @@ interface IPrepareServerEntrypointLoadOut<TAppProps = Record<string, any>> {
   render: TRender;
   routes: TRouteObject[];
   abortDelay?: number;
-  hasEarlyHints?: boolean;
   onRequest?: IEntrypointOptions<TAppProps>['onRequest'];
   onRouterReady?: IEntrypointOptions<TAppProps>['onRouterReady'];
   onShellReady?: IEntrypointOptions<TAppProps>['onShellReady'];
@@ -107,7 +106,7 @@ class PrepareServer {
       delete resolvedEntrypoint.init;
     }
 
-    const { render, init, routes, abortDelay, hasEarlyHints } = resolvedEntrypoint;
+    const { render, init, routes, abortDelay } = resolvedEntrypoint;
     const { onServerCreated, ...renderParams } =
       (await init?.({
         config: this.config,
@@ -117,7 +116,6 @@ class PrepareServer {
       render,
       routes,
       abortDelay,
-      hasEarlyHints,
       ...renderParams,
     };
     this.onServerCreated = onServerCreated;
