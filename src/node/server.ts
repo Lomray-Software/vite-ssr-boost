@@ -75,20 +75,10 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
     app.use('*', (req, res, next) => {
       void (async () => {
         try {
-          const [
-            {
-              render,
-              abortDelay,
-              onRequest,
-              onRouterReady,
-              onShellReady,
-              onResponse,
-              onShellError,
-              onError,
-              getState,
-            },
-            clientHtml,
-          ] = await Promise.all([prepareServer.loadEntrypoint(), prepareServer.loadHtml(req)]);
+          const [{ render, onRequest, ...renderParams }, clientHtml] = await Promise.all([
+            prepareServer.loadEntrypoint(),
+            prepareServer.loadHtml(req),
+          ]);
           const { appProps } = (await onRequest?.(req, res)) ?? {};
           const [header, footer] = clientHtml;
 
@@ -99,15 +89,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
             html: { header, footer },
           };
 
-          await render(config, context, {
-            abortDelay,
-            onRouterReady,
-            onShellReady,
-            onShellError,
-            onResponse,
-            onError,
-            getState,
-          });
+          await render(config, context, renderParams);
         } catch (e) {
           next(e);
         }
