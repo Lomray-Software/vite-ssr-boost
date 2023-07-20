@@ -8,28 +8,22 @@ export interface IPluginOptions {
 }
 
 /**
- * Add normalize wrapper to lazy imports for server build
- */
-const normalizeRoutesSSR = (code: string): string =>
-  `import n from '${PLUGIN_NAME}/helpers/import-route';${code}`.replace(
-    /(lazyNR|lazy)(:\s*)(\(\)\s*=>\s*import\(([^)]+)\))/gs,
-    'lazy$2()=>n($3,$4)',
-  );
-
-/**
  * Add normalize wrapper to lazy imports for client build
  */
-const normalizeRoutes = (code: string): string =>
+const normalizeRoutes = (code: string, isSSR: boolean): string =>
   `import n from '${PLUGIN_NAME}/helpers/import-route';${code}`.replace(
-    /(lazyNR)(:\s*)(\(\)\s*=>\s*import\(([^)]+)\))/gs,
-    'lazy$2()=>n($3)',
+    /(lazy)(:\s*)(\(\)\s*=>\s*import\(([^)]+)\))/gs,
+    isSSR ? 'lazy$2()=>n($3,$4)' : 'lazy$2()=>n($3)',
   );
 
 /**
  * Add possibility to export route components like FCRoute or FCCRoute
- * USAGE: { path: '/', lazyNR: () => import('./pages/home') }
+ * Add route path for generating manifest
+ * USAGE: { path: '/', lazy: () => import('./pages/home') }
  * @see FCRoute
  * @see FCCRoute
+ * @see SsrManifest.getRoutesIds
+ * @see importRoute
  * @constructor
  */
 function ViteNormalizeRouterPlugin(options: IPluginOptions = {}): Plugin {
@@ -49,7 +43,7 @@ function ViteNormalizeRouterPlugin(options: IPluginOptions = {}): Plugin {
       }
 
       return {
-        code: isSSR ? normalizeRoutesSSR(code) : normalizeRoutes(code),
+        code: normalizeRoutes(code, isSSR),
         map: { mappings: '' },
       };
     },
