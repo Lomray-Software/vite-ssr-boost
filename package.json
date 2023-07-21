@@ -73,7 +73,7 @@
     "@types/express": "^4.17.17",
     "react-dom": ">=18.2.0",
     "react-router-dom": ">=6.12.1",
-    "vite": "^4.3.9"
+    "vite": "^4.4.6"
   },
   "bin": {
     "ssr-boost": "cli.js"

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 import Hjson from 'hjson';
 import type { Plugin } from 'vite';
 import PLUGIN_NAME from '@constants/plugin-name';
@@ -20,7 +21,7 @@ const cleanupAlias = (str: string): string => str.replace('/*', '');
  */
 function ViteMakeAliasesPlugin(options: IPluginOptions = {}): Plugin {
   const { root, tsconfig } = options;
-  const projectRoot = root ?? process.cwd();
+  const projectRoot = pathToFileURL(root ?? process.cwd()).toString();
   const tsconfigPath = path.resolve(projectRoot, tsconfig ?? 'tsconfig.json');
   const aliases: [string, string][] = [];
 

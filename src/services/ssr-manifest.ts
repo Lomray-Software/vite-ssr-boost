@@ -258,6 +258,9 @@ class SsrManifest {
       }
     }
 
+    // normalize slashes
+    fullPath = fullPath.split(path.win32.sep).join(path.posix.sep);
+
     return fullPath.replace(this.root, '').replace(/^\/|\/$/g, '');
   }
 

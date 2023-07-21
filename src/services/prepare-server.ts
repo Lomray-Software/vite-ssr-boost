@@ -1,5 +1,6 @@
 import fs from 'fs';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 import path from 'path';
 import chalk from 'chalk';
 import type { Request } from 'express';
@@ -82,7 +83,7 @@ class PrepareServer {
           })
         ).default;
       } else {
-        resolvedEntrypoint = (await import(entrypointPath)).default;
+        resolvedEntrypoint = (await import(pathToFileURL(entrypointPath).toString())).default;
       }
     } catch (e) {
       if (e.message.includes('Cannot find module') && e.message.includes('/build/')) {
