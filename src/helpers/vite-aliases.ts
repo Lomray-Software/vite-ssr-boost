@@ -1,4 +1,4 @@
-import { fileURLToPath, URL } from 'node:url';
+import { fileURLToPath, pathToFileURL, URL } from 'node:url';
 import type { Alias } from 'vite';
 
 const cleanupPath = (path: string) => path.replace('./', '/').replace(/([^:]\/)\/+/g, '$1');
@@ -9,7 +9,9 @@ const cleanupPath = (path: string) => path.replace('./', '/').replace(/([^:]\/)\
 const viteAliases = (aliases: [string, string][], root = ''): Alias[] =>
   aliases.map(([find, path]) => ({
     find,
-    replacement: fileURLToPath(new URL(`${root}${cleanupPath(path)}`, import.meta.url)),
+    replacement: fileURLToPath(
+      new URL(pathToFileURL(`${root}${cleanupPath(path)}`).toString(), import.meta.url),
+    ),
   }));
 
 export default viteAliases;
