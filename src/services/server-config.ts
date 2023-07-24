@@ -9,7 +9,6 @@ interface IConfigOptions {
   isProd?: boolean;
   isHost?: boolean;
   isOnlyClient?: boolean; // SPA mode
-  prodParams?: Partial<IConfigParams>;
   mode?: string;
 }
 

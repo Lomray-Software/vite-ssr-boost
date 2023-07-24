@@ -102,7 +102,7 @@ async function render(
     return;
   }
 
-  SsrManifest.get(config.getParams().root).injectAssets(context);
+  SsrManifest.get(config).injectAssets(context);
 
   const { isStream = true } = (await onRouterReady?.({ context })) ?? {};
 

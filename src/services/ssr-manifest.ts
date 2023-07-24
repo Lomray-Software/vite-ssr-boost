@@ -2,15 +2,16 @@ import fs from 'node:fs';
 import type { Socket } from 'node:net';
 import path from 'node:path';
 import type { AgnosticDataRouteMatch } from '@remix-run/router/dist/utils';
+import chalk from 'chalk';
 import type { RouteObject } from 'react-router-dom';
-import type { Alias } from 'vite';
+import type { Alias, ModuleNode } from 'vite';
 import type { IRequestContext } from '@node/render';
 import PrepareServer from '@services/prepare-server';
-import ServerConfig from '@services/server-config';
+import type ServerConfig from '@services/server-config';
 
 interface ISsrManifestParams {
-  alias?: Alias[];
   buildDir?: string;
+  viteAliases?: Alias[];
 }
 
 interface IManifest {
@@ -20,6 +21,19 @@ interface IManifest {
     file: string;
     imports: string[];
   };
+}
+
+enum AssetType {
+  style = 'style',
+  script = 'script',
+  image = 'image',
+  font = 'font',
+}
+
+interface IAsset {
+  type: AssetType;
+  url: string;
+  content?: string;
 }
 
 const CRLF = '\r\n';
@@ -34,29 +48,34 @@ class SsrManifest {
   protected static instance: SsrManifest | null = null;
 
   /**
+   * Server config
+   */
+  protected readonly config: ServerConfig;
+
+  /**
    * Project root path
    */
-  protected root: string;
+  protected readonly root: string;
 
   /**
    * Build dir
    */
-  protected buildDir?: string;
+  protected readonly buildDir?: string;
 
   /**
    * Client manifest file name
    */
-  protected manifestName = 'manifest.json';
+  protected readonly manifestName = 'manifest.json';
 
   /**
    * Assets manifest file name
    */
-  protected assetsManifest = 'assets-manifest.json';
+  protected readonly assetsManifest = 'assets-manifest.json';
 
   /**
    * Vite resolve aliases
    */
-  protected alias?: Alias[];
+  protected readonly viteAliases?: Alias[];
 
   /**
    * Loaded assets manifest file
@@ -66,18 +85,19 @@ class SsrManifest {
   /**
    * @constructor
    */
-  protected constructor(root: string, { buildDir, alias }: ISsrManifestParams = {}) {
-    this.root = root;
+  protected constructor(config: ServerConfig, { buildDir, viteAliases }: ISsrManifestParams = {}) {
+    this.config = config;
+    this.root = config.getParams().root;
     this.buildDir = buildDir;
-    this.alias = alias;
+    this.viteAliases = viteAliases ?? config.getVite()?.config?.resolve.alias;
   }
 
   /**
    * Get singleton instance
    */
-  public static get(root: string, params: ISsrManifestParams = {}): SsrManifest {
+  public static get(config: ServerConfig, params: ISsrManifestParams = {}): SsrManifest {
     if (SsrManifest.instance === null) {
-      SsrManifest.instance = new SsrManifest(root, params);
+      SsrManifest.instance = new SsrManifest(config, params);
     }
 
     return SsrManifest.instance;
@@ -165,8 +185,7 @@ class SsrManifest {
    * Build routes manifest file
    */
   public async buildRoutesManifest(shouldPreloadAssets: boolean): Promise<void> {
-    const serverConfig = ServerConfig.init({ isProd: true });
-    const prepareServer = PrepareServer.init(serverConfig);
+    const prepareServer = PrepareServer.init(this.config);
     const manifest = this.loadClientManifest();
     const { routes } = await prepareServer.loadEntrypoint(false);
     const routesPaths = await this.getRoutesIds(routes as RouteObject[]);
@@ -209,12 +228,12 @@ class SsrManifest {
   }
 
   /**
-   * Load aliases manifest
+   * Get vite aliases
    */
   protected getAliases(): Record<string, string> {
     const aliases = {};
 
-    this.alias?.forEach(({ find, replacement }) => {
+    this.viteAliases?.forEach(({ find, replacement }) => {
       if (typeof find !== 'string') {
         return;
       }
@@ -230,14 +249,14 @@ class SsrManifest {
    */
   protected getRouteImportPostfix(): string[] {
     return ['', '/index']
-      .map((prefix) => ['.js', '.ts', '.tsx'].map((ext) => `${prefix}${ext}`))
+      .map((prefix) => ['', '.js', '.ts', '.tsx'].map((ext) => `${prefix}${ext}`))
       .flat();
   }
 
   /**
    * Normalized route path
    */
-  protected normalizeRoutePath(routePath?: string): string | undefined {
+  protected normalizeRoutePath(routePath?: string, withRoot = false): string | undefined {
     if (!routePath) {
       return;
     }
@@ -261,13 +280,21 @@ class SsrManifest {
     // normalize slashes
     fullPath = fullPath.split(path.win32.sep).join(path.posix.sep);
 
+    if (withRoot) {
+      return fullPath;
+    }
+
     return fullPath.replace(this.root, '').replace(/^\/|\/$/g, '');
   }
 
   /**
-   * Get provided route assets
+   * Get route assets
    */
-  public getAssets(routes?: AgnosticDataRouteMatch[]): string[] {
+  protected getAssets(routes?: AgnosticDataRouteMatch[]): IAsset[] {
+    if (this.config.getVite()) {
+      return this.getAssetsDev(routes);
+    }
+
     const routeIds = routes?.map(({ route }) => route.id).filter(Boolean) ?? [];
 
     if (!routeIds.length) {
@@ -279,7 +306,88 @@ class SsrManifest {
     return routeIds
       .map((routeId) => routesAssets[routeId])
       .filter(Boolean)
-      .flat();
+      .flat()
+      .sort((a, b) => {
+        const aWeight = this.getAssetWeight(a);
+        const bWeight = this.getAssetWeight(b);
+
+        return aWeight === bWeight ? 0 : aWeight - bWeight;
+      })
+      .map((url) => ({
+        type: this.getAssetType(url)!,
+        url,
+      }));
+  }
+
+  /**
+   * Get development route assets
+   */
+  protected getAssetsDev(routes?: AgnosticDataRouteMatch[]): IAsset[] {
+    const routeIds =
+      (routes
+        ?.map(({ route }) => this.normalizeRoutePath(route?.['pathId'] as string, true))
+        .filter(Boolean) as string[]) ?? [];
+
+    if (!routeIds.length) {
+      return [];
+    }
+
+    let assets: { [id: string]: IAsset } = {};
+    const postfixes = this.getRouteImportPostfix();
+    const rootId = `${this.root}/${this.config.getPluginConfig()?.clientFile ?? 'client.ts'}`;
+
+    [rootId, ...routeIds].forEach((moduleId) => {
+      for (const ext of postfixes) {
+        const module = this.config.getVite()?.moduleGraph.getModuleById(`${moduleId}${ext}`);
+
+        if (module) {
+          assets = { ...assets, ...this.getModuleAssets(module) };
+          break;
+        }
+      }
+    });
+
+    return Object.values(assets);
+  }
+
+  /**
+   * Get module assets
+   */
+  protected getModuleAssets(module?: ModuleNode): { [id: string]: IAsset } {
+    if (!module?.clientImportedModules.size) {
+      return {};
+    }
+
+    let assets: { [id: string]: IAsset } = {};
+
+    module.clientImportedModules.forEach((subModule) => {
+      const { file, clientImportedModules, transformResult } = subModule;
+      const ext = file?.split('.').at(-1);
+
+      if (file && ext && ['css', 'scss'].includes(ext)) {
+        // @TODO investigate better method?
+        const code = transformResult?.code.match(/__vite__css\s+=\s+"(?<css>.+)"/)?.groups?.css;
+
+        if (code) {
+          try {
+            assets[file] = {
+              type: AssetType.style,
+              url: file,
+              content: JSON.parse(`{"style": "${code}"}`).style,
+            };
+          } catch (e) {
+            console.warn(chalk.yellowBright('Failed to parse style: ', file));
+          }
+        }
+      } else if (clientImportedModules.size) {
+        assets = {
+          ...assets,
+          ...this.getModuleAssets(subModule),
+        };
+      }
+    });
+
+    return assets;
   }
 
   /**
@@ -303,15 +411,16 @@ class SsrManifest {
   /**
    * Get asset type
    */
-  protected getAssetType(asset: string): string | null {
+  protected getAssetType(asset: string): AssetType | null {
     const ext = asset.split('.').at(-1)?.toLowerCase();
 
     switch (ext) {
       case 'css':
-        return 'style';
+      case 'scss':
+        return AssetType.style;
 
       case 'js':
-        return 'script';
+        return AssetType.script;
 
       case 'svg':
       case 'jpg':
@@ -320,13 +429,13 @@ class SsrManifest {
       case 'webp':
       case 'gif':
       case 'ico':
-        return 'image';
+        return AssetType.image;
 
       case 'ttf':
       case 'otf':
       case 'woff':
       case 'woff2':
-        return 'font';
+        return AssetType.font;
 
       default:
         return null;
@@ -336,16 +445,14 @@ class SsrManifest {
   /**
    * Write 103 Early Hits header
    */
-  public writeEarlyHits(assets: string[], socket: Socket): void {
+  public writeEarlyHits(assets: IAsset[], socket: Socket): void {
     socket.write(`HTTP/1.1 103 Early Hints${CRLF}`);
-    assets.forEach((asset) => {
-      const type = this.getAssetType(asset);
-
+    assets.forEach(({ type, url }) => {
       if (!type || !['style', 'script'].includes(type)) {
         return;
       }
 
-      socket.write(`Link: <${asset}>; rel=preload; as=${type}${CRLF}`);
+      socket.write(`Link: <${url}>; rel=preload; as=${type}${CRLF}`);
     });
     socket.write(CRLF);
   }
@@ -354,18 +461,17 @@ class SsrManifest {
    * Inject route assets to head html
    */
   public injectAssets({ routerContext, html, res, hasEarlyHints = false }: IRequestContext): void {
-    const assets = this.getAssets(routerContext?.matches).sort((a, b) => {
-      const aWeight = this.getAssetWeight(a);
-      const bWeight = this.getAssetWeight(b);
-
-      return aWeight === bWeight ? 0 : aWeight - bWeight;
-    });
+    const assets = this.getAssets(routerContext?.matches);
     const htmlAssets = assets
-      .map((asset) => {
-        if (asset.endsWith('.css')) {
-          return `<link rel="stylesheet" href="${asset}">`;
-        } else if (asset.endsWith('.js')) {
-          return `<script async type="module" src="${asset}"></script>`;
+      .map(({ type, url, content = '' }) => {
+        switch (type) {
+          case 'style':
+            return this.config.getVite()
+              ? `<style data-vite-dev-id="${url}">${content}</style>`
+              : `<link rel="stylesheet" href="${url}">`;
+
+          case 'script':
+            return `<script async type="module" src="${url}"></script>`;
         }
 
         return null;
