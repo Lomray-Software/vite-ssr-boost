@@ -99,6 +99,10 @@ import routes from './routes';
 
 export default entryServer(App, routes, {
   /**
+   * Request timeout (If your backend is slow, increase this value)
+   */
+  abortDelay: 15000, // default: 15000 (ms)
+  /**
    * Server configuration (optional)
    */
   init: () => ({
@@ -168,23 +172,25 @@ import type { FCRoute } from '@lomray/vite-ssr-boost/interfaces/fc-route';
  */
 SsrBoost({
   /**
-   * With this option you can export route components like FCRoute or FCCRoute
-   * @example 
-   * const Page: FCRoute = () => <div>Hi</div>;
-   * 
-   * Page.ErrorBoudary = () => <div>Error</div>;
-   * 
-   * export default Page;
-   * 
-   * Routes:
-   * const routes = [{ path: '/', lazyNR: () => import('./pages/home') }]
+   * index.html file path
    */
-  hasLazyRoutePlugin: true, // default: true
-
+  indexFile: 'index.html', // default: index.html
+  /**
+   * Server entrypoint file
+   */
+  serverFile: 'server.ts', // default: server.ts
+  /**
+   * Client entrypoint file
+   */
+  clientFile: 'client.ts', // default: client.ts
   /**
    * Add tsconfig aliases to vite config aliases
    */
   tsconfigAliases: true, // default: true
+  /**
+   * Production: add scripts to head (server-side)
+   */
+  preloadAssets: false, // default: false
 })
 ```
 
