@@ -73,6 +73,8 @@ program
     }
 
     const command = async (isPrintInfo?: boolean): Promise<void> => {
+      console.info(chalk.cyan('Starting the development server...'));
+
       const { server, config } = await runDev({ version, isHost: host, isPrintInfo, mode });
 
       cliContext.server = server;
