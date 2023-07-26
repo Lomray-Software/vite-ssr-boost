@@ -32,6 +32,7 @@ module.exports = {
     '@typescript-eslint/ban-ts-comment': 'off',
     'no-await-in-loop': 'off',
     '@typescript-eslint/no-for-in-array': 'off',
+    'unicorn/no-nested-ternary': 'off',
     'prettier/prettier': [
       'error',
       {

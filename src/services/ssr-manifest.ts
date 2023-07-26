@@ -512,8 +512,11 @@ class SsrManifest {
 
           case 'script':
             return isPreload
-              ? `<link rel="modulepreload" as="script" crossorigin href="${url}">`
-              : `<script async type="module" src="${url}"></script>`;
+              ? this.config.isModulePreload
+                ? // can reduce lighthouse performance
+                  `<link rel="modulepreload" as="script" crossorigin href="${url}">`
+                : null
+              : `<script async type="module" crossorigin src="${url}"></script>`;
         }
 
         return null;

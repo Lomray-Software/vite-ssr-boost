@@ -9,6 +9,7 @@ interface IConfigOptions {
   isProd?: boolean;
   isHost?: boolean;
   isOnlyClient?: boolean; // SPA mode
+  isModulePreload?: boolean;
   mode?: string;
 }
 
@@ -37,6 +38,11 @@ class ServerConfig {
    * Server host mode
    */
   public readonly isHost: boolean;
+
+  /**
+   * Add module preload scripts to server output
+   */
+  public readonly isModulePreload: boolean;
 
   /**
    * SPA mode
@@ -77,12 +83,19 @@ class ServerConfig {
    * @constructor
    */
   protected constructor(
-    { isProd = false, isHost = false, isOnlyClient = false, mode = 'production' }: IConfigOptions,
+    {
+      isProd = false,
+      isHost = false,
+      isOnlyClient = false,
+      isModulePreload = false,
+      mode = 'production',
+    }: IConfigOptions,
     prodParams: Partial<IConfigParams>,
   ) {
     this.isProd = isProd;
     this.isHost = isHost;
     this.isSPA = isOnlyClient;
+    this.isModulePreload = isModulePreload;
     this.mode = mode;
     this.prodParams = {
       root: './build',

@@ -132,7 +132,10 @@ program
   .addOption(hostOption)
   .addOption(portOption)
   .addOption(onlyClientOption)
-  .action(({ host, port, onlyClient }) => {
+  .addOption(
+    new Option('--module-preload', 'Add module preload scripts to server output.').default(false),
+  )
+  .action(({ host, port, onlyClient, modulePreload }) => {
     const command = async (isPrintInfo?: boolean): Promise<void> => {
       const { server, config } = await runProd({
         version,
@@ -140,6 +143,7 @@ program
         isPrintInfo,
         port,
         onlyClient,
+        modulePreload,
       });
 
       cliContext.server = server;
