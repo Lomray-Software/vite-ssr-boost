@@ -141,10 +141,12 @@ async function build({
   createDevMarker(buildService.isProd, buildService.viteConfig);
   onFinish?.();
 
+  const durationMs = Math.ceil(performance.now() - perfStart);
+  const duration = durationMs > 1000 ? (durationMs / 1000).toFixed(2) : durationMs;
+  const units = durationMs > 1000 ? 's' : 'ms';
+
   const buildDurationString = chalk.dim(
-    `${chalk.yellowBright(types.join(','))} built in ${chalk.reset(
-      chalk.bold(Math.ceil(performance.now() - perfStart)),
-    )} ms`,
+    `${chalk.yellowBright(types.join(','))} built in ${chalk.reset(chalk.bold(duration))} ${units}`,
   );
 
   console.info(

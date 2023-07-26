@@ -170,9 +170,13 @@ class SsrManifest {
       const routeId = [index, routeIndex].filter(Boolean).join('-');
 
       if (route.lazy) {
-        const resolvedRoute = await route.lazy();
+        try {
+          const resolvedRoute = await route.lazy();
 
-        result[routeId] = this.normalizeRoutePath(resolvedRoute?.['pathId'] as string);
+          result[routeId] = this.normalizeRoutePath(resolvedRoute?.['pathId'] as string);
+        } catch (e) {
+          console.error(chalk.red('Failed to load route:'), route.path, e);
+        }
       } else if (route.children) {
         Object.assign(result, await this.getRoutesIds(route.children, routeId));
       }
@@ -205,7 +209,7 @@ class SsrManifest {
       const routeAssets = [
         ...(routeMeta?.assets ?? []),
         ...(routeMeta?.css ?? []),
-        routeMeta.file,
+        routeMeta?.file,
         ...(shouldPreloadAssets ? routeMeta?.imports ?? [] : []).map(
           (nestedAsset) => manifest[nestedAsset]?.file,
         ),
