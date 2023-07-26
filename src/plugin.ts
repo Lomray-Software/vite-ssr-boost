@@ -11,7 +11,6 @@ export interface IPluginOptions {
   indexFile?: string; // default: index.html
   serverFile?: string; // default: server.ts
   clientFile?: string; // default: client.ts
-  preloadAssets?: boolean; // default: true
   tsconfigAliases?: boolean | IMakeAliasesPluginOptions; // Read aliases from tsconfig
   customShortcuts?: {
     key: string;
@@ -25,7 +24,6 @@ const defaultOptions: IPluginOptions = {
   indexFile: 'index.html',
   serverFile: 'server.ts',
   clientFile: 'client.ts',
-  preloadAssets: false,
   tsconfigAliases: true,
 };
 

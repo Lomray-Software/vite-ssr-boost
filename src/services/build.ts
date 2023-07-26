@@ -134,7 +134,7 @@ class Build {
     await SsrManifest.get(serverConfig, {
       buildDir: this.viteConfig.build.outDir,
       viteAliases: this.viteConfig.resolve.alias,
-    }).buildRoutesManifest(this.pluginConfig.preloadAssets);
+    }).buildRoutesManifest();
   }
 
   /**

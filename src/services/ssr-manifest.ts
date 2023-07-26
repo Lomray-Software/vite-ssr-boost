@@ -19,6 +19,7 @@ interface IManifest {
     assets: string[];
     css: string[];
     file: string;
+    isEntry?: boolean;
     imports: string[];
   };
 }
@@ -33,6 +34,9 @@ enum AssetType {
 interface IAsset {
   type: AssetType;
   url: string;
+  weight: number;
+  isNested: boolean;
+  isPreload: boolean;
   content?: string;
 }
 
@@ -80,7 +84,7 @@ class SsrManifest {
   /**
    * Loaded assets manifest file
    */
-  protected routesAssets: Record<string, string[]> | null = null;
+  protected routesAssets: Record<string, IAsset[]> | null = null;
 
   /**
    * @constructor
@@ -137,7 +141,7 @@ class SsrManifest {
   /**
    * Load assets manifest
    */
-  protected loadAssetsManifest(): Record<string, string[]> {
+  protected loadAssetsManifest(): Record<string, IAsset[]> {
     if (this.routesAssets !== null) {
       return this.routesAssets;
     }
@@ -150,7 +154,7 @@ class SsrManifest {
 
     this.routesAssets = JSON.parse(fs.readFileSync(manifestFile, { encoding: 'utf-8' })) as Record<
       string,
-      string[]
+      IAsset[]
     >;
 
     return this.routesAssets;
@@ -186,9 +190,62 @@ class SsrManifest {
   }
 
   /**
+   * Sort assets
+   */
+  protected sortAssets(assets: IAsset[]): IAsset[] {
+    return assets.sort((a, b) =>
+      a.weight === b.weight ? Number(a.isNested) - Number(b.isNested) : a.weight - b.weight,
+    );
+  }
+
+  /**
+   * Get recursive module assets
+   */
+  protected getRouteAssets(
+    manifest: IManifest,
+    module: IManifest[string],
+    isNested = false,
+  ): Record<string, IAsset> {
+    const rootAssets = [...(module?.assets ?? []), ...(module?.css ?? []), module?.file];
+
+    const assets = rootAssets.reduce((res, asset) => {
+      if (asset) {
+        const type = this.getAssetType(asset);
+        const isEntry = module.isEntry && module.file === asset;
+
+        // keep only js,css,image,fonts files
+        if (type) {
+          res[asset] = {
+            url: `/${asset}`,
+            weight: isEntry ? 1.9 : this.getAssetWeight(asset),
+            type,
+            isNested,
+            isPreload: !isEntry,
+          };
+        }
+      }
+
+      return res;
+    }, {} as Record<string, IAsset>);
+
+    // nested assets
+    if (module.imports?.length) {
+      module.imports.forEach((nestedAsset) => {
+        const nestedModule = manifest[nestedAsset];
+
+        if (nestedModule) {
+          Object.assign(assets, this.getRouteAssets(manifest, nestedModule, true));
+        }
+      });
+    }
+
+    return assets;
+  }
+
+  /**
    * Build routes manifest file
    */
-  public async buildRoutesManifest(shouldPreloadAssets: boolean): Promise<void> {
+  public async buildRoutesManifest(): Promise<void> {
     const prepareServer = PrepareServer.init(ServerConfig.init({ isProd: true }));
     const manifest = this.loadClientManifest();
     const { routes } = await prepareServer.loadEntrypoint(false);
@@ -206,24 +263,8 @@ class SsrManifest {
       });
       const routeFile = `${routePath}${routePostfix || ''}`;
       const routeMeta = manifest[routeFile];
-      const routeAssets = [
-        ...(routeMeta?.assets ?? []),
-        ...(routeMeta?.css ?? []),
-        routeMeta?.file,
-        ...(shouldPreloadAssets ? routeMeta?.imports ?? [] : []).map(
-          (nestedAsset) => manifest[nestedAsset]?.file,
-        ),
-      ]
-        .filter(
-          (asset) =>
-            // keep only js,css,image,fonts files
-            asset && this.getAssetType(asset),
-        )
-        .map((asset) => `/${asset}`);
 
-      if (routeAssets) {
-        result[routeId] = routeAssets;
-      }
+      result[routeId] = this.sortAssets(Object.values(this.getRouteAssets(manifest, routeMeta)));
     });
 
     fs.writeFileSync(this.getAssetsManifestFile(), JSON.stringify(result, null, 2), {
@@ -307,20 +348,12 @@ class SsrManifest {
 
     const routesAssets = this.loadAssetsManifest();
 
-    return routeIds
-      .map((routeId) => routesAssets[routeId])
-      .filter(Boolean)
-      .flat()
-      .sort((a, b) => {
-        const aWeight = this.getAssetWeight(a);
-        const bWeight = this.getAssetWeight(b);
-
-        return aWeight === bWeight ? 0 : aWeight - bWeight;
-      })
-      .map((url) => ({
-        type: this.getAssetType(url)!,
-        url,
-      }));
+    return this.sortAssets(
+      routeIds
+        .map((routeId) => routesAssets[routeId])
+        .flat()
+        .filter(Boolean),
+    );
   }
 
   /**
@@ -357,7 +390,7 @@ class SsrManifest {
   /**
    * Get module assets
    */
-  protected getModuleAssets(module?: ModuleNode): { [id: string]: IAsset } {
+  protected getModuleAssets(module?: ModuleNode, isNested = false): { [id: string]: IAsset } {
     if (!module?.clientImportedModules.size) {
       return {};
     }
@@ -377,7 +410,10 @@ class SsrManifest {
             assets[file] = {
               type: AssetType.style,
               url: file,
+              weight: this.getAssetWeight(file),
               content: JSON.parse(`{"style": "${code}"}`).style,
+              isNested,
+              isPreload: false,
             };
           } catch (e) {
             console.warn(chalk.yellowBright('Failed to parse style: ', file));
@@ -386,7 +422,7 @@ class SsrManifest {
       } else if (clientImportedModules.size) {
         assets = {
           ...assets,
-          ...this.getModuleAssets(subModule),
+          ...this.getModuleAssets(subModule, true),
         };
       }
     });
@@ -467,7 +503,7 @@ class SsrManifest {
   public injectAssets({ routerContext, html, res, hasEarlyHints = false }: IRequestContext): void {
     const assets = this.getAssets(routerContext?.matches);
     const htmlAssets = assets
-      .map(({ type, url, content = '' }) => {
+      .map(({ type, url, isPreload, content = '' }) => {
         switch (type) {
           case 'style':
             return this.config.getVite()
@@ -475,7 +511,9 @@ class SsrManifest {
               : `<link rel="stylesheet" href="${url}">`;
 
           case 'script':
-            return `<script async type="module" src="${url}"></script>`;
+            return isPreload
+              ? `<link rel="modulepreload" as="script" crossorigin href="${url}">`
+              : `<script async type="module" src="${url}"></script>`;
         }
 
         return null;

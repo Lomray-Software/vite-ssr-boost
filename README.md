@@ -187,10 +187,6 @@ SsrBoost({
    * Add tsconfig aliases to vite config aliases
    */
   tsconfigAliases: true, // default: true
-  /**
-   * Production: add scripts to head (server-side)
-   */
-  preloadAssets: false, // default: false
 })
 ```
 
