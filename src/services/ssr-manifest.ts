@@ -7,7 +7,7 @@ import type { RouteObject } from 'react-router-dom';
 import type { Alias, ModuleNode } from 'vite';
 import type { IRequestContext } from '@node/render';
 import PrepareServer from '@services/prepare-server';
-import type ServerConfig from '@services/server-config';
+import ServerConfig from '@services/server-config';
 
 interface ISsrManifestParams {
   buildDir?: string;
@@ -185,7 +185,7 @@ class SsrManifest {
    * Build routes manifest file
    */
   public async buildRoutesManifest(shouldPreloadAssets: boolean): Promise<void> {
-    const prepareServer = PrepareServer.init(this.config);
+    const prepareServer = PrepareServer.init(ServerConfig.init({ isProd: true }));
     const manifest = this.loadClientManifest();
     const { routes } = await prepareServer.loadEntrypoint(false);
     const routesPaths = await this.getRoutesIds(routes as RouteObject[]);

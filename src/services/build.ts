@@ -124,6 +124,8 @@ class Build {
    * Build assets manifest file
    */
   public async buildManifest(): Promise<void> {
+    console.log(chalk.blue('Building routes manifest file...'));
+
     const serverConfig = ServerConfig.init(
       { isProd: this.isProd, mode: this.params.mode },
       { root: this.viteConfig.root },
