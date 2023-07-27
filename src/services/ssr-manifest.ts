@@ -229,7 +229,7 @@ class SsrManifest {
     }, {} as Record<string, IAsset>);
 
     // nested assets
-    if (module.imports?.length) {
+    if (module?.imports?.length) {
       module.imports.forEach((nestedAsset) => {
         const nestedModule = manifest[nestedAsset];
 

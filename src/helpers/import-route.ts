@@ -11,17 +11,6 @@ export type IAsyncRoute =
   | Omit<NonIndexRouteObject, ImmutableRouteKey>;
 
 /**
- * Assign route path id to component
- */
-const assignId = (response: Record<string, any>, id?: string) => {
-  if (!id) {
-    return;
-  }
-
-  response['pathId'] = id;
-};
-
-/**
  * Import dynamic route
  */
 const importRoute = async (route: IDynamicRoute, id?: string): Promise<IAsyncRoute> => {
@@ -29,13 +18,11 @@ const importRoute = async (route: IDynamicRoute, id?: string): Promise<IAsyncRou
 
   // fallback to react router export style
   if (resolved['Component']) {
-    assignId(resolved, id);
-
-    return resolved as IAsyncRoute;
+    return { ...resolved, pathId: id } as IAsyncRoute;
   }
 
   const Component = resolved.default;
-  const result = { Component };
+  const result = { Component, pathId: id };
 
   keys.forEach((key) => {
     if (Component[key]) {
@@ -46,8 +33,6 @@ const importRoute = async (route: IDynamicRoute, id?: string): Promise<IAsyncRou
   if (Component.Suspense) {
     result.Component = withSuspense(Component, Component.Suspense);
   }
-
-  assignId(result, id);
 
   return result;
 };
