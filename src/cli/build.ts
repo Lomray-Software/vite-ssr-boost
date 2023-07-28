@@ -1,7 +1,7 @@
 import childProcess from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import chalk from 'chalk';
-import viteResetCache from '@cli/vite-reset-cache';
+import viteResetCache from '@cli/helpers/vite-reset-cache';
 import cliName from '@constants/cli-name';
 import { createDevMarker } from '@helpers/dev-marker';
 import processStop from '@helpers/process-stop';

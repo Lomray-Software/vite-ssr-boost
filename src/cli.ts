@@ -4,11 +4,11 @@ import { readFileSync } from 'fs';
 import chalk from 'chalk';
 import { Command, Option } from 'commander';
 import runBuild from '@cli/build';
-import onKeyPress from '@cli/keyboard-input';
+import onKeyPress from '@cli/helpers/keyboard-input';
+import viteResetCache from '@cli/helpers/vite-reset-cache';
 import runDev from '@cli/run-dev';
 import runDockerBuild from '@cli/run-docker-build';
 import runProd from '@cli/run-prod';
-import viteResetCache from '@cli/vite-reset-cache';
 import CliActions from '@constants/cli-actions';
 import cliContext from '@constants/cli-context';
 import cliName from '@constants/cli-name';
@@ -117,16 +117,24 @@ program
   )
   .addOption(
     new Option(
-      '--no-warnings',
+      '--throw-warnings',
       'The build will abort with an error if warnings occur in the process.',
     ).default(false),
   )
   .action(
-    async ({ onlyClient, clientOptions, serverOptions, mode, unlockRobots, eject, noWarnings }) => {
+    async ({
+      onlyClient,
+      clientOptions,
+      serverOptions,
+      mode,
+      unlockRobots,
+      eject,
+      throwWarnings,
+    }) => {
       await runBuild({
         isOnlyClient: onlyClient,
         isUnlockRobots: unlockRobots,
-        isNoWarnings: noWarnings,
+        isNoWarnings: throwWarnings,
         isEject: eject,
         clientOptions,
         serverOptions,

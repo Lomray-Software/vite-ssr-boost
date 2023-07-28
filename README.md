@@ -196,6 +196,28 @@ Explore all commands and options:
 ssr-boost -h
 ```
 
+## WARNING
+Route imports of the following types are supported:
+```typescript jsx
+import { RouteObject } from 'react-router-dom';
+import HomePage from './pages/home';
+
+const importPath = './pages/home';
+
+const routes: RouteObject[] = [
+  {
+    path: '/home',
+    Component: HomePage, // support
+    element: <AppLayout />, // support
+    lazy: () => import('./pages/home'), // support
+    lazy: () => import(importPath), // not support
+    lazy: () => { // not support
+        return import('./pages/home');
+    } 
+  }
+];
+```
+
 ## Demo
 Explore [demo app](https://github.com/Lomray-Software/vite-template) to more understand.
 
