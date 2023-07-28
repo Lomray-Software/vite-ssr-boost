@@ -97,19 +97,32 @@ class Build {
   /**
    * Promisify spawn process
    */
-  public promisifyProcess(command: childProcess.ChildProcess): Promise<unknown> {
+  public promisifyProcess(
+    command: childProcess.ChildProcess,
+    isRejectWarnings = false,
+  ): Promise<unknown> {
     const promise = new Promise((resolve, reject) => {
       command.on('exit', (code) => {
         resolve(code);
       });
 
-      command.on('close', (code) => {
+      command.on('close', (code: number): void => {
         resolve(code);
       });
 
-      command.on('error', (message) => {
+      command.on('error', (message: string): void => {
         reject(message);
       });
+
+      if (isRejectWarnings) {
+        command.stderr?.on('data', (buff: Uint8Array): void => {
+          const msg = Buffer.from(buff).toString();
+
+          if (msg.includes('warning') || msg.includes('WARNING')) {
+            resolve(1);
+          }
+        });
+      }
     });
 
     command.stdout?.pipe(process.stdout);

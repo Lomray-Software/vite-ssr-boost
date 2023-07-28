@@ -4,17 +4,19 @@ import chalk from 'chalk';
 import viteResetCache from '@cli/vite-reset-cache';
 import cliName from '@constants/cli-name';
 import { createDevMarker } from '@helpers/dev-marker';
+import processStop from '@helpers/process-stop';
 import Build from '@services/build';
 
 interface IBuildParams {
-  isOnlyClient?: boolean;
-  isWatch?: boolean;
-  isEject?: boolean;
-  isUnlockRobots?: boolean;
+  onFinish?: () => void;
+  mode?: string;
   clientOptions?: string;
   serverOptions?: string;
-  mode?: string;
-  onFinish?: () => void;
+  isOnlyClient?: boolean;
+  isWatch?: boolean;
+  isUnlockRobots?: boolean;
+  isEject?: boolean;
+  isNoWarnings?: boolean;
 }
 
 /**
@@ -22,13 +24,14 @@ interface IBuildParams {
  */
 async function build({
   onFinish,
+  mode = '',
+  clientOptions = '',
+  serverOptions = '',
   isOnlyClient = false,
   isWatch = false,
   isUnlockRobots = false,
   isEject = false,
-  clientOptions = '',
-  serverOptions = '',
-  mode = '',
+  isNoWarnings = false,
 }: IBuildParams): Promise<void> {
   const perfStart = performance.now();
   const buildService = new Build({ mode });
@@ -50,7 +53,7 @@ async function build({
       `vite build ${clientOptions} --emptyOutDir --outDir ${buildService.outDir}/client ${modeOpt}`,
       {
         signal: controller.signal,
-        stdio: [process.stdin, 'pipe', process.stderr],
+        stdio: [process.stdin, 'pipe', 'pipe'],
         shell: true,
         env: {
           ...process.env,
@@ -60,10 +63,13 @@ async function build({
         },
       },
     ),
+    isNoWarnings,
   );
 
   if (!isWatch) {
-    await clientProcess;
+    const exitCode = (await clientProcess) as number;
+
+    processStop(exitCode, true);
   }
 
   let serverProcess: Promise<unknown> | undefined;
@@ -77,7 +83,7 @@ async function build({
         `vite build ${serverOptions} --emptyOutDir --outDir ${buildService.outDir}/server --ssr ${buildService.serverFile} ${modeOpt}`,
         {
           signal: controller.signal,
-          stdio: [process.stdin, 'pipe', process.stderr],
+          stdio: [process.stdin, 'pipe', 'pipe'],
           shell: true,
           env: {
             ...process.env,
@@ -87,10 +93,13 @@ async function build({
           },
         },
       ),
+      isNoWarnings,
     );
 
     if (!isWatch) {
-      await serverProcess;
+      const exitCode = (await serverProcess) as number;
+
+      processStop(exitCode, true);
       await buildService.buildManifest();
 
       if (isEject) {

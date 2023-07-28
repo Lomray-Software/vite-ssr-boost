@@ -115,16 +115,25 @@ program
   .addOption(
     new Option('--eject', 'Produces entrypoint file to run app without cli').default(false),
   )
-  .action(async ({ onlyClient, clientOptions, serverOptions, mode, unlockRobots, eject }) => {
-    await runBuild({
-      isOnlyClient: onlyClient,
-      isUnlockRobots: unlockRobots,
-      isEject: eject,
-      clientOptions,
-      serverOptions,
-      mode,
-    });
-  });
+  .addOption(
+    new Option(
+      '--no-warnings',
+      'The build will abort with an error if warnings occur in the process.',
+    ).default(false),
+  )
+  .action(
+    async ({ onlyClient, clientOptions, serverOptions, mode, unlockRobots, eject, noWarnings }) => {
+      await runBuild({
+        isOnlyClient: onlyClient,
+        isUnlockRobots: unlockRobots,
+        isNoWarnings: noWarnings,
+        isEject: eject,
+        clientOptions,
+        serverOptions,
+        mode,
+      });
+    },
+  );
 
 program
   .command(CliActions.start)
