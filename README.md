@@ -1,7 +1,7 @@
 <h1 align='center'>Vite SSR BOOST</h1>
 
 <p align="center">
-    <img  src="./logo.png" alt="Bootstrap logo" width="250" height="250">
+    <img  src="./logo.png" alt="Vite SSR BOOST logo" width="250" height="250">
 </p>
 
 ### Key features:

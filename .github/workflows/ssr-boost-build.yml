@@ -32,7 +32,7 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: ${{ inputs.config-path }}
+          node-version: ${{ inputs.node-version }}
           cache: 'npm'
 
       - name: Install dependencies
