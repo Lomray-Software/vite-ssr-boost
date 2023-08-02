@@ -1,5 +1,9 @@
 <h1 align='center'>Vite SSR BOOST</h1>
 
+<p align="center">
+    <img  src="./logo.png" alt="Bootstrap logo" width="200" height="200">
+</p>
+
 - Develop ⚡charged⚡ server side applications with React streaming 💨 support.
 - Unlocks Suspense for server side applications.
 - Switch between SPA and SSR in 1 second.
