@@ -1,8 +1,10 @@
 <h1 align='center'>Vite SSR BOOST</h1>
 
 <p align="center">
-    <img  src="./logo.png" alt="Bootstrap logo" width="200" height="200">
+    <img  src="./logo.png" alt="Bootstrap logo" width="250" height="250">
 </p>
+
+### Key features:
 
 - Develop ⚡charged⚡ server side applications with React streaming 💨 support.
 - Unlocks Suspense for server side applications.
@@ -28,6 +30,7 @@
 - [Getting started](#getting-started)
 - [How to use](#how-to-use)
 - [Plugin options](#plugin-options)
+- [Useful imports](#useful-imports)
 - [CLI](#cli)
 - [Example](#demo)
 - [Bugs and feature requests](#bugs-and-feature-requests)
@@ -192,6 +195,35 @@ SsrBoost({
    */
   tsconfigAliases: true, // default: true
 })
+```
+
+## Useful imports
+```typescript
+/**
+ * Components
+ */
+// Navigate component based on react-router-dom with server-side support
+import Navigate from '@lomray/vite-ssr-boost/components/navigate';
+// Change server response status
+import ResponseStatus from '@lomray/vite-ssr-boost/components/response-status';
+// Scroll page to top after navigate
+import ScrollToTop from '@lomray/vite-ssr-boost/components/scroll-to-top';
+// HOC for wrap component in Suspense
+import withSuspense from '@lomray/vite-ssr-boost/components/with-suspense';
+
+/**
+ * Helpers
+ */
+// Get server state (e.g. state manager) on client side
+import getServerState from '@lomray/vite-ssr-boost/helpers/get-server-state';
+
+/**
+ * Interfaces
+ */
+// interfaces for route components
+import type { FCRoute, FCCRoute } from '@lomray/vite-ssr-boost/interfaces/fc-route';
+// interface for define routes
+import type { TRouteObject } from '@lomray/vite-ssr-boost/interfaces/route-object';
 ```
 
 ## CLI
