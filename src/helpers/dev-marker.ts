@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ResolvedConfig } from 'vite';
 
-const markerFileName = 'server/.dev';
+const getMarkerFile = (root: string, withFile = true): string =>
+  [root, 'server', withFile && '.dev'].filter(Boolean).join('/');
 
 /**
  * Create dev marker
@@ -10,8 +11,9 @@ const markerFileName = 'server/.dev';
  * @see printServerInfo
  */
 const createDevMarker = (isProd: boolean, { root, build: buildConf }: ResolvedConfig): void => {
-  const devMarkerPath = path.resolve(root, buildConf.outDir);
-  const devMarker = `${devMarkerPath}/${markerFileName}`;
+  const buildRoot = path.resolve(root, buildConf.outDir);
+  const devMarkerPath = getMarkerFile(buildRoot, false);
+  const devMarker = getMarkerFile(buildRoot);
 
   if (!isProd) {
     if (!fs.existsSync(devMarkerPath)) {
@@ -24,4 +26,4 @@ const createDevMarker = (isProd: boolean, { root, build: buildConf }: ResolvedCo
   }
 };
 
-export { createDevMarker, markerFileName };
+export { createDevMarker, getMarkerFile };
