@@ -70,17 +70,12 @@ class Build {
   public async makeConfig(): Promise<void> {
     const { mode } = this.params;
 
-    this.viteConfig = await resolveConfig(
-      {},
-      'build',
-      mode,
-      mode === 'production' ? 'production' : 'development',
-    );
+    this.viteConfig = await resolveConfig({}, 'build', mode, 'production');
     this.pluginConfig = getPluginConfig(this.viteConfig);
     this.buildDir = path.resolve(this.viteConfig.root, this.viteConfig.build.outDir);
     this.outDir = this.viteConfig.build.outDir;
     this.serverFile = this.pluginConfig.serverFile;
-    this.nodeEnv = process.env.NODE_ENV || 'development';
+    this.nodeEnv = process.env.NODE_ENV || 'production';
     this.isProd = this.nodeEnv === 'production';
   }
 
