@@ -33,18 +33,18 @@
     "pretty": true,
     "useDefineForClassFields": true,
     "jsx": "react",
-    "baseUrl": "./src",
+    "baseUrl": ".",
     "paths": {
-      "@browser/*": ["./browser/*"],
-      "@cli/*": ["./cli/*"],
-      "@components/*": ["./components/*"],
-      "@constants/*": ["./constants/*"],
-      "@context/*": ["./context/*"],
-      "@helpers/*": ["./helpers/*"],
-      "@interfaces/*": ["./interfaces/*"],
-      "@node/*": ["./node/*"],
-      "@plugins/*": ["./plugins/*"],
-      "@services/*": ["./services/*"]
+      "@browser/*": ["./src/browser/*"],
+      "@cli/*": ["./src/cli/*"],
+      "@components/*": ["./src/components/*"],
+      "@constants/*": ["./src/constants/*"],
+      "@context/*": ["./src/context/*"],
+      "@helpers/*": ["./src/helpers/*"],
+      "@interfaces/*": ["./src/interfaces/*"],
+      "@node/*": ["./src/node/*"],
+      "@plugins/*": ["./src/plugins/*"],
+      "@services/*": ["./src/services/*"]
     }
   },
   "exclude": [
@@ -53,7 +53,7 @@
     "node_modules",
     "lib",
     "commitlint.config.js",
-    "nyc.config.js",
+    ".mocharc.json",
     "rollup.config.js"
   ]
 }

@@ -24,6 +24,9 @@ jobs:
       - name: Run eslint
         run: npm run lint:check
 
+      - name: Test
+        run: npm run test
+
       - name: Build
         run: |
           npm pkg delete scripts.prepare

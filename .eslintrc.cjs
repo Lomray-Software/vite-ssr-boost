@@ -13,6 +13,7 @@ module.exports = {
     es6: true,
     node: true,
     serviceworker: true,
+    mocha: true,
   },
   globals: {
     NodeJS: true,

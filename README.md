@@ -24,6 +24,7 @@
   <img src="https://img.shields.io/bundlephobia/minzip/@lomray/vite-ssr-boost" alt="size">
   <img src="https://img.shields.io/npm/l/@lomray/vite-ssr-boost" alt="size">
   <img src="https://img.shields.io/npm/v/@lomray/vite-ssr-boost?label=semantic%20release&logo=semantic-release" alt="semantic version">
+  <img src="https://sonarcloud.io/api/project_badges/measure?project=vite-ssr-boost&metric=coverage" alt="code coverage">
 </p>
 
 ## Table of contents

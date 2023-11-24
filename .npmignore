@@ -1,5 +1,6 @@
 __tests__
 __helpers__
+__mocks__
 src
 coverage
 *.tgz

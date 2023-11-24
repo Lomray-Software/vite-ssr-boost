@@ -22,3 +22,6 @@ jobs:
 
       - name: Typescript check
         run: npm run ts:check
+
+      - name: Test
+        run: npm run test

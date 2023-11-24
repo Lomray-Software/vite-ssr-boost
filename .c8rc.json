@@ -1,0 +1,11 @@
+{
+  "include": "src/**",
+  "exclude": "src/interfaces/**",
+  "all": true,
+  "cache": false,
+  "reporter": [
+    "text",
+    "text-summary",
+    "lcov"
+  ]
+}
