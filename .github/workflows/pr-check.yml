@@ -2,7 +2,8 @@ name: Check PR
 
 on:
   pull_request:
-    branches: [ prod ]
+    branches: [prod, staging]
+    types: [opened, synchronize, reopened]
 
 jobs:
   check:
@@ -24,4 +25,41 @@ jobs:
         run: npm run ts:check
 
       - name: Test
-        run: npm run test
+        run: npx c8 npm run test
+
+      - uses: actions/upload-artifact@master
+        with:
+          name: coverage-lcov
+          path: coverage
+
+      - name: Build
+        run: |
+          npm pkg delete scripts.prepare
+          npm run build
+
+  sonarcube:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.ref }}-sonarcube
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@master
+        with:
+          name: coverage-lcov
+          path: coverage
+
+      - id: package-version
+        run: npx @lomray/microservices-cli package-version
+
+      - uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_CLOUD_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectVersion=${{ steps.package-version.outputs.version }}
