@@ -30,10 +30,11 @@ function createFetchRequest(req: ExpressRequest): Request {
     method: req.method,
     headers,
     signal: controller.signal,
+    body: undefined,
   };
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    init['body'] = req.body;
+    init.body = req.body;
   }
 
   return new Request(url.href, init);

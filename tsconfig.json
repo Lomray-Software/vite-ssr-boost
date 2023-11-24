@@ -31,7 +31,6 @@
     "strictNullChecks": true,
     "strict": false,
     "pretty": true,
-    "suppressImplicitAnyIndexErrors": true,
     "useDefineForClassFields": true,
     "jsx": "react",
     "baseUrl": "./src",

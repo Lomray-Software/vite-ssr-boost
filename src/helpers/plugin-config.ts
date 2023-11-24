@@ -13,9 +13,10 @@ export interface IPluginConfig extends Required<IPluginOptions> {
  * Get plugin config from vite config
  */
 function getPluginConfig(viteConfig: ResolvedConfig): IPluginConfig {
-  const pluginOptions = viteConfig.plugins.find((plugin) => plugin.name === PLUGIN_NAME)?.[
-    'pluginOptions'
-  ] as unknown as IPluginConfig;
+  const pluginConfig = viteConfig.plugins.find(
+    (plugin) => plugin.name === PLUGIN_NAME,
+  ) as ResolvedConfig['plugins'][number] & { pluginOptions?: IPluginConfig };
+  const pluginOptions = pluginConfig?.pluginOptions;
 
   if (!pluginOptions) {
     throw new Error(

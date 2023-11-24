@@ -35,7 +35,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
   const dirInfo = new URL(import.meta.url);
   const action = (global.viteBoostAction || process.env.SSR_BOOST_ACTION) as CliActions;
   const mergedOptions: IPluginOptions = { ...defaultOptions, ...options };
-  const isSSR = process.env.SSR_BOOST_IS_SSR === '1' || action === 'dev';
+  const isSSR = process.env.SSR_BOOST_IS_SSR === '1' || action === CliActions.dev;
   const isBuild = action === CliActions.build;
 
   const plugins: Plugin[] = [

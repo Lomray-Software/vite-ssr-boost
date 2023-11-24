@@ -67,12 +67,12 @@ async function build({
   );
 
   if (!isWatch) {
-    const exitCode = (await clientProcess) as number;
+    const exitCode = await clientProcess.promise;
 
     processStop(exitCode, true);
   }
 
-  let serverProcess: Promise<unknown> | undefined;
+  let serverProcess: ReturnType<Build['promisifyProcess']> | null = null;
 
   /**
    * Build server
@@ -97,7 +97,7 @@ async function build({
     );
 
     if (!isWatch) {
-      const exitCode = (await serverProcess) as number;
+      const exitCode = await serverProcess.promise;
 
       processStop(exitCode, true);
       await buildService.buildManifest();
@@ -126,8 +126,8 @@ async function build({
         buildCount -= 1;
 
         if (!buildCount) {
-          clientProcess['command'].stdout.removeListener('data', listener);
-          serverProcess?.['command'].stdout.removeListener('data', listener);
+          clientProcess.command.stdout?.removeListener('data', listener);
+          serverProcess?.command.stdout?.removeListener('data', listener);
           createDevMarker(buildService.isProd, buildService.viteConfig);
           onFinish?.();
         }
@@ -137,8 +137,8 @@ async function build({
     /**
      * Listen output for call onFinish
      */
-    clientProcess['command'].stdout.on('data', listener);
-    serverProcess?.['command'].stdout.on('data', listener);
+    clientProcess.command.stdout?.on('data', listener);
+    serverProcess?.command.stdout?.on('data', listener);
 
     return;
   }

@@ -1,14 +1,14 @@
 /**
  * Get server state on the client side
  */
-const getServerState = (name: string, shouldRemove = true): Record<string, any> => {
-  const data = window[name] as Record<string, any>;
+const getServerState = <TP = Record<string, any>>(name: string, shouldRemove = true): TP => {
+  const data = (window as Record<any, any>)[name] as TP;
 
   if (shouldRemove && data) {
-    delete window[name];
+    delete (window as Record<any, any>)[name];
   }
 
-  return data ?? {};
+  return (data ?? {}) as TP;
 };
 
 export default getServerState;

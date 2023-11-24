@@ -10,7 +10,7 @@ export interface IObtainStreamErrorOut {
  * Get react stream error
  */
 const obtainStreamError = (err: unknown): IObtainStreamErrorOut => {
-  const message = (err?.['message'] ?? 'Unknown.').replace('Error: ', '');
+  const message = ((err as Record<string, any>)?.message ?? 'Unknown.').replace('Error: ', '');
 
   if (message === 'The render was aborted by the server without a reason.') {
     return {

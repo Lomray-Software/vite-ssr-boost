@@ -95,8 +95,8 @@ class Build {
   public promisifyProcess(
     command: childProcess.ChildProcess,
     isRejectWarnings = false,
-  ): Promise<unknown> {
-    const promise = new Promise((resolve, reject) => {
+  ): { promise: Promise<number | null | string>; command: childProcess.ChildProcess } {
+    const promise = new Promise<number | null | string>((resolve, reject) => {
       command.on('exit', (code) => {
         resolve(code);
       });
@@ -123,9 +123,7 @@ class Build {
     command.stdout?.pipe(process.stdout);
     command.stderr?.pipe(process.stderr);
 
-    promise['command'] = command;
-
-    return promise;
+    return { promise, command };
   }
 
   /**

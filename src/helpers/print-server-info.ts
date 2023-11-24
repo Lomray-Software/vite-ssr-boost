@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
 import chalk from 'chalk';
+import type { ResolvedConfig } from 'vite';
 import CliActions from '@constants/cli-actions';
 import cliName from '@constants/cli-name';
 import { getMarkerFile } from '@helpers/dev-marker';
@@ -38,12 +39,14 @@ async function printServerInfo(
     { clear: !Logger.hasWarned },
   );
 
-  const viteConfig = config.getVite()?.config;
+  const viteConfig = config.getVite()?.config as
+    | (ResolvedConfig & { rawBase?: string })
+    | undefined;
   const isProdBuild = !viteConfig?.mode && !fs.existsSync(devMarker);
   const resolvedUrls = await resolveServerUrls(server, {
     host,
     isHttps: typeof viteConfig?.server.https === 'boolean' ? viteConfig?.server.https : false,
-    rawBase: viteConfig?.['rawBase'],
+    rawBase: viteConfig?.rawBase,
   });
   const mode =
     viteConfig?.mode || isProdBuild

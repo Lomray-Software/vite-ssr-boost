@@ -5,6 +5,7 @@ import type { AgnosticDataRouteMatch } from '@remix-run/router/dist/utils';
 import chalk from 'chalk';
 import type { RouteObject } from 'react-router-dom';
 import type { Alias, ModuleNode } from 'vite';
+import type { IAsyncRoute } from '@helpers/import-route';
 import type { IRequestContext } from '@node/render';
 import PrepareServer from '@services/prepare-server';
 import ServerConfig from '@services/server-config';
@@ -166,8 +167,8 @@ class SsrManifest {
   protected async getRoutesIds(
     routes: RouteObject[],
     index?: string,
-  ): Promise<Record<string, string>> {
-    const result = {};
+  ): Promise<Record<string, string | undefined>> {
+    const result: Record<string, string | undefined> = {};
 
     for (const routeIndex in routes) {
       const route = routes[routeIndex];
@@ -175,9 +176,9 @@ class SsrManifest {
 
       if (route.lazy) {
         try {
-          const resolvedRoute = await route.lazy();
+          const resolvedRoute: IAsyncRoute = await route.lazy();
 
-          result[routeId] = this.normalizeRoutePath(resolvedRoute?.['pathId'] as string);
+          result[routeId] = this.normalizeRoutePath(resolvedRoute?.pathId);
         } catch (e) {
           console.error(chalk.red('Failed to load route:'), route.path, e);
         }
@@ -208,25 +209,28 @@ class SsrManifest {
   ): Record<string, IAsset> {
     const rootAssets = [...(module?.assets ?? []), ...(module?.css ?? []), module?.file];
 
-    const assets = rootAssets.reduce((res, asset) => {
-      if (asset) {
-        const type = this.getAssetType(asset);
-        const isEntry = module.isEntry && module.file === asset;
+    const assets = rootAssets.reduce(
+      (res, asset) => {
+        if (asset) {
+          const type = this.getAssetType(asset);
+          const isEntry = module.isEntry && module.file === asset;
 
-        // keep only js,css,image,fonts files
-        if (type) {
-          res[asset] = {
-            url: `/${asset}`,
-            weight: isEntry ? 1.9 : this.getAssetWeight(asset),
-            type,
-            isNested,
-            isPreload: !isEntry,
-          };
+          // keep only js,css,image,fonts files
+          if (type) {
+            res[asset] = {
+              url: `/${asset}`,
+              weight: isEntry ? 1.9 : this.getAssetWeight(asset),
+              type,
+              isNested,
+              isPreload: !isEntry,
+            };
+          }
         }
-      }
 
-      return res;
-    }, {} as Record<string, IAsset>);
+        return res;
+      },
+      {} as Record<string, IAsset>,
+    );
 
     // nested assets
     if (module?.imports?.length) {
@@ -252,7 +256,7 @@ class SsrManifest {
     const routesPaths = await this.getRoutesIds(routes as RouteObject[]);
     const postfixes = this.getRouteImportPostfix();
 
-    const result = {};
+    const result: Record<string, IAsset[]> = {};
 
     // find route assets
     Object.entries(routesPaths).forEach(([routeId, routePath]) => {
@@ -276,7 +280,7 @@ class SsrManifest {
    * Get vite aliases
    */
   protected getAliases(): Record<string, string> {
-    const aliases = {};
+    const aliases: Record<string, string> = {};
 
     this.viteAliases?.forEach(({ find, replacement }) => {
       if (typeof find !== 'string') {
@@ -362,7 +366,7 @@ class SsrManifest {
   protected getAssetsDev(routes?: AgnosticDataRouteMatch[]): IAsset[] {
     const routeIds =
       (routes
-        ?.map(({ route }) => this.normalizeRoutePath(route?.['pathId'] as string, true))
+        ?.map(({ route }) => this.normalizeRoutePath((route as IAsyncRoute)?.pathId, true))
         .filter(Boolean) as string[]) ?? [];
 
     if (!routeIds.length) {
@@ -437,10 +441,10 @@ class SsrManifest {
     const type = this.getAssetType(asset);
 
     switch (type) {
-      case 'style':
+      case AssetType.style:
         return 1;
 
-      case 'script':
+      case AssetType.script:
         return 2;
 
       default:
@@ -505,12 +509,12 @@ class SsrManifest {
     const htmlAssets = assets
       .map(({ type, url, isPreload, content = '' }) => {
         switch (type) {
-          case 'style':
+          case AssetType.style:
             return this.config.getVite()
               ? `<style data-vite-dev-id="${url}">${content}</style>`
               : `<link rel="stylesheet" href="${url}">`;
 
-          case 'script':
+          case AssetType.script:
             return isPreload
               ? this.config.isModulePreload
                 ? // can reduce lighthouse performance

@@ -6,9 +6,10 @@ import { keys } from '@interfaces/fc-route';
 
 export type IDynamicRoute = () => Promise<{ default: FCRoute | FCCRoute<any> }>;
 
-export type IAsyncRoute =
+export type IAsyncRoute = { pathId?: string } & (
   | Omit<IndexRouteObject, ImmutableRouteKey>
-  | Omit<NonIndexRouteObject, ImmutableRouteKey>;
+  | Omit<NonIndexRouteObject, ImmutableRouteKey>
+);
 
 /**
  * Import dynamic route
@@ -17,16 +18,16 @@ const importRoute = async (route: IDynamicRoute, id?: string): Promise<IAsyncRou
   const resolved = await route();
 
   // fallback to react router export style
-  if (resolved['Component']) {
+  if ('Component' in resolved) {
     return { ...resolved, pathId: id } as IAsyncRoute;
   }
 
   const Component = resolved.default;
-  const result = { Component, pathId: id };
+  const result: IAsyncRoute = { Component, pathId: id };
 
   keys.forEach((key) => {
     if (Component[key]) {
-      result[key] = Component[key];
+      result[key] = Component[key] as any;
     }
   });
 
