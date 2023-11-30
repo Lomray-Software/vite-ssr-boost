@@ -10,6 +10,7 @@
 - Unlocks Suspense for server side applications.
 - Switch between SPA and SSR in 1 second.
 - Charged CLI out of box.
+- Deploy to AWS Amplify/Docker in SPA/SSR mode for 5 sec.
 - Very easy to migrate, very easy to use.
 - All the power of [vite](https://vitejs.dev/)⚡
 - All the power of [react-router](https://reactrouter.com/)🛣
