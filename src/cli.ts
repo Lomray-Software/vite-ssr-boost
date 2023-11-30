@@ -6,6 +6,7 @@ import { Command, Option } from 'commander';
 import runBuild from '@cli/build';
 import onKeyPress from '@cli/helpers/keyboard-input';
 import viteResetCache from '@cli/helpers/vite-reset-cache';
+import runAmplifyBuild from '@cli/run-amplify-build';
 import runDev from '@cli/run-dev';
 import runDockerBuild from '@cli/run-docker-build';
 import runProd from '@cli/run-prod';
@@ -245,6 +246,23 @@ program
       dockerOptions,
       dockerFile,
       isOnlyClient: onlyClient,
+      mode,
+    });
+  });
+
+program
+  .command(CliActions.buildAmplify)
+  .description('Create AWS Amplify production build.')
+  .addOption(
+    new Option(
+      '--manifest-file [manifest-file]',
+      'Name of the Amplify manifest file (Default is PLUGIN_PATH/workflow/amplify-manifest.json).',
+    ),
+  )
+  .addOption(envModeOption)
+  .action(async ({ manifestFile, mode }) => {
+    await runAmplifyBuild({
+      manifestFile,
       mode,
     });
   });
