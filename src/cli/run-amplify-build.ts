@@ -10,12 +10,17 @@ import getPluginConfig from '@helpers/plugin-config';
 interface IRunAmplifyBuildParams {
   manifestFile?: string;
   mode?: string;
+  isOptimize?: boolean;
 }
 
 /**
  * Create AWS Amplify SSR build
  */
-async function runAmplifyBuild({ manifestFile, mode = '' }: IRunAmplifyBuildParams): Promise<void> {
+async function runAmplifyBuild({
+  manifestFile,
+  mode = '',
+  isOptimize = false,
+}: IRunAmplifyBuildParams): Promise<void> {
   const config = await resolveConfig({}, 'build', mode);
   const pluginConfig = getPluginConfig(config);
   const {
@@ -33,9 +38,13 @@ async function runAmplifyBuild({ manifestFile, mode = '' }: IRunAmplifyBuildPara
 
   // Check build server
   if (!fs.existsSync(`${buildDir}/server/start.js`)) {
-    throw new Error(
-      'Failed create Amplify build: Before, you should create standard build with `eject` option.',
+    console.error(
+      chalk.red(
+        'Failed create Amplify build: Before, you should create standard build with `eject` option.',
+      ),
     );
+
+    return;
   }
 
   if (fs.existsSync(amplifyDir)) {
@@ -45,9 +54,17 @@ async function runAmplifyBuild({ manifestFile, mode = '' }: IRunAmplifyBuildPara
   fs.mkdirSync(computeDir, { recursive: true });
   childProcess.execSync(`cp -r ${buildDir} ${computeDir}/build`, stdOpts);
   childProcess.execSync(`cp ${projectRoot}/package.json ${computeDir}/package.json`, stdOpts);
+  childProcess.execSync(
+    `cp ${projectRoot}/package-lock.json ${computeDir}/package-lock.json`,
+    stdOpts,
+  );
   childProcess.execSync(`cp -r ${buildDir}/client ${amplifyDir}/static`, stdOpts);
   childProcess.execSync(`cp ${manFile} ${amplifyDir}/deploy-manifest.json`, stdOpts);
   childProcess.execSync(`cp -r ${projectRoot}/node_modules ${computeDir}/node_modules`);
+
+  if (isOptimize) {
+    childProcess.execSync(`cd ${computeDir} && npm ci --omit=dev`, stdOpts);
+  }
 
   // cleanup
   childProcess.execSync(`rm -rf ${computeDir}/build/client/assets`, stdOpts);

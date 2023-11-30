@@ -259,11 +259,13 @@ program
       'Name of the Amplify manifest file (Default is PLUGIN_PATH/workflow/amplify-manifest.json).',
     ),
   )
+  .addOption(new Option('--is-optimize', 'Optimize node_modules folder.').default(false))
   .addOption(envModeOption)
-  .action(async ({ manifestFile, mode }) => {
+  .action(async ({ manifestFile, mode, isOptimize }) => {
     await runAmplifyBuild({
       manifestFile,
       mode,
+      isOptimize,
     });
   });
 
