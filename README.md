@@ -21,7 +21,6 @@
   <img src="https://sonarcloud.io/api/project_badges/measure?project=vite-ssr-boost&metric=vulnerabilities" alt="Vulnerabilities">
   <img src="https://sonarcloud.io/api/project_badges/measure?project=vite-ssr-boost&metric=bugs" alt="Bugs">
   <img src="https://sonarcloud.io/api/project_badges/measure?project=vite-ssr-boost&metric=ncloc" alt="Lines of Code">
-  <img src="https://img.shields.io/bundlephobia/minzip/@lomray/vite-ssr-boost" alt="size">
   <img src="https://img.shields.io/npm/l/@lomray/vite-ssr-boost" alt="size">
   <img src="https://img.shields.io/npm/v/@lomray/vite-ssr-boost?label=semantic%20release&logo=semantic-release" alt="semantic version">
   <img src="https://sonarcloud.io/api/project_badges/measure?project=vite-ssr-boost&metric=coverage" alt="code coverage">
