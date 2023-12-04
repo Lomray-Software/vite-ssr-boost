@@ -56,7 +56,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
         isDev: action === CliActions.dev,
       },
 
-      config(config, { ssrBuild }) {
+      config(config, { isSsrBuild }) {
         config.define = {
           ...(config.define ?? {}),
           __IS_SSR__: isSSR,
@@ -66,7 +66,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
           ...(config.build ?? {}),
         };
 
-        if (!ssrBuild) {
+        if (!isSsrBuild) {
           if (isSSR && isBuild) {
             config.build!.manifest = true;
           }
