@@ -121,10 +121,8 @@ class SsrManifest {
    * Load client ssr manifest
    */
   protected loadClientManifest(): IManifest {
-    const clientSsrManifest = path.resolve(
-      this.root,
-      `${this.buildDir || ''}/client/${this.manifestName}`,
-    );
+    const clientManifestDir = path.resolve(this.root, `${this.buildDir || ''}/client/.vite`);
+    const clientSsrManifest = `${clientManifestDir}/${this.manifestName}`;
 
     if (!fs.existsSync(clientSsrManifest)) {
       return {};
@@ -135,6 +133,11 @@ class SsrManifest {
     ) as IManifest;
 
     fs.rmSync(clientSsrManifest);
+
+    // try to remove empty .vite dir
+    if (fs.readdirSync(clientManifestDir).length === 0) {
+      fs.rmSync(clientManifestDir, { recursive: true });
+    }
 
     return result;
   }
