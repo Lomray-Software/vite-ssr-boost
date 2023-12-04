@@ -39,6 +39,7 @@ jobs:
 
   sonarcube:
     runs-on: ubuntu-latest
+    needs: check
     concurrency:
       group: ${{ github.ref }}-sonarcube
       cancel-in-progress: true
