@@ -237,7 +237,7 @@ ssr-boost -h
 Route imports of the following types are supported:
 ```typescript jsx
 import { RouteObject } from 'react-router-dom';
-import HomePage from './pages/home';
+import HomePage from './pages/home'; // not lazy imports should be directly in file where it use
 
 const importPath = './pages/home';
 

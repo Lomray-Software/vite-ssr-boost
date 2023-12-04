@@ -8,10 +8,16 @@ import ViteMakeAliasesPlugin from '@plugins/make-aliases';
 import ViteNormalizeRouterPlugin from '@plugins/normalize-route';
 
 export interface IPluginOptions {
-  indexFile?: string; // default: index.html
-  serverFile?: string; // default: server.ts
-  clientFile?: string; // default: client.ts
-  tsconfigAliases?: boolean | IMakeAliasesPluginOptions; // Read aliases from tsconfig
+  // default: index.html
+  indexFile?: string;
+  // default: server.ts
+  serverFile?: string;
+  // default: client.ts
+  clientFile?: string;
+  // Path contains routes declaration files (need to detect route files). default: undefined, e.g.: /routes/
+  routesPath?: string;
+  // Read aliases from tsconfig
+  tsconfigAliases?: boolean | IMakeAliasesPluginOptions;
   customShortcuts?: {
     key: string;
     description: string;
@@ -58,7 +64,6 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
 
         config.build = {
           ...(config.build ?? {}),
-          // modulePreload: config.build?.modulePreload ?? false,
         };
 
         if (!ssrBuild) {
@@ -78,7 +83,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     },
   ];
 
-  const { tsconfigAliases } = mergedOptions;
+  const { tsconfigAliases, routesPath } = mergedOptions;
 
   if (tsconfigAliases) {
     plugins.push(
@@ -86,7 +91,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     );
   }
 
-  plugins.push(ViteNormalizeRouterPlugin({ isSSR }));
+  plugins.push(ViteNormalizeRouterPlugin({ isSSR, isBuild, routesPath }));
 
   return plugins;
 }
