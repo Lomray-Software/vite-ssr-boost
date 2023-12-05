@@ -71,7 +71,7 @@ interface IResolveServerUrlsOptions {
 
 /**
  * Resolve server urls
- * @see https://github.com/vitejs/vite/blob/main/packages/vite/src/node/utils.ts#L880
+ * @see https://github.com/vitejs/vite/blob/main/packages/vite/src/node/utils.ts#L956
  * vite not export this function
  */
 async function resolveServerUrls(

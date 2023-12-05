@@ -187,6 +187,20 @@ class Build {
       encoding: 'utf-8',
     });
   }
+
+  /**
+   * Create serverless entrypoint
+   */
+  public createServerless(): void {
+    const entrypoint = `${this.buildDir}/server/serverless.js`;
+    const script =
+      "import runServerless from '@lomray/vite-ssr-boost/cli/run-serverless.js';\n\n" +
+      `export default await runServerless({ version: process.env.VERSION || "1.0.0" });\n`;
+
+    fs.writeFileSync(entrypoint, script, {
+      encoding: 'utf-8',
+    });
+  }
 }
 
 export default Build;

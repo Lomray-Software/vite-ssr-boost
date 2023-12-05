@@ -10,6 +10,7 @@ import runAmplifyBuild from '@cli/run-amplify-build';
 import runDev from '@cli/run-dev';
 import runDockerBuild from '@cli/run-docker-build';
 import runProd from '@cli/run-prod';
+import runVercelBuild from '@cli/run-vercel-build';
 import CliActions from '@constants/cli-actions';
 import cliContext from '@constants/cli-context';
 import cliName from '@constants/cli-name';
@@ -118,6 +119,12 @@ program
   )
   .addOption(
     new Option(
+      '--serverless',
+      'Produces entrypoint file to run app like serverless function',
+    ).default(false),
+  )
+  .addOption(
+    new Option(
       '--throw-warnings',
       'The build will abort with an error if warnings occur in the process.',
     ).default(false),
@@ -130,6 +137,7 @@ program
       mode,
       unlockRobots,
       eject,
+      serverless,
       throwWarnings,
     }) => {
       await runBuild({
@@ -137,6 +145,7 @@ program
         isUnlockRobots: unlockRobots,
         isNoWarnings: throwWarnings,
         isEject: eject,
+        isServerless: serverless,
         clientOptions,
         serverOptions,
         mode,
@@ -264,6 +273,25 @@ program
   .action(async ({ manifestFile, mode, isOptimize }) => {
     await runAmplifyBuild({
       manifestFile,
+      mode,
+      isOptimize,
+    });
+  });
+
+program
+  .command(CliActions.buildVercel)
+  .description('Create Vercel serverless production build.')
+  .addOption(
+    new Option(
+      '--vercel-file [vercel-file]',
+      'Name of the Vercel config file (Default is PLUGIN_PATH/workflow/vercel.json).',
+    ),
+  )
+  .addOption(new Option('--is-optimize', 'Optimize node_modules folder.').default(false))
+  .addOption(envModeOption)
+  .action(async ({ vercelFile, mode, isOptimize }) => {
+    await runVercelBuild({
+      configFile: vercelFile,
       mode,
       isOptimize,
     });

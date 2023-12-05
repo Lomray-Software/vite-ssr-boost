@@ -1,6 +1,7 @@
 import type { Server } from 'node:net';
 import path from 'path';
 import compression from 'compression';
+import type { Express } from 'express';
 import express from 'express';
 import printServerInfo from '@helpers/print-server-info';
 import type { IRequestContext } from '@node/render';
@@ -9,6 +10,7 @@ import type ServerConfig from '@services/server-config';
 
 export interface ICreateServerOut {
   run: (options?: { version?: string; isPrintInfo?: boolean }) => Server;
+  app: Express;
 }
 
 /**
@@ -125,11 +127,12 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
           return;
         }
 
-        void printServerInfo(server, config, { version });
+        void printServerInfo(config, { version, server });
       });
 
       return server;
     },
+    app,
   };
 }
 

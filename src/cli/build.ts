@@ -16,6 +16,7 @@ interface IBuildParams {
   isWatch?: boolean;
   isUnlockRobots?: boolean;
   isEject?: boolean;
+  isServerless?: boolean;
   isNoWarnings?: boolean;
 }
 
@@ -31,6 +32,7 @@ async function build({
   isWatch = false,
   isUnlockRobots = false,
   isEject = false,
+  isServerless = false,
   isNoWarnings = false,
 }: IBuildParams): Promise<void> {
   const perfStart = performance.now();
@@ -104,6 +106,10 @@ async function build({
 
       if (isEject) {
         buildService.eject();
+      }
+
+      if (isServerless) {
+        buildService.createServerless();
       }
     }
 

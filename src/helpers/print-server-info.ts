@@ -12,15 +12,15 @@ import type ServerConfig from '@services/server-config';
 
 interface IPrintServerInfoParams {
   version?: string;
+  server?: Server;
 }
 
 /**
  * Print server info
  */
 async function printServerInfo(
-  server: Server,
   config: ServerConfig,
-  { version = 'unknown' }: IPrintServerInfoParams,
+  { server, version = 'unknown' }: IPrintServerInfoParams = {},
 ): Promise<void> {
   const { action } = config.getPluginConfig() ?? {};
   const { isProd, host, root } = config.getParams();
@@ -43,11 +43,13 @@ async function printServerInfo(
     | (ResolvedConfig & { rawBase?: string })
     | undefined;
   const isProdBuild = !viteConfig?.mode && !fs.existsSync(devMarker);
-  const resolvedUrls = await resolveServerUrls(server, {
-    host,
-    isHttps: typeof viteConfig?.server.https === 'boolean' ? viteConfig?.server.https : false,
-    rawBase: viteConfig?.rawBase,
-  });
+  const resolvedUrls = server
+    ? await resolveServerUrls(server, {
+        host,
+        isHttps: Boolean(viteConfig?.server.https),
+        rawBase: viteConfig?.rawBase,
+      })
+    : null;
   const mode =
     viteConfig?.mode || isProdBuild
       ? config.mode
@@ -60,7 +62,7 @@ async function printServerInfo(
 
     vite.resolvedUrls = resolvedUrls;
     vite.printUrls();
-  } else {
+  } else if (resolvedUrls) {
     printServerUrls(resolvedUrls, (msg) => Logger.info(msg));
   }
 
