@@ -29,15 +29,15 @@ const normalizeSyncRoutes = (code: string, isBuild = false): string => {
   );
 
   return code.replace(
-    /(.*path:.*(?:Component|element):\s*(\w+)),*(.+)/s,
-    (_, before, routeName: string, after: string) => {
+    /(.*?(?:Component|element):[\s<]*(\w+)[^,]*),*/gs,
+    (_, before: string, routeName: string) => {
       const importPath = imports?.[routeName];
 
       if (!importPath) {
-        return before + after;
+        return before;
       }
 
-      return `${before},\npathId: '${importPath}',${after}`;
+      return `${before},pathId: '${importPath}',`;
     },
   );
 };
@@ -66,7 +66,8 @@ function ViteNormalizeRouterPlugin(options: IPluginOptions = {}): Plugin {
 
   return {
     name: `${PLUGIN_NAME}-normalize-route`,
-    transform: (code, id) => {
+    enforce: 'pre',
+    transform(code, id) {
       const extName = extname(id).split('?')[0]!;
       const isRoutesPath = !routesPath || id.includes(routesPath);
 

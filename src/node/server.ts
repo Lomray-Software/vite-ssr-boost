@@ -50,7 +50,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
 
     if (!isSPA) {
       // ignore index.html file in SSR mode
-      app.use((req, res, next) => {
+      app.use((req, _, next) => {
         if (req.url === '/index.html') {
           req.url = '/index-not-found.html';
         }
