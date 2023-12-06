@@ -9,6 +9,7 @@ import getPluginConfig from '@helpers/plugin-config';
 
 interface IRunVercelBuildParams {
   configFile?: string;
+  configVcFile?: string;
   mode?: string;
   isOptimize?: boolean;
 }
@@ -18,6 +19,7 @@ interface IRunVercelBuildParams {
  */
 async function runVercelBuild({
   configFile,
+  configVcFile,
   mode = '',
   isOptimize = false,
 }: IRunVercelBuildParams): Promise<void> {
@@ -29,8 +31,9 @@ async function runVercelBuild({
   } = config;
   const projectRoot = cwd();
   const buildDir = `.${path.resolve(root, outDir).replace(projectRoot, '')}`; // relative path
-  const manFile = configFile || `${pluginConfig.pluginPath}/workflow/vercel.json`;
-  const apiDir = `${projectRoot}/api`;
+  const manFile = configFile || `${pluginConfig.pluginPath}/workflow/vercel.config.json`;
+  const manVcFile = configVcFile || `${pluginConfig.pluginPath}/workflow/vercel.vc-config.json`;
+  const outputDir = `${projectRoot}/.vercel/output`;
   const stdOpts: ExecSyncOptions = {
     stdio: 'inherit',
   };
@@ -46,24 +49,38 @@ async function runVercelBuild({
     return;
   }
 
-  if (fs.existsSync(apiDir)) {
-    childProcess.execSync(`rm -rf ${apiDir}`, stdOpts);
+  if (fs.existsSync(outputDir)) {
+    childProcess.execSync(`rm -rf ${outputDir}`, stdOpts);
   }
 
-  fs.mkdirSync(apiDir, { recursive: true });
-
-  const entrypoint = `${apiDir}/express.js`;
-  const script =
-    "import Express from '../build/server/serverless.js';\n\n" + `export default Express;\n`;
-
-  fs.writeFileSync(entrypoint, script, {
-    encoding: 'utf-8',
-  });
-
-  childProcess.execSync(`cp ${manFile} vercel.json`, stdOpts);
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.mkdirSync(`${outputDir}/functions/index.func`, { recursive: true });
+  childProcess.execSync(`cp ${manFile} ${outputDir}/config.json`, stdOpts);
+  childProcess.execSync(
+    `cp ${manVcFile} ${outputDir}/functions/index.func/.vc-config.json`,
+    stdOpts,
+  );
+  childProcess.execSync(
+    `cp ${buildDir}/server/serverless.js ${outputDir}/functions/index.func/index.js`,
+    stdOpts,
+  );
+  childProcess.execSync(
+    `cp -r ${projectRoot}/node_modules ${outputDir}/functions/index.func/node_modules`,
+    stdOpts,
+  );
+  childProcess.execSync(`cp -r ${buildDir} ${outputDir}/functions/index.func/build`, stdOpts);
+  childProcess.execSync(
+    `cp -r ${projectRoot}/package.json ${outputDir}/functions/index.func/package.json`,
+    stdOpts,
+  );
+  childProcess.execSync(
+    `cp -r ${projectRoot}/package-lock.json ${outputDir}/functions/index.func/package-lock.json`,
+    stdOpts,
+  );
+  childProcess.execSync(`cp -r ${buildDir}/client ${outputDir}/static`, stdOpts);
 
   if (isOptimize) {
-    childProcess.execSync(`npm ci --omit=dev`, stdOpts);
+    childProcess.execSync(`cd ${outputDir}/functions/index.func && npm ci --omit=dev`, stdOpts);
   }
 
   console.info(`\n${chalk.cyan('Vercel build success created.')}`);

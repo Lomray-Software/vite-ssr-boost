@@ -265,7 +265,7 @@ program
   .addOption(
     new Option(
       '--manifest-file [manifest-file]',
-      'Name of the Amplify manifest file (Default is PLUGIN_PATH/workflow/amplify-manifest.json).',
+      'Path to the Amplify manifest file (Default is PLUGIN_PATH/workflow/amplify-manifest.json).',
     ),
   )
   .addOption(new Option('--is-optimize', 'Optimize node_modules folder.').default(false))
@@ -283,15 +283,22 @@ program
   .description('Create Vercel serverless production build.')
   .addOption(
     new Option(
-      '--vercel-file [vercel-file]',
-      'Name of the Vercel config file (Default is PLUGIN_PATH/workflow/vercel.json).',
+      '--config-file [config-file]',
+      'Path to the Vercel config.json file (Default is PLUGIN_PATH/workflow/vercel.config.json).',
+    ),
+  )
+  .addOption(
+    new Option(
+      '--config-vc-file [config-vc-file]',
+      'Path to the Vercel vc-config.json file (Default is PLUGIN_PATH/workflow/vercel.vc-config.json).',
     ),
   )
   .addOption(new Option('--is-optimize', 'Optimize node_modules folder.').default(false))
   .addOption(envModeOption)
-  .action(async ({ vercelFile, mode, isOptimize }) => {
+  .action(async ({ configFile, configVcFile, mode, isOptimize }) => {
     await runVercelBuild({
-      configFile: vercelFile,
+      configFile,
+      configVcFile,
       mode,
       isOptimize,
     });
