@@ -31,7 +31,6 @@
     "lint:format": "eslint --fix --ext \".ts,.tsx\" \"src/**/*.{ts,tsx,*.ts,*tsx}\"",
     "ts:check": "tsc --project ./tsconfig.json --skipLibCheck --noemit",
     "test": "mocha --no-warnings  __tests__ --recursive --unhandled-rejections=strict --exit",
-    "test:watch": "mocha --no-warnings  __tests__ --recursive --unhandled-rejections=strict",
     "prepare": "husky install"
   },
   "dependencies": {
@@ -68,7 +67,6 @@
     "husky": "^8.0.3",
     "lint-staged": "^15.2.0",
     "mocha": "^10.2.0",
-    "nodemon": "^3.0.2",
     "prettier": "^3.1.0",
     "rollup": "^4.6.1",
     "rollup-plugin-copy": "^3.5.0",

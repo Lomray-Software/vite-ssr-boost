@@ -29,7 +29,7 @@ const normalizeSyncRoutes = (code: string, isBuild = false): string => {
   );
 
   return code.replace(
-    /(.*?(?:Component|element):[\s<]*(\w+)[^,]*),*/gs,
+    /(.*?(?:Component|element):[\s<]*(\w+)[^,}]*),*/gs,
     (_, before: string, routeName: string) => {
       const importPath = imports?.[routeName];
 
@@ -45,11 +45,18 @@ const normalizeSyncRoutes = (code: string, isBuild = false): string => {
 /**
  * Add normalize wrapper to lazy imports for client build
  */
-const normalizeAsyncRoutes = (code: string, isSSR: boolean): string =>
-  `import n from '${PLUGIN_NAME}/helpers/import-route';${code}`.replace(
+const normalizeAsyncRoutes = (code: string, isSSR: boolean): string => {
+  const modifiedCode = code.replace(
     /(lazy)(:\s*)(\(\)\s*=>\s*import\(([^)]+)\))/gs,
     isSSR ? 'lazy$2()=>n($3,$4)' : 'lazy$2()=>n($3)',
   );
+
+  if (code !== modifiedCode) {
+    return `import n from '${PLUGIN_NAME}/helpers/import-route';${modifiedCode}`;
+  }
+
+  return code;
+};
 
 /**
  * Add possibility to export route components like FCRoute or FCCRoute
