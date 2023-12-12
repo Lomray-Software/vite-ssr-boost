@@ -41,6 +41,8 @@ interface IAsset {
   content?: string;
 }
 
+type TAssets = { [id: string]: IAsset };
+
 const CRLF = '\r\n';
 
 /**
@@ -376,7 +378,7 @@ class SsrManifest {
       return [];
     }
 
-    let assets: { [id: string]: IAsset } = {};
+    let assets: TAssets = {};
     const postfixes = this.getRouteImportPostfix();
     const rootId = `${this.root}/${this.config.getPluginConfig()?.clientFile ?? 'client.ts'}`;
 
@@ -397,12 +399,14 @@ class SsrManifest {
   /**
    * Get module assets
    */
-  protected getModuleAssets(module?: ModuleNode, isNested = false): { [id: string]: IAsset } {
-    if (!module?.clientImportedModules.size) {
+  protected getModuleAssets(module?: ModuleNode, skipModules: Set<string> = new Set()): TAssets {
+    if (!module?.clientImportedModules.size || skipModules.has(module.file!)) {
       return {};
     }
 
-    let assets: { [id: string]: IAsset } = {};
+    let assets: TAssets = {};
+
+    skipModules.add(module.file!);
 
     module.clientImportedModules.forEach((subModule) => {
       const { file, clientImportedModules, transformResult } = subModule;
@@ -419,7 +423,7 @@ class SsrManifest {
               url: file,
               weight: this.getAssetWeight(file),
               content: JSON.parse(`{"style": "${code}"}`).style,
-              isNested,
+              isNested: Boolean(skipModules.size),
               isPreload: false,
             };
           } catch (e) {
@@ -429,7 +433,7 @@ class SsrManifest {
       } else if (clientImportedModules.size) {
         assets = {
           ...assets,
-          ...this.getModuleAssets(subModule, true),
+          ...this.getModuleAssets(subModule, skipModules),
         };
       }
     });
