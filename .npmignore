@@ -14,7 +14,7 @@ coverage
 .lintstagedrc.js
 commitlint.config.js
 rollup.config.js
-.prettierrc.cjs
+.prettierrc.js
 sonar-project.properties
 tsconfig.json
 release.config.js
