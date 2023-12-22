@@ -30,10 +30,11 @@
 ## Table of contents
 - [Getting started](#getting-started)
 - [How to use](#how-to-use)
+- [Example](#how-to-use)
 - [Plugin options](#plugin-options)
 - [Useful imports](#useful-imports)
 - [CLI](#cli)
-- [Example](#demo)
+- [Warning](#warning)
 - [Bugs and feature requests](#bugs-and-feature-requests)
 - [License](#license)
 
@@ -46,6 +47,8 @@ npm i --save @lomray/vite-ssr-boost
 ```
 
 ## How to use
+
+Explore [demo app](https://github.com/Lomray-Software/vite-template) to more understand or:
 
 1. Add plugin to vite config:
 ```typescript
@@ -254,9 +257,6 @@ const routes: RouteObject[] = [
   }
 ];
 ```
-
-## Demo
-Explore [demo app](https://github.com/Lomray-Software/vite-template) to more understand.
 
 ## Bugs and feature requests
 
