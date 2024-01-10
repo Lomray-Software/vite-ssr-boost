@@ -27,7 +27,7 @@ const writeResponse = (context: IRequestContext, params: IWriteResponseParams): 
     return;
   }
 
-  // catch close connection from react and write footer
+  // catch close connection from React and write footer
   if (didError) {
     const end = res.end.bind(res);
 

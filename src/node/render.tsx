@@ -121,13 +121,10 @@ async function render(
   res.write = (data: string | Uint8Array, ...args): boolean => {
     const isString = typeof data === 'string';
     const html = isString ? data : Buffer.from(data).toString();
-    const additionalHtml = onResponse?.({ context, html });
+    const modifiedHtml = onResponse?.({ context, html });
 
-    if (additionalHtml) {
-      return write(
-        isString ? `${additionalHtml}${data}` : Buffer.concat([Buffer.from(additionalHtml), data]),
-        ...args,
-      ) as boolean;
+    if (modifiedHtml) {
+      return write(isString ? modifiedHtml : Buffer.from(modifiedHtml), ...args) as boolean;
     }
 
     return write(data, ...args) as boolean;
