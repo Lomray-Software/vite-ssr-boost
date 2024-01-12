@@ -265,4 +265,4 @@ Bug or a feature request, [please open a new issue](https://github.com/Lomray-So
 ## License
 Made with 💚
 
-Published under [Apache License](./LICENSE).
+Published under [MIT License](./LICENSE).
