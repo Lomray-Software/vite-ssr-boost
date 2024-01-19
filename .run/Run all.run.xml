@@ -6,7 +6,7 @@
     <working-directory>$PROJECT_DIR$</working-directory>
     <pass-parent-env>true</pass-parent-env>
     <ui>bdd</ui>
-    <extra-mocha-options />
+    <extra-mocha-options>--watch</extra-mocha-options>
     <test-kind>PATTERN</test-kind>
     <test-pattern>__tests__/**/*.ts</test-pattern>
     <method v="2" />
