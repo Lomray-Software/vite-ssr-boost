@@ -80,6 +80,11 @@ class ServerConfig {
   protected logger: Logger;
 
   /**
+   * Default root dir
+   */
+  protected defaultRoot = './build';
+
+  /**
    * @constructor
    */
   protected constructor(
@@ -98,7 +103,7 @@ class ServerConfig {
     this.isModulePreload = isModulePreload;
     this.mode = mode;
     this.prodParams = {
-      root: './build',
+      root: this.defaultRoot,
       publicDir: '/client', // default for production,
       indexFile: '/client/index.html',
       serverFile: '/server/server.js',
@@ -127,7 +132,7 @@ class ServerConfig {
     const pluginConfig = (this.getPluginConfig() ?? {}) as Partial<IPluginConfig>;
     const { config } = this.vite ?? {};
 
-    const root = config?.root ?? this.prodParams.root ?? '';
+    const root = config?.root ?? this.prodParams.root ?? this.defaultRoot;
     const publicDir = config?.publicDir ?? this.prodParams.publicDir!;
     const dirInfo = new URL(import.meta.url);
     const pluginPath =

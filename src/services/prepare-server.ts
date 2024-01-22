@@ -93,6 +93,8 @@ class PrepareServer {
             chalk.red(
               `Before starting the server, you need to create a build: ${chalk.yellow(
                 'ssr-boost build',
+              )} or provide path to build dir: ${chalk.yellow(
+                'ssr-boost start --build-dir build',
               )}`,
             ),
           );

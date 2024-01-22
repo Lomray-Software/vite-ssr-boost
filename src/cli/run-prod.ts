@@ -11,6 +11,7 @@ interface IRunProdParams {
   onlyClient?: boolean; // SPA mode
   mode?: string;
   modulePreload?: boolean;
+  buildDir?: string;
 }
 
 interface IRunProdOut {
@@ -26,6 +27,7 @@ async function runProd({
   isHost,
   isPrintInfo,
   port,
+  buildDir,
   onlyClient = false,
   modulePreload = false,
 }: IRunProdParams): Promise<IRunProdOut> {
@@ -35,7 +37,7 @@ async function runProd({
 
   const config = ServerConfig.init(
     { isHost, isProd: true, isOnlyClient: onlyClient, isModulePreload: modulePreload },
-    { port },
+    { port, root: buildDir },
   );
   const { run } = await createServer(config);
 

@@ -111,12 +111,17 @@ class SsrManifest {
   }
 
   /**
+   * Get output dir
+   */
+  protected getOutDir() {
+    return path.resolve(this.root, this.buildDir || '');
+  }
+
+  /**
    * Get assets manifest file name
    */
   protected getAssetsManifestFile(): string {
-    const outDir = path.resolve(this.root, this.buildDir || '');
-
-    return `${outDir}/server/${this.assetsManifest}`;
+    return `${this.getOutDir()}/server/${this.assetsManifest}`;
   }
 
   /**
@@ -255,7 +260,9 @@ class SsrManifest {
    * Build routes manifest file
    */
   public async buildRoutesManifest(): Promise<void> {
-    const prepareServer = PrepareServer.init(ServerConfig.init({ isProd: true }));
+    const prepareServer = PrepareServer.init(
+      ServerConfig.init({ isProd: true }, { root: this.getOutDir() }),
+    );
     const manifest = this.loadClientManifest();
     const { routes } = await prepareServer.loadEntrypoint(false);
     const routesPaths = await this.getRoutesIds(routes as RouteObject[]);

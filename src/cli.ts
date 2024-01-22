@@ -58,6 +58,7 @@ const portOption = new Option('--port [port]', 'Server port.').default(3000);
 const envModeOption = new Option('--mode [mode]', 'Env mode.')
   .env('VITE_ENV_MODE')
   .default('production');
+const buildDirOption = new Option('--build-dir [buildDir]', 'Build directory output.');
 
 /**
  * Cli commands
@@ -159,10 +160,11 @@ program
   .addOption(hostOption)
   .addOption(portOption)
   .addOption(onlyClientOption)
+  .addOption(buildDirOption)
   .addOption(
     new Option('--module-preload', 'Add module preload scripts to server output.').default(false),
   )
-  .action(({ host, port, onlyClient, modulePreload }) => {
+  .action(({ host, port, onlyClient, modulePreload, buildDir }) => {
     const command = async (isPrintInfo?: boolean): Promise<void> => {
       const { server, config } = await runProd({
         version,
@@ -171,6 +173,7 @@ program
         port,
         onlyClient,
         modulePreload,
+        buildDir,
       });
 
       cliContext.server = server;
@@ -191,7 +194,8 @@ program
   .addOption(hostOption)
   .addOption(portOption)
   .addOption(envModeOption)
-  .action(async ({ host, port, onlyClient, mode }) => {
+  .addOption(buildDirOption)
+  .action(async ({ host, port, onlyClient, mode, buildDir }) => {
     global.viteBoostStartTime = performance.now();
 
     const command = async (isPrintInfo?: boolean): Promise<void> => {
@@ -201,6 +205,7 @@ program
         isPrintInfo,
         port,
         onlyClient,
+        buildDir,
       });
 
       server.on('listening', () => {
