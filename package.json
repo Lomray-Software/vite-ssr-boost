@@ -38,6 +38,7 @@
     "commander": "^11.1.0",
     "compression": "^1.7.4",
     "express": "^4.18.2",
+    "hjson": "^3.2.2",
     "hoist-non-react-statics": "^3.3.2"
   },
   "devDependencies": {
@@ -48,6 +49,7 @@
     "@rollup/plugin-terser": "^0.4.4",
     "@types/chai": "^4.3.11",
     "@types/compression": "^1.7.5",
+    "@types/hjson": "^2.4.6",
     "@types/hoist-non-react-statics": "^3.3.5",
     "@types/react-dom": "^18.2.17",
     "@types/sinon": "^17.0.3",
@@ -80,8 +82,7 @@
     "@types/express": ">=4.17.21",
     "react-dom": ">=18.2.0",
     "react-router-dom": ">=6.12.1",
-    "vite": ">=5",
-    "vite-tsconfig-paths": ">=4"
+    "vite": ">=5"
   },
   "bin": {
     "ssr-boost": "cli.js"

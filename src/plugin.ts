@@ -1,10 +1,10 @@
 import path from 'node:path';
 import type { Plugin } from 'vite';
-import type { PluginOptions as ITsconfigPathsOptions } from 'vite-tsconfig-paths';
-import tsconfigPathsPlugin from 'vite-tsconfig-paths';
 import CliActions from '@constants/cli-actions';
 import type { ICliContext } from '@constants/cli-context';
 import PLUGIN_NAME from '@constants/plugin-name';
+import type { IPluginOptions as IMakeAliasesPluginOptions } from '@plugins/make-aliases';
+import ViteMakeAliasesPlugin from '@plugins/make-aliases';
 import ViteNormalizeRouterPlugin from '@plugins/normalize-route';
 
 export interface IPluginOptions {
@@ -16,8 +16,8 @@ export interface IPluginOptions {
   clientFile?: string;
   // Path contains routes declaration files (need to detect route files). default: undefined, e.g.: /routes/
   routesPath?: string;
-  // Enable and configure tsconfig path plugin
-  tsconfigPaths?: boolean | ITsconfigPathsOptions;
+  // Read aliases from tsconfig
+  tsconfigAliases?: boolean | IMakeAliasesPluginOptions;
   customShortcuts?: {
     key: string;
     description: string;
@@ -30,7 +30,7 @@ const defaultOptions: IPluginOptions = {
   indexFile: 'index.html',
   serverFile: 'server.ts',
   clientFile: 'client.ts',
-  tsconfigPaths: true,
+  tsconfigAliases: true,
 };
 
 /**
@@ -83,11 +83,11 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     },
   ];
 
-  const { tsconfigPaths, routesPath } = mergedOptions;
+  const { tsconfigAliases, routesPath } = mergedOptions;
 
-  if (tsconfigPaths) {
+  if (tsconfigAliases) {
     plugins.push(
-      tsconfigPathsPlugin(typeof tsconfigPaths === 'boolean' ? undefined : tsconfigPaths),
+      ViteMakeAliasesPlugin(typeof tsconfigAliases === 'boolean' ? undefined : tsconfigAliases),
     );
   }
 
