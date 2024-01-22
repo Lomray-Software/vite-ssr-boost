@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import normalizeRoute from '@plugins/normalize-route';
+import { describe, it } from 'vitest';
 import {
   routesCode1Before,
   routesCode1After,
@@ -9,7 +9,8 @@ import {
   routesCode3After,
   routesCodeLazyBefore,
   routesCodeLazyAfter,
-} from '../../__mocks__/route-file';
+} from '@__mocks__/route-file';
+import normalizeRoute from '@plugins/normalize-route';
 
 type TSimpleTransform = (code: string, id: string) => undefined | { code: string };
 

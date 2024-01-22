@@ -35,6 +35,8 @@
     "jsx": "react",
     "baseUrl": ".",
     "paths": {
+      "@__helpers__/*": ["./__helpers__/*"],
+      "@__mocks__/*": ["./__mocks__/*"],
       "@browser/*": ["./src/browser/*"],
       "@cli/*": ["./src/cli/*"],
       "@components/*": ["./src/components/*"],

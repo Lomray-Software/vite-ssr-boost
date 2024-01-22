@@ -1,4 +1,5 @@
 import { expect } from 'chai';
+import { describe, it } from 'vitest';
 import buildCustomState from '@helpers/build-custom-state';
 
 describe('buildCustomState', () => {

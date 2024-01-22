@@ -28,7 +28,7 @@ jobs:
         run: npm run lint:check
 
       - name: Test
-        run: npx c8 npm run test
+        run: npm run test -- --coverage
 
       - uses: actions/upload-artifact@master
         with:

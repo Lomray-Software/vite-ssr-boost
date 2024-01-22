@@ -25,7 +25,7 @@ jobs:
         run: npm run ts:check
 
       - name: Test
-        run: npx c8 npm run test
+        run: npm run test -- --coverage
 
       - uses: actions/upload-artifact@master
         with:

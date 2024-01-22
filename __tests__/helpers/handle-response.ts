@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 import type { Response as ExpressResponse } from 'express';
 import sinon from 'sinon';
+import { describe, it, afterEach } from 'vitest';
 import handleResponse from '@helpers/handle-response';
 
 describe('handleResponse', () => {
