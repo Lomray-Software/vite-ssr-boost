@@ -38,23 +38,21 @@
     "commander": "^11.1.0",
     "compression": "^1.7.4",
     "express": "^4.18.2",
-    "hjson": "^3.2.2",
     "hoist-non-react-statics": "^3.3.2"
   },
   "devDependencies": {
-    "@commitlint/cli": "^18.4.3",
-    "@commitlint/config-conventional": "^18.4.3",
+    "@commitlint/cli": "^18.5.0",
+    "@commitlint/config-conventional": "^18.5.0",
     "@lomray/eslint-config": "^4.0.1",
     "@lomray/prettier-config": "^2.0.1",
     "@rollup/plugin-terser": "^0.4.4",
     "@types/chai": "^4.3.11",
     "@types/compression": "^1.7.5",
-    "@types/hjson": "^2.4.6",
     "@types/hoist-non-react-statics": "^3.3.5",
     "@types/react-dom": "^18.2.17",
     "@types/sinon": "^17.0.3",
     "@types/sinon-chai": "^3.2.12",
-    "@typescript-eslint/eslint-plugin": "^6.14.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@vitest/coverage-v8": "^1.2.1",
     "@zerollup/ts-transform-paths": "^1.7.18",
     "chai": "^4.3.10",
@@ -75,16 +73,15 @@
     "semantic-release": "^21.1.2",
     "sinon": "^17.0.1",
     "sinon-chai": "^3.7.0",
-    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.3.3",
-    "vite-tsconfig-paths": "^4.3.1",
     "vitest": "^1.2.1"
   },
   "peerDependencies": {
     "@types/express": ">=4.17.21",
     "react-dom": ">=18.2.0",
     "react-router-dom": ">=6.12.1",
-    "vite": ">=5"
+    "vite": ">=5",
+    "vite-tsconfig-paths": ">=4"
   },
   "bin": {
     "ssr-boost": "cli.js"

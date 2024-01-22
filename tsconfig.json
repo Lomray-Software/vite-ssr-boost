@@ -51,11 +51,8 @@
   },
   "exclude": [
     "node_modules",
-    "jest",
-    "node_modules",
     "lib",
     "commitlint.config.js",
-    ".mocharc.json",
     "rollup.config.js"
   ]
 }
