@@ -61,4 +61,17 @@ describe('normalizeRoute', () => {
 
     expect(result).to.be.undefined;
   });
+
+  it('should return the original code when importPath is not defined', () => {
+    const code = `
+      const routes = [
+        { path: '/', Component: Home },
+        { path: '/about', Component: About },
+      ];
+    `;
+
+    const result = getTransform()(code, allowedFileId);
+
+    expect(result?.code).to.equal(code);
+  });
 });

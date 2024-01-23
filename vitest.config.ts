@@ -9,7 +9,8 @@ export default defineConfig({
       include: ['src/**/*'],
       exclude: ['src/interfaces/**'],
       reporter: ['text', 'text-summary', 'lcov', 'html'],
-    }
+    },
+    environment: 'jsdom',
   },
   plugins: [tsconfigPaths()],
 });
