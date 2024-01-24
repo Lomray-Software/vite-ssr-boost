@@ -58,6 +58,8 @@ describe('ViteMakeAliasesPlugin', () => {
   });
 
   it('should use default values when tsconfig is not provided', () => {
+    sandbox.stub(console, 'error');
+
     const config = { resolve: { alias: {} } };
     // @ts-ignore
     const result = ViteMakeAliasesPlugin({ root }).config(config);
