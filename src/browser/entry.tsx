@@ -20,6 +20,8 @@ export type TApp<T> = FC<PropsWithChildren<IAppClientProps<T>>>;
 
 export interface IEntryClientOptions<T> {
   init?: (params: IInitPropsParams) => Promise<T>;
+  routerOptions?: Parameters<typeof createBrowserRouter>[1];
+  rootId?: string;
 }
 
 /**
@@ -28,7 +30,7 @@ export interface IEntryClientOptions<T> {
 async function entry<TAppProps>(
   App: TApp<TAppProps>,
   routes: TRouteObject[],
-  { init }: IEntryClientOptions<TAppProps> = {},
+  { init, routerOptions, rootId = 'root' }: IEntryClientOptions<TAppProps> = {},
 ): Promise<ReactDOM.Root | void> {
   const lazyMatches = matchRoutes(routes as RouteObject[], window.location)?.filter(
     (m) => m.route.lazy,
@@ -49,8 +51,8 @@ async function entry<TAppProps>(
     );
   }
 
-  const router = createBrowserRouter(routes as RouteObject[]);
-  const root = document.getElementById('root') as HTMLElement;
+  const router = createBrowserRouter(routes as RouteObject[], routerOptions);
+  const root = document.getElementById(rootId) as HTMLElement;
   const appProps = (await init?.({ isSSRMode: IS_SSR_MODE, router })) as TAppProps;
 
   const AppComponent: FC = () => (
