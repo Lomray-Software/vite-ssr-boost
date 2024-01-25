@@ -126,8 +126,7 @@ class ServerConfig {
   }
 
   /**
-   *
-   * @protected
+   * Lookup build folder
    */
   protected getBuildDir(root?: string): string {
     for (const dir of [root, ...this.defaultBuildRoots]) {
