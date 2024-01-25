@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import type { Express } from 'express';
 import type { Logger, ViteDevServer } from 'vite';
@@ -82,7 +83,7 @@ class ServerConfig {
   /**
    * Default root dir
    */
-  protected defaultRoot = './build';
+  protected defaultBuildRoots = ['./build', './dist'];
 
   /**
    * @constructor
@@ -103,7 +104,6 @@ class ServerConfig {
     this.isModulePreload = isModulePreload;
     this.mode = mode;
     this.prodParams = {
-      root: this.defaultRoot,
       publicDir: '/client', // default for production,
       indexFile: '/client/index.html',
       serverFile: '/server/server.js',
@@ -126,13 +126,27 @@ class ServerConfig {
   }
 
   /**
+   *
+   * @protected
+   */
+  protected getBuildDir(root?: string): string {
+    for (const dir of [root, ...this.defaultBuildRoots]) {
+      if (dir && fs.existsSync(dir)) {
+        return dir;
+      }
+    }
+
+    return root ?? this.defaultBuildRoots[0];
+  }
+
+  /**
    * Make config params
    */
   protected makeParams(): void {
     const pluginConfig = (this.getPluginConfig() ?? {}) as Partial<IPluginConfig>;
     const { config } = this.vite ?? {};
 
-    const root = config?.root ?? this.prodParams.root ?? this.defaultRoot;
+    const root = config?.root ?? this.getBuildDir(this.prodParams.root);
     const publicDir = config?.publicDir ?? this.prodParams.publicDir!;
     const dirInfo = new URL(import.meta.url);
     const pluginPath =
