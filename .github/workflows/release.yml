@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - run: echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > ~/.npmrc
 
@@ -30,7 +30,7 @@ jobs:
       - name: Test
         run: npm run test -- --coverage
 
-      - uses: actions/upload-artifact@master
+      - uses: actions/upload-artifact@4
         with:
           name: coverage-lcov
           path: coverage
@@ -54,11 +54,11 @@ jobs:
       cancel-in-progress: true
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@master
+      - uses: actions/download-artifact@4
         with:
           name: coverage-lcov
           path: coverage
