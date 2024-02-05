@@ -17,6 +17,8 @@ on:
     secrets:
       github-token:
         required: false
+      build-env:
+        required: false
 
 jobs:
   build:
@@ -50,6 +52,7 @@ jobs:
       - name: Build application
         run: |
           npm pkg delete scripts.prepare
+          echo ${{ secrets.build-env }} >> .env
           npm run build -- ${{ inputs.app-build-args }}
 
       - name: Prepare docker file
