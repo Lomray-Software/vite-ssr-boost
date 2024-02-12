@@ -7,7 +7,7 @@ export default defineConfig({
     setupFiles: ['__helpers__/setup.ts'],
     coverage: {
       include: ['src/**/*'],
-      exclude: ['src/interfaces/**'],
+      exclude: ['src/interfaces/**', 'src/cli.ts'],
       reporter: ['text', 'text-summary', 'lcov', 'html'],
     },
     environment: 'jsdom',
