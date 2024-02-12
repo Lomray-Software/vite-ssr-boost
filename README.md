@@ -202,7 +202,7 @@ SsrBoost({
 ```
 
 ## Useful imports
-```typescript
+```typescript tsx
 /**
  * Components
  */
@@ -214,6 +214,8 @@ import ResponseStatus from '@lomray/vite-ssr-boost/components/response-status';
 import ScrollToTop from '@lomray/vite-ssr-boost/components/scroll-to-top';
 // HOC for wrap component in Suspense
 import withSuspense from '@lomray/vite-ssr-boost/components/with-suspense';
+// Only client side components
+import OnlyClient from '@lomray/vite-ssr-boost/components/only-client';
 
 /**
  * Helpers
@@ -228,6 +230,15 @@ import getServerState from '@lomray/vite-ssr-boost/helpers/get-server-state';
 import type { FCRoute, FCCRoute } from '@lomray/vite-ssr-boost/interfaces/fc-route';
 // interface for define routes
 import type { TRouteObject } from '@lomray/vite-ssr-boost/interfaces/route-object';
+```
+
+Client side components import example:
+```typescript jsx
+<OnlyClient load={() => import('external-package')}>
+  {(LoadedComnponent) => (
+    <LoadedComnponent />
+  )}
+</OnlyClient>
 ```
 
 ## CLI
