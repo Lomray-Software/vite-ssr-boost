@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import Hjson from 'hjson';
+import JSON5 from 'json5';
 import type { Plugin } from 'vite';
+// import without aliases for use in vitest.config.ts
 import PLUGIN_NAME from '../constants/plugin-name';
 import ViteAliases from '../helpers/vite-aliases';
 
@@ -28,7 +29,7 @@ function ViteMakeAliasesPlugin(options: IPluginOptions = {}): Plugin {
   if (!fs.existsSync(tsconfigPath)) {
     console.error(`${pluginName}: tsconfig not exist in "${tsconfigPath}"`);
   } else {
-    const tsJson = Hjson.parse(fs.readFileSync(tsconfigPath, { encoding: 'utf-8' }));
+    const tsJson = JSON5.parse(fs.readFileSync(tsconfigPath, { encoding: 'utf-8' }));
     const paths: Record<string, string[]> = tsJson?.compilerOptions?.paths ?? {};
 
     Object.entries(paths).forEach(([alias, aliasPaths]) => {

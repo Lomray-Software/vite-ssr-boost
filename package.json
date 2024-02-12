@@ -38,8 +38,8 @@
     "commander": "^12.0.0",
     "compression": "^1.7.4",
     "express": "^4.18.2",
-    "hjson": "^3.2.2",
-    "hoist-non-react-statics": "^3.3.2"
+    "hoist-non-react-statics": "^3.3.2",
+    "json5": "^2.2.3"
   },
   "devDependencies": {
     "@commitlint/cli": "^18.6.0",
@@ -50,7 +50,6 @@
     "@testing-library/react": "^14.2.1",
     "@types/chai": "^4.3.11",
     "@types/compression": "^1.7.5",
-    "@types/hjson": "^2.4.6",
     "@types/hoist-non-react-statics": "^3.3.5",
     "@types/react-dom": "^18.2.19",
     "@types/sinon": "^17.0.3",
