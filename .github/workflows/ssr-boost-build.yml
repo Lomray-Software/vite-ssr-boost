@@ -14,6 +14,18 @@ on:
         required: false
         type: string
         default: node_modules/@lomray/vite-ssr-boost/workflow/Dockerfile
+      should-skip-eslint:
+        required: false
+        type: boolean
+        default: false
+      should-skip-typescript:
+        required: false
+        type: boolean
+        default: false
+      should-skip-stylelint:
+        required: false
+        type: boolean
+        default: false
     secrets:
       github-token:
         required: false
@@ -41,12 +53,15 @@ jobs:
         run: npm ci
 
       - name: Run eslint
+        if: ${{ !inputs.should-skip-eslint }}
         run: npm run lint:check
 
       - name: Typescript check
+        if: ${{ !inputs.should-skip-typescript }}
         run: npm run ts:check
 
       - name: Stylelint check
+        if: ${{ !inputs.should-skip-stylelint }}
         run: npm run style:check
 
       - name: Build application

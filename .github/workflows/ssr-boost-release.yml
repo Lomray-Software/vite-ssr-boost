@@ -3,6 +3,10 @@ name: SSR BOOST Release
 on:
   workflow_call:
     inputs:
+      build-folder:
+        required: false
+        type: string
+        default: build
       has-release-asset:
         required: false
         type: boolean
@@ -33,7 +37,7 @@ jobs:
 
       - name: Create release asset
         if: ${{ inputs.has-release-asset }}
-        run: zip -r build.zip build package.json package-lock.json README.md
+        run: zip -r build.zip ${{ inputs.build-folder }} package.json package-lock.json README.md
 
       - name: Install dependencies
         run: npm ci
