@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitest/config';
-import tsconfigPaths from 'vite-tsconfig-paths';
+import MakeAliases from './src/plugins/make-aliases';
 
 export default defineConfig({
   test: {
@@ -12,5 +12,5 @@ export default defineConfig({
     },
     environment: 'jsdom',
   },
-  plugins: [tsconfigPaths()],
+  plugins: [MakeAliases()],
 });

@@ -3,8 +3,8 @@ import path from 'node:path';
 import process from 'node:process';
 import Hjson from 'hjson';
 import type { Plugin } from 'vite';
-import PLUGIN_NAME from '@constants/plugin-name';
-import ViteAliases from '@helpers/vite-aliases';
+import PLUGIN_NAME from '../constants/plugin-name';
+import ViteAliases from '../helpers/vite-aliases';
 
 export interface IPluginOptions {
   root?: string; // default: cwd()
