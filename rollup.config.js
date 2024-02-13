@@ -5,12 +5,14 @@ import { folderInput } from 'rollup-plugin-folder-input';
 import copy from 'rollup-plugin-copy';
 import { preserveShebangs } from 'rollup-plugin-preserve-shebangs';
 
+const dest = 'lib';
+
 export default {
   input: [
     'src/**/*.ts*',
   ],
   output: {
-    dir: 'lib',
+    dir: dest,
     format: 'es',
     sourcemap: true,
     preserveModules: true,
@@ -33,6 +35,8 @@ export default {
     'node:child_process',
     'node:fs',
     'node:url',
+    'node:http',
+    'node:https',
   ],
   plugins: [
     folderInput(),
@@ -56,9 +60,9 @@ export default {
     terser(),
     copy({
       targets: [
-        { src: 'package.json', dest: 'lib' },
-        { src: 'README.md', dest: 'lib' },
-        { src: 'workflow', dest: 'lib' },
+        { src: 'package.json', dest: dest },
+        { src: 'README.md', dest: dest },
+        { src: 'workflow', dest: dest },
       ]
     })
   ],

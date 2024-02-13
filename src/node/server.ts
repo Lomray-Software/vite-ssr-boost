@@ -1,3 +1,5 @@
+import http from 'node:http';
+import https from 'node:https';
 import type { Server } from 'node:net';
 import path from 'path';
 import compression from 'compression';
@@ -116,13 +118,18 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
   return {
     run: ({ version, isPrintInfo = true } = {}): Server => {
       const { port, host } = config.getParams();
+      const isHTTPS = Boolean(config.getVite()?.config?.server?.https);
 
       // update resolved host for print network link
       if (config.isHost && !config.isProd) {
         config.getVite()!.config.server.host = host;
       }
 
-      const server = app.listen(port, host, () => {
+      const server = (
+        isHTTPS
+          ? https.createServer(config.getVite()!.config.server.https!, app)
+          : http.createServer(app)
+      ).listen(port, host, () => {
         if (!isPrintInfo) {
           return;
         }
