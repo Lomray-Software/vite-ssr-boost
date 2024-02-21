@@ -19,6 +19,10 @@ on:
         required: false
         type: boolean
         default: false
+      should-checkout:
+        required: false
+        type: boolean
+        default: false
     secrets:
       github-token:
         required: true
@@ -40,6 +44,9 @@ jobs:
       image-tag: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
 
     steps:
+      - uses: actions/checkout@v4
+        if: ${{ inputs.should-checkout }}
+
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.should-skip-artifacts }}
         with:
