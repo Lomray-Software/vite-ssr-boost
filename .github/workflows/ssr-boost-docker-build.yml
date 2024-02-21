@@ -15,9 +15,6 @@ on:
       app-build-path:
         required: true
         type: string
-      extra-build-args:
-        required: false
-        type: string
       should-skip-artifacts:
         required: false
         type: boolean
@@ -25,6 +22,8 @@ on:
     secrets:
       github-token:
         required: true
+      extra-build-args:
+        required: false
     outputs:
       image-tag:
         description: "Docker image with new tag version"
@@ -77,4 +76,4 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             BUILD_PATH=${{ inputs.app-build-path }}
-            ${{ inputs.extra-build-args }}
+            ${{ secrets.extra-build-args }}
