@@ -9,6 +9,8 @@ import {
   routesCode3After,
   routesCodeLazyBefore,
   routesCodeLazyAfter,
+  routesCode4Before,
+  routesCode4After,
 } from '@__mocks__/route-file';
 import normalizeRoute from '@plugins/normalize-route';
 
@@ -39,6 +41,12 @@ describe('normalizeRoute', () => {
     const result = getTransform()(routesCode3Before, allowedFileId);
 
     expect(result?.code).to.equal(routesCode3After);
+  });
+
+  it('should return original routes', () => {
+    const result = getTransform()(routesCode4Before, allowedFileId);
+
+    expect(result?.code).to.equal(routesCode4After);
   });
 
   it('should return routes with injected pathId - NO SSR: lazy', () => {

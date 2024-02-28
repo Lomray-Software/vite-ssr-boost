@@ -30,11 +30,11 @@ const normalizeSyncRoutes = (code: string, isBuild = false): string => {
 
   return code.replace(
     /(.*?(?:Component|element):[\s<]*(\w+)[^,}]*),*/gs,
-    (_, before: string, routeName: string) => {
+    (fullMatch, before: string, routeName: string) => {
       const importPath = imports?.[routeName];
 
       if (!importPath) {
-        return before;
+        return fullMatch;
       }
 
       return `${before},pathId: '${importPath}',`;

@@ -235,6 +235,68 @@ const routes: TRouteObject[] = [
 export default routes;
 `;
 
+const routesCode4Before = `
+import type { TRouteObject } from '@lomray/vite-ssr-boost/interfaces/route-object';
+import { lazy } from 'react';
+import AppLayout from '@components/layouts/app';
+import RouteManager from '@services/route-manager';
+
+const GuestLayout = lazy(() => import('@components/layouts/guest'));
+
+/**
+ * Application routes
+ */
+const routes: TRouteObject[] = [
+  {
+    Component: AppLayout,
+    children: [
+      {
+        Component: GuestLayout,
+        children: [
+          {
+            path: RouteManager.path('signIn'),
+            lazy: () => import('@pages/sign-in'),
+          },
+        ],
+      },
+    ],
+  },
+];
+
+export default routes;
+`;
+
+const routesCode4After = `import n from '@lomray/vite-ssr-boost/helpers/import-route';
+import type { TRouteObject } from '@lomray/vite-ssr-boost/interfaces/route-object';
+import { lazy } from 'react';
+import AppLayout from '@components/layouts/app';
+import RouteManager from '@services/route-manager';
+
+const GuestLayout = lazy(() => import('@components/layouts/guest'));
+
+/**
+ * Application routes
+ */
+const routes: TRouteObject[] = [
+  {
+    Component: AppLayout,pathId: '@components/layouts/app',
+    children: [
+      {
+        Component: GuestLayout,
+        children: [
+          {
+            path: RouteManager.path('signIn'),
+            lazy: ()=>n(() => import('@pages/sign-in')),
+          },
+        ],
+      },
+    ],
+  },
+];
+
+export default routes;
+`;
+
 export {
   routesCode1Before,
   routesCode1After,
@@ -242,6 +304,8 @@ export {
   routesCode2After,
   routesCode3Before,
   routesCode3After,
+  routesCode4Before,
+  routesCode4After,
   routesCodeLazyBefore,
   routesCodeLazyAfter,
 };
