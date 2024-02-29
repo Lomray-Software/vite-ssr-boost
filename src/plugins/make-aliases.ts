@@ -29,8 +29,10 @@ function ViteMakeAliasesPlugin(options: IPluginOptions = {}): Plugin {
   if (!fs.existsSync(tsconfigPath)) {
     console.error(`${pluginName}: tsconfig not exist in "${tsconfigPath}"`);
   } else {
-    const tsJson = JSON5.parse(fs.readFileSync(tsconfigPath, { encoding: 'utf-8' }));
-    const paths: Record<string, string[]> = tsJson?.compilerOptions?.paths ?? {};
+    const tsJson = JSON5.parse<{ compilerOptions?: { paths: Record<string, string[]> } }>(
+      fs.readFileSync(tsconfigPath, { encoding: 'utf-8' }),
+    );
+    const paths = tsJson?.compilerOptions?.paths ?? {};
 
     Object.entries(paths).forEach(([alias, aliasPaths]) => {
       aliases.push([cleanupAlias(alias), cleanupAlias(aliasPaths[0])]);
@@ -45,7 +47,10 @@ function ViteMakeAliasesPlugin(options: IPluginOptions = {}): Plugin {
         const defaultAliases = resolveConfig.alias ?? [];
         const normalizedAliases = Array.isArray(defaultAliases)
           ? defaultAliases
-          : Object.entries(defaultAliases).map(([find, val]) => ({ find, replacement: val }));
+          : Object.entries(defaultAliases).map(([find, val]) => ({
+              find,
+              replacement: val as string,
+            }));
 
         normalizedAliases.push(...ViteAliases(aliases, `${projectRoot}/${config?.root ?? ''}`));
 

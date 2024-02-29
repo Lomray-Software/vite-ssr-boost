@@ -27,7 +27,8 @@ const importRoute = async (route: IDynamicRoute, id?: string): Promise<IAsyncRou
 
   keys.forEach((key) => {
     if (Component[key]) {
-      result[key] = Component[key] as any;
+      // @ts-ignore
+      result[key] = Component[key] as NonNullable<IAsyncRoute[typeof key]>;
     }
   });
 

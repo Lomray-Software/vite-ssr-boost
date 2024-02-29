@@ -81,12 +81,18 @@ class PrepareServer {
           await this.config.getVite()!.ssrLoadModule(entrypointPath, {
             fixStacktrace: true,
           })
-        ).default;
+        ).default as IPrepareRenderOut;
       } else {
-        resolvedEntrypoint = (await import(pathToFileURL(entrypointPath).toString())).default;
+        resolvedEntrypoint = (
+          (await import(pathToFileURL(entrypointPath).toString())) as { default: IPrepareRenderOut }
+        ).default;
       }
     } catch (e) {
-      if (e.message.includes('Cannot find module') && e.message.includes('/build/')) {
+      if (
+        e instanceof Error &&
+        e.message.includes('Cannot find module') &&
+        e.message.includes('/build/')
+      ) {
         this.config
           .getLogger()
           .error(

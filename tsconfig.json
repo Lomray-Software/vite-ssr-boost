@@ -49,6 +49,7 @@
       "@services/*": ["./src/services/*"]
     }
   },
+  "include": ["src", "types", "vitest.config.ts", "eslint.config.js"],
   "exclude": [
     "node_modules",
     "lib",

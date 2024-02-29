@@ -26,7 +26,7 @@ function createFetchRequest(req: ExpressRequest): Request {
     }
   }
 
-  const init = {
+  const init: RequestInit = {
     method: req.method,
     headers,
     signal: controller.signal,
@@ -34,7 +34,7 @@ function createFetchRequest(req: ExpressRequest): Request {
   };
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    init.body = req.body;
+    init.body = req.body as BodyInit;
   }
 
   return new Request(url.href, init);

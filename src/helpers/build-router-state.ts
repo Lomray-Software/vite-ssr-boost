@@ -5,7 +5,7 @@ import serializeErrors from '@helpers/serialize-errors';
  * Build router state
  */
 function buildRouterState(context: StaticHandlerContext): string {
-  const { loaderData, actionData, errors } = context as StaticHandlerContext;
+  const { loaderData, actionData, errors } = context;
   const routerState = {
     loaderData,
     actionData,

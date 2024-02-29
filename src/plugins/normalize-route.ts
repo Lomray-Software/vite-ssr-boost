@@ -75,7 +75,7 @@ function ViteNormalizeRouterPlugin(options: IPluginOptions = {}): Plugin {
     name: `${PLUGIN_NAME}-normalize-route`,
     enforce: 'pre',
     transform(code, id) {
-      const extName = extname(id).split('?')[0]!;
+      const [extName] = extname(id).split('?');
       const isRoutesPath = !routesPath || id.includes(routesPath);
 
       if (

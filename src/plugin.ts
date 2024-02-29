@@ -68,7 +68,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
 
         if (!isSsrBuild) {
           if (isSSR && isBuild) {
-            config.build!.manifest = true;
+            config.build.manifest = true;
           }
 
           return config;

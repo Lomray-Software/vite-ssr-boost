@@ -29,13 +29,14 @@ const writeResponse = (context: IRequestContext, params: IWriteResponseParams): 
 
   // catch close connection from React and write footer
   if (didError) {
-    const end = res.end.bind(res);
+    const end = res.end.bind(res) as ExpressResponse['end'];
 
     res.end = (...args: unknown[]): ExpressResponse => {
       // send second part of app shell
       res.write(modifiedFooter || html.footer);
 
-      return end(...args) as ExpressResponse;
+      // @ts-ignore
+      return end(...args);
     };
   }
 

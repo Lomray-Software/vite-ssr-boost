@@ -6,6 +6,15 @@ import { Command, Option } from 'commander';
 import runBuild from '@cli/build';
 import onKeyPress from '@cli/helpers/keyboard-input';
 import viteResetCache from '@cli/helpers/vite-reset-cache';
+import type {
+  IBuildActionParams,
+  IBuildAmplifyActionParams,
+  IBuildDockerActionParams,
+  IBuildVercelActionParams,
+  IDevActionParams,
+  IPreviewActionParams,
+  IStartActionParams,
+} from '@cli/interfaces/actions';
 import runAmplifyBuild from '@cli/run-amplify-build';
 import runDev from '@cli/run-dev';
 import runDockerBuild from '@cli/run-docker-build';
@@ -70,7 +79,7 @@ program
   .addOption(hostOption)
   .addOption(new Option('--reset-cache', 'Clear vite cache before run.').default(false))
   .addOption(new Option('--mode [mode]', 'Env mode.').env('VITE_ENV_MODE').default('development'))
-  .action(async ({ host, resetCache, mode }) => {
+  .action(async ({ host, resetCache, mode }: IDevActionParams) => {
     if (resetCache) {
       await viteResetCache();
     }
@@ -78,7 +87,12 @@ program
     const command = async (isPrintInfo?: boolean): Promise<void> => {
       console.info(chalk.cyan('Starting the development server...'));
 
-      const { server, config } = await runDev({ version, isHost: host, isPrintInfo, mode });
+      const { server, config } = await runDev({
+        version,
+        isHost: host,
+        isPrintInfo,
+        mode,
+      });
 
       cliContext.server = server;
       cliContext.config = config;
@@ -140,7 +154,7 @@ program
       eject,
       serverless,
       throwWarnings,
-    }) => {
+    }: IBuildActionParams) => {
       await runBuild({
         isOnlyClient: onlyClient,
         isUnlockRobots: unlockRobots,
@@ -164,7 +178,7 @@ program
   .addOption(
     new Option('--module-preload', 'Add module preload scripts to server output.').default(false),
   )
-  .action(({ host, port, onlyClient, modulePreload, buildDir }) => {
+  .action(({ host, port, onlyClient, modulePreload, buildDir }: IStartActionParams) => {
     const command = async (isPrintInfo?: boolean): Promise<void> => {
       const { server, config } = await runProd({
         version,
@@ -195,7 +209,7 @@ program
   .addOption(portOption)
   .addOption(envModeOption)
   .addOption(buildDirOption)
-  .action(async ({ host, port, onlyClient, mode, buildDir }) => {
+  .action(async ({ host, port, onlyClient, mode, buildDir }: IPreviewActionParams) => {
     global.viteBoostStartTime = performance.now();
 
     const command = async (isPrintInfo?: boolean): Promise<void> => {
@@ -254,15 +268,23 @@ program
   )
   .addOption(onlyClientOption)
   .addOption(envModeOption)
-  .action(async ({ imageName, dockerOptions, dockerFile, onlyClient, mode }) => {
-    await runDockerBuild({
+  .action(
+    async ({
       imageName,
       dockerOptions,
       dockerFile,
-      isOnlyClient: onlyClient,
+      onlyClient,
       mode,
-    });
-  });
+    }: IBuildDockerActionParams) => {
+      await runDockerBuild({
+        imageName,
+        dockerOptions,
+        dockerFile,
+        isOnlyClient: onlyClient,
+        mode,
+      });
+    },
+  );
 
 program
   .command(CliActions.buildAmplify)
@@ -275,7 +297,7 @@ program
   )
   .addOption(new Option('--is-optimize', 'Optimize node_modules folder.').default(false))
   .addOption(envModeOption)
-  .action(async ({ manifestFile, mode, isOptimize }) => {
+  .action(async ({ manifestFile, mode, isOptimize }: IBuildAmplifyActionParams) => {
     await runAmplifyBuild({
       manifestFile,
       mode,
@@ -300,7 +322,7 @@ program
   )
   .addOption(new Option('--is-optimize', 'Optimize node_modules folder.').default(false))
   .addOption(envModeOption)
-  .action(async ({ configFile, configVcFile, mode, isOptimize }) => {
+  .action(async ({ configFile, configVcFile, mode, isOptimize }: IBuildVercelActionParams) => {
     await runVercelBuild({
       configFile,
       configVcFile,

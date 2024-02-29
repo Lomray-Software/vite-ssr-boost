@@ -24,7 +24,7 @@ function serializeErrors(errors: StaticHandlerContext['errors']): StaticHandlerC
         __type: 'Error',
       };
     } else {
-      serialized[key] = val;
+      serialized[key] = val as unknown;
     }
   }
 

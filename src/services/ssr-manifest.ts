@@ -180,6 +180,8 @@ class SsrManifest {
   ): Promise<Record<string, string | undefined>> {
     const result: Record<string, string | undefined> = {};
 
+    // reason: await + array index
+    // eslint-disable-next-line @typescript-eslint/no-for-in-array
     for (const routeIndex in routes) {
       const route = routes[routeIndex];
       const routeId = [index, routeIndex].filter(Boolean).join('-');
@@ -429,7 +431,7 @@ class SsrManifest {
               type: AssetType.style,
               url: file,
               weight: this.getAssetWeight(file),
-              content: JSON.parse(`{"style": "${code}"}`).style,
+              content: (JSON.parse(`{"style": "${code}"}`) as { style: string }).style,
               isNested: Boolean(skipModules.size),
               isPreload: false,
             };
