@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { expect } from 'chai';
 import sinon from 'sinon';
+import type { UserConfig } from 'vite';
 import { afterEach, describe, it } from 'vitest';
 import PLUGIN_NAME from '@constants/plugin-name';
 import ViteMakeAliasesPlugin from '@plugins/make-aliases';
@@ -24,12 +25,14 @@ describe('ViteMakeAliasesPlugin', () => {
     sandbox
       .stub(fs, 'readFileSync')
       .returns(JSON.stringify({ compilerOptions: { paths: aliases } }));
-    const config = { resolve: { alias: {} }, root };
+    const config = { resolve: { alias: {} }, root } as UserConfig;
 
     // @ts-ignore
-    const result = ViteMakeAliasesPlugin({ tsconfig: tsconfigPath, root: '' }).config(config);
+    const result = ViteMakeAliasesPlugin({ tsconfig: tsconfigPath, root: '' }).config(
+      config,
+    ) as UserConfig;
 
-    expect(result.resolve.alias).to.deep.equal([
+    expect(result.resolve?.alias).to.deep.equal([
       { find: '@src', replacement: `${root}/src` },
       { find: '@components', replacement: `${root}/src/components` },
     ]);
@@ -52,7 +55,7 @@ describe('ViteMakeAliasesPlugin', () => {
   it('should use default values when options are not provided', () => {
     const config = { resolve: { alias: {} } };
     // @ts-ignore
-    const result = ViteMakeAliasesPlugin().config(config);
+    const result = ViteMakeAliasesPlugin().config(config) as UserConfig;
 
     expect(result).to.deep.equal(config);
   });
@@ -62,7 +65,7 @@ describe('ViteMakeAliasesPlugin', () => {
 
     const config = { resolve: { alias: {} } };
     // @ts-ignore
-    const result = ViteMakeAliasesPlugin({ root }).config(config);
+    const result = ViteMakeAliasesPlugin({ root }).config(config) as UserConfig;
 
     expect(result).to.deep.equal(config);
   });

@@ -4,10 +4,20 @@ import baseConfig from '@lomray/eslint-config';
 // noinspection NpmUsedModulesInstalled
 import globals from 'globals';
 
+const customFilesIgnores = {
+  ...baseConfig['filesIgnores'],
+  files: [
+    ...baseConfig['filesIgnores'].files,
+    '__tests__/**/*.{ts,tsx,*.ts,*tsx}',
+    '__mocks__/**/*.{ts,tsx,*.ts,*tsx}',
+    '__helpers__/**/*.{ts,tsx,*.ts,*tsx}',
+  ],
+}
+
 export default [
-  ...lomrayConfig.config(),
+  ...lomrayConfig.config(customFilesIgnores),
   {
-    ...baseConfig['filesIgnores'],
+    ...customFilesIgnores,
     languageOptions: {
       globals: {
         ...globals.node,

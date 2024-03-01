@@ -1,5 +1,7 @@
+import type { Router as RemixRouter } from '@remix-run/router';
 import { render, cleanup } from '@testing-library/react';
 import { expect } from 'chai';
+import type { ReactNode } from 'react';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import type { RouteObject } from 'react-router-dom';
@@ -60,7 +62,7 @@ describe('browserEntry', () => {
 
     const root = await entry(App, routes);
 
-    const [AppRoot] = renderStub.firstCall.args;
+    const [AppRoot] = renderStub.firstCall.args as [ReactNode];
     const { getByTestId } = render(<div children={AppRoot} />);
 
     expect(getByTestId('home-page')).to.not.undefined;
@@ -76,7 +78,10 @@ describe('browserEntry', () => {
 
     await entry(App, routes, { init: initStub });
 
-    const { isSSRMode, router } = initStub.firstCall.firstArg;
+    const { isSSRMode, router } = initStub.firstCall.firstArg as {
+      isSSRMode: boolean;
+      router: RemixRouter;
+    };
     const [, AppRoot] = hydrateStub.firstCall.args;
     const { getByTestId } = render(<div children={AppRoot} />);
 
