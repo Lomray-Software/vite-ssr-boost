@@ -48,7 +48,7 @@ npm i --save @lomray/vite-ssr-boost
 
 ## How to use
 
-Explore [demo app](https://github.com/Lomray-Software/vite-template) to more understand or:
+**Explore [template](https://github.com/Lomray-Software/vite-template)** to more understand how it works or:
 
 1. Add plugin to vite config:
 ```typescript
