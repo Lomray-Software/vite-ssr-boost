@@ -5,13 +5,21 @@ interface IOnlyClient<T> {
   load: () => Promise<{ default: ComponentType<T> } | ComponentType<T>>;
   children: (Component: ComponentType<T>) => ReactNode;
   fallback?: ReactNode;
+  errorComponent?: ReactNode;
 }
+
+const defaultError = <p>Failed to load client side component.</p>;
 
 /**
  * Render component only on client side
  * @constructor
  */
-function OnlyClient<T>({ load, children, fallback }: IOnlyClient<T>): ReactNode {
+function OnlyClient<T>({
+  load,
+  children,
+  fallback,
+  errorComponent = defaultError,
+}: IOnlyClient<T>): ReactNode {
   const [Component, setComponent] = useState<ComponentType<unknown> | null>(null);
 
   useEffect(() => {
@@ -24,7 +32,7 @@ function OnlyClient<T>({ load, children, fallback }: IOnlyClient<T>): ReactNode 
           .catch((error: Error) => {
             console.error('Client side component loading failed:', error);
 
-            return { default: () => <p>Failed to load client side component.</p> };
+            return { default: () => errorComponent };
           }),
       );
 

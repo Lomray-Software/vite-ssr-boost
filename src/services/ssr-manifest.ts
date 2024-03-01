@@ -347,7 +347,7 @@ class SsrManifest {
       return fullPath;
     }
 
-    return fullPath.replace(this.root, '').replace(/^\/|\/$/g, '');
+    return fullPath.replace(this.root, '').replace(/^(\/)|(\/)$/g, '');
   }
 
   /**
