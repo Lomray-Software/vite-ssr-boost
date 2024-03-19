@@ -80,7 +80,7 @@ const routes: TRouteObject[] = [
     children: [
       {
         index: true,
-        lazy: ()=>n(() => import('@pages/home'),'@pages/home'),
+        lazy: n(() => import('@pages/home'),'@pages/home'),
       },
       {
         path: RouteManager.path('details'),
@@ -88,19 +88,19 @@ const routes: TRouteObject[] = [
       },
       {
         path: RouteManager.path('errorBoundary'),
-        lazy: ()=>n(() => import('@pages/error-boundary'),'@pages/error-boundary'),
+        lazy: n(() => import('@pages/error-boundary'),'@pages/error-boundary'),
       },
       {
         path: RouteManager.path('nestedSuspense'),
-        lazy: ()=>n(() => import('@pages/nested-suspense'),'@pages/nested-suspense'),
+        lazy: n(() => import('@pages/nested-suspense'),'@pages/nested-suspense'),
       },
       {
         path: RouteManager.path('redirect'),
-        lazy: ()=>n(() => import('@pages/redirect'),'@pages/redirect'),
+        lazy: n(() => import('@pages/redirect'),'@pages/redirect'),
       },
       {
         path: RouteManager.path('redirect'),
-        lazy: ()=>n(() => import('@pages/redirect'),'@pages/redirect'),
+        lazy: n(() => import('@pages/redirect'),'@pages/redirect'),
       },
       {
         path: RouteManager.path('notLazy'),
@@ -228,7 +228,7 @@ import RouteManager from '@services/route-manager';
 const routes: TRouteObject[] = [
   {
     path: RouteManager.path('errorBoundary'),
-    lazy: ()=>n(() => import('@pages/error-boundary')),
+    lazy: n(() => import('@pages/error-boundary')),
   },
 ];
 
@@ -286,7 +286,7 @@ const routes: TRouteObject[] = [
         children: [
           {
             path: RouteManager.path('signIn'),
-            lazy: ()=>n(() => import('@pages/sign-in')),
+            lazy: n(() => import('@pages/sign-in')),
           },
         ],
       },

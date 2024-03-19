@@ -15,7 +15,7 @@ describe('importRoute', () => {
 
   it('should import dynamic route and return an IAsyncRoute object with Component and pathId', async () => {
     const id = 'routeId';
-    const result = await importRoute(getDynamicRoute(), id);
+    const result = await importRoute(getDynamicRoute(), id)();
 
     expect(result.Component).to.be.a('function');
     expect(result.Component).to.equal(Component);
@@ -23,7 +23,7 @@ describe('importRoute', () => {
   });
 
   it('should handle dynamic route with additional properties', async () => {
-    const result = await importRoute(getDynamicRoute({ someProp: 'value' }));
+    const result = await importRoute(getDynamicRoute({ someProp: 'value' }))();
 
     expect(result.Component).to.be.a('function');
     expect(result).to.have.property('someProp').and.to.equal('value');
@@ -37,7 +37,7 @@ describe('importRoute', () => {
         },
         true,
       ),
-    );
+    )();
 
     expect(result.Component).to.be.a('function');
     expect(result.Component).to.not.equal(Component);
@@ -55,7 +55,7 @@ describe('importRoute', () => {
         },
         true,
       ),
-    );
+    )();
 
     expect(result.Component).to.not.undefined;
     expect(result).to.not.have.property('notAllowedKey');

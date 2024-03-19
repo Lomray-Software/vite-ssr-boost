@@ -14,29 +14,31 @@ export type IAsyncRoute = { pathId?: string } & (
 /**
  * Import dynamic route
  */
-const importRoute = async (route: IDynamicRoute, id?: string): Promise<IAsyncRoute> => {
-  const resolved = await route();
+const importRoute = (route: IDynamicRoute, id?: string): (() => Promise<IAsyncRoute>) => {
+  return async (): Promise<IAsyncRoute> => {
+    const resolved = await route();
 
-  // fallback to react router export style
-  if ('Component' in resolved) {
-    return { ...resolved, pathId: id } as IAsyncRoute;
-  }
-
-  const Component = resolved.default;
-  const result: IAsyncRoute = { Component, pathId: id };
-
-  keys.forEach((key) => {
-    if (Component[key]) {
-      // @ts-ignore
-      result[key] = Component[key] as NonNullable<IAsyncRoute[typeof key]>;
+    // fallback to react router export style
+    if ('Component' in resolved) {
+      return { ...resolved, pathId: id } as IAsyncRoute;
     }
-  });
 
-  if (Component.Suspense) {
-    result.Component = withSuspense(Component, Component.Suspense);
-  }
+    const Component = resolved.default;
+    const result: IAsyncRoute = { Component, pathId: id };
 
-  return result;
+    keys.forEach((key) => {
+      if (Component[key]) {
+        // @ts-ignore
+        result[key] = Component[key] as NonNullable<IAsyncRoute[typeof key]>;
+      }
+    });
+
+    if (Component.Suspense) {
+      result.Component = withSuspense(Component, Component.Suspense);
+    }
+
+    return result;
+  };
 };
 
 export default importRoute;

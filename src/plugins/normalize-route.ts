@@ -48,7 +48,7 @@ const normalizeSyncRoutes = (code: string, isBuild = false): string => {
 const normalizeAsyncRoutes = (code: string, isSSR: boolean): string => {
   const modifiedCode = code.replace(
     /(lazy)(:\s*)(\(\)\s*=>\s*import\(([^)]+)\))/gs,
-    isSSR ? 'lazy$2()=>n($3,$4)' : 'lazy$2()=>n($3)',
+    isSSR ? 'lazy$2n($3,$4)' : 'lazy$2n($3)',
   );
 
   if (code !== modifiedCode) {
