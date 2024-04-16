@@ -48,6 +48,10 @@ jobs:
         if: ${{ inputs.has-release-asset }}
         run: zip -r build.zip ${{ inputs.build-folder }} package.json package-lock.json README.md
 
+        # install all related semantic-release deps
+      - name: Install dependencies
+        run: npm ci
+
       - name: Release
         run: npx semantic-release
         env:
