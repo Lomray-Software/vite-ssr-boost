@@ -11,6 +11,10 @@ on:
         required: false
         type: boolean
         default: false
+      node-version:
+        required: false
+        type: string
+        default: 20.10.0
     secrets:
       github-token:
         required: true
@@ -30,6 +34,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
 
       - uses: actions/download-artifact@v4
         with:
