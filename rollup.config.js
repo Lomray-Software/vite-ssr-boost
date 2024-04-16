@@ -6,6 +6,9 @@ import copy from 'rollup-plugin-copy';
 import { preserveShebangs } from 'rollup-plugin-preserve-shebangs';
 
 const dest = 'lib';
+// const dest = '../vite-template/node_modules/@lomray/vite-ssr-boost';
+// const dest = '../../uplift/uplift-web/node_modules/@lomray/vite-ssr-boost';
+// const dest = '../../test/node_modules/@lomray/vite-ssr-boost';
 
 export default {
   input: [
