@@ -18,6 +18,12 @@ const obtainStreamError = (err: unknown): IObtainStreamErrorOut => {
       message,
       original: err,
     };
+  } else if (message === 'The destination stream closed early.') {
+    return {
+      code: StreamError.RenderSkip,
+      message,
+      original: err,
+    };
   }
 
   return {
