@@ -297,6 +297,74 @@ const routes: TRouteObject[] = [
 export default routes;
 `;
 
+const compiledRoutesCode1Before = `{
+  ErrorBoundary: NotFound,
+  Component: AppLayout,
+  children: [
+    {
+      index: true,
+      lazy: e$2(() => __vitePreload(() => import("./index-ojFAmQK4.js"), true ? __vite__mapDeps([7,8]) : void 0), "@pages/home")
+    },
+    {
+      path: manager.path("details"),
+      children: detailsRoutes
+    },
+    {
+      path: manager.path("errorBoundary"),
+      lazy: e$2(() => __vitePreload(() => import("./index-DAh3GXwI.js"), true ? __vite__mapDeps([9,1,5]) : void 0), "@pages/error-boundary")
+    },
+    {
+      path: manager.path("nestedSuspense"),
+      lazy: e$2(() => __vitePreload(() => import("./index-BlcC__XX.js"), true ? __vite__mapDeps([10,1,2]) : void 0), "@pages/nested-suspense")
+    },
+    {
+      path: manager.path("redirect"),
+      lazy:Jr(()=>cr(()=>import("./index-B19FHlDU.js"),__vite__mapDeps([4,1,5,2,6])),"@pages/details/user")
+    },
+    {
+      path: manager.path("notLazy"),
+      Component: NotLazy
+    }
+  ]
+}
+// minified
+lazy:Jr(()=>cr(()=>import("./index-B19FHlDU.js"),__vite__mapDeps([4,1,5,2,6])),"@pages/details/user")itePreload(() => import("./index-BlcC_
+`;
+
+const compiledRoutesCode1After = `{
+  ErrorBoundary: NotFound,
+  Component: AppLayout,
+  children: [
+    {
+      index: true,
+      lazy: e$2(() => __vitePreload(() => import("./index-ojFAmQK4.js"), true ? __vite__mapDeps([7,8]) : void 0))
+    },
+    {
+      path: manager.path("details"),
+      children: detailsRoutes
+    },
+    {
+      path: manager.path("errorBoundary"),
+      lazy: e$2(() => __vitePreload(() => import("./index-DAh3GXwI.js"), true ? __vite__mapDeps([9,1,5]) : void 0))
+    },
+    {
+      path: manager.path("nestedSuspense"),
+      lazy: e$2(() => __vitePreload(() => import("./index-BlcC__XX.js"), true ? __vite__mapDeps([10,1,2]) : void 0))
+    },
+    {
+      path: manager.path("redirect"),
+      lazy:Jr(()=>cr(()=>import("./index-B19FHlDU.js"),__vite__mapDeps([4,1,5,2,6])))
+    },
+    {
+      path: manager.path("notLazy"),
+      Component: NotLazy
+    }
+  ]
+}
+// minified
+lazy:Jr(()=>cr(()=>import("./index-B19FHlDU.js"),__vite__mapDeps([4,1,5,2,6])))itePreload(() => import("./index-BlcC_
+`;
+
 export {
   routesCode1Before,
   routesCode1After,
@@ -308,4 +376,6 @@ export {
   routesCode4After,
   routesCodeLazyBefore,
   routesCodeLazyAfter,
+  compiledRoutesCode1Before,
+  compiledRoutesCode1After,
 };

@@ -5,6 +5,7 @@ import viteResetCache from '@cli/helpers/vite-reset-cache';
 import cliName from '@constants/cli-name';
 import { createDevMarker } from '@helpers/dev-marker';
 import processStop from '@helpers/process-stop';
+import { removeMeta } from '@helpers/ssr-meta';
 import Build from '@services/build';
 
 interface IBuildParams {
@@ -154,6 +155,7 @@ async function build({
   }
 
   createDevMarker(buildService.isProd, buildService.viteConfig);
+  removeMeta(buildService.buildDir);
   onFinish?.();
 
   const durationMs = Math.ceil(performance.now() - perfStart);

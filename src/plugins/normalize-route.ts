@@ -1,7 +1,8 @@
-import { extname } from 'node:path';
+import { extname, resolve } from 'node:path';
 import type { Plugin } from 'vite';
 import PLUGIN_NAME from '@constants/plugin-name';
 import isRoutesFile from '@helpers/is-route-file';
+import { writeMeta } from '@helpers/ssr-meta';
 
 export interface IPluginOptions {
   isSSR?: boolean;
@@ -70,6 +71,8 @@ const normalizeAsyncRoutes = (code: string, isSSR: boolean): string => {
  */
 function ViteNormalizeRouterPlugin(options: IPluginOptions = {}): Plugin {
   const { isSSR = false, isBuild = false, routesPath } = options;
+  const routeFiles = new Map<string, string>();
+  const cfg = { root: '', buildDir: '' };
 
   return {
     name: `${PLUGIN_NAME}-normalize-route`,
@@ -87,10 +90,50 @@ function ViteNormalizeRouterPlugin(options: IPluginOptions = {}): Plugin {
         return;
       }
 
+      routeFiles.set(id, '');
+
       return {
         code: normalizeAsyncRoutes(normalizeSyncRoutes(code, isBuild), isSSR),
         map: { mappings: '' },
       };
+    },
+    /**
+     * Get build path
+     */
+    config(config, { isSsrBuild }): void {
+      if (isSsrBuild) {
+        return;
+      }
+
+      cfg.root = config.root!;
+      cfg.buildDir = config.build!.outDir!;
+    },
+    /**
+     * Get transformed route files
+     */
+    generateBundle(_, bundle) {
+      for (const [fileName, chunk] of Object.entries(bundle)) {
+        if (chunk.type === 'chunk') {
+          Object.entries(chunk.modules).forEach(([modulePath]) => {
+            if (routeFiles.has(modulePath)) {
+              routeFiles.set(modulePath, fileName);
+            }
+          });
+        }
+      }
+    },
+    /**
+     * Save metadata on for client build
+     * @see config hook
+     */
+    writeBundle(): void {
+      if (!cfg.root) {
+        return;
+      }
+
+      const [buildDir] = resolve(cfg.root, cfg.buildDir).split('/client');
+
+      writeMeta(buildDir, { routeFiles: Object.fromEntries(routeFiles) });
     },
   };
 }

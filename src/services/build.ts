@@ -6,6 +6,7 @@ import type { ResolvedConfig } from 'vite';
 import { resolveConfig } from 'vite';
 import type { IPluginConfig } from '@helpers/plugin-config';
 import getPluginConfig from '@helpers/plugin-config';
+import { readMeta } from '@helpers/ssr-meta';
 import ServerConfig from '@services/server-config';
 import SsrManifest from '@services/ssr-manifest';
 
@@ -130,7 +131,7 @@ class Build {
    * Build assets manifest file
    */
   public async buildManifest(): Promise<void> {
-    console.log(chalk.blue('Building routes manifest file...'));
+    console.info(chalk.blue('Building routes manifest file...'));
 
     const serverConfig = ServerConfig.init(
       { isProd: this.isProd, mode: this.params.mode },
@@ -141,6 +142,34 @@ class Build {
       buildDir: this.viteConfig.build.outDir,
       viteAliases: this.viteConfig.resolve.alias,
     }).buildRoutesManifest();
+
+    this.cleanupClientRoutes();
+  }
+
+  /**
+   * Remove pathId from client route files
+   */
+  private cleanupClientRoutes(): void {
+    const { routeFiles } = readMeta(this.buildDir);
+    const files = new Set(Object.values(routeFiles ?? []));
+
+    if (!files.size) {
+      return;
+    }
+
+    files.forEach((file) => {
+      const filepath = `${this.buildDir}/client/${file}`;
+
+      try {
+        const result = fs
+          .readFileSync(filepath, { encoding: 'utf-8' })
+          .replace(/(lazy:.*?\((.*?)\)),\s?".*?"\)/g, '$1)');
+
+        fs.writeFileSync(filepath, result);
+      } catch (e) {
+        console.log(`Failed cleanup client route ${filepath}:`, e);
+      }
+    });
   }
 
   /**

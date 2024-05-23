@@ -1,5 +1,7 @@
+import fs from 'node:fs';
 import { expect } from 'chai';
-import { describe, it } from 'vitest';
+import sinon from 'sinon';
+import { afterEach, describe, it } from 'vitest';
 import {
   routesCode1Before,
   routesCode1After,
@@ -17,7 +19,12 @@ import normalizeRoute from '@plugins/normalize-route';
 type TSimpleTransform = (code: string, id: string) => undefined | { code: string };
 
 describe('normalizeRoute', () => {
+  const sandbox = sinon.createSandbox();
   const allowedFileId = '/src/routes/index.ts';
+
+  afterEach(() => {
+    sandbox.restore();
+  });
 
   /**
    * Return transform function
@@ -81,5 +88,49 @@ describe('normalizeRoute', () => {
     const result = getTransform()(code, allowedFileId);
 
     expect(result?.code).to.equal(code);
+  });
+
+  it('should set config & get transformed route & write metadata', () => {
+    const writeFileSyncStub = sandbox.stub(fs, 'writeFileSync');
+    const plugin = normalizeRoute({ isSSR: true });
+    const bundle = {
+      '/assets/index-JDj23ja.js': {
+        type: 'chunk',
+        modules: { [allowedFileId]: 'test' },
+      },
+      '/assets/index-Jx9999.js': {
+        type: 'chunk',
+        modules: { '/': 'test' },
+      },
+    };
+
+    // @ts-expect-error ignore error, we know config type
+    plugin.transform(routesCode1Before, allowedFileId);
+    // @ts-expect-error ignore error, we know config type
+    plugin.generateBundle?.({}, bundle);
+    // @ts-expect-error ignore error, we know config type
+    plugin.config?.({ root: '/src', build: { outDir: '/build/client' } }, { isSsrBuild: false });
+    // @ts-expect-error ignore error, we know config type
+    plugin.writeBundle?.();
+
+    const [, data] = writeFileSyncStub.firstCall.args;
+
+    expect(JSON.parse(data as string)).to.deep.equal({
+      routeFiles: {
+        [allowedFileId]: Object.keys(bundle)[0],
+      },
+    });
+  });
+
+  it('should ignore set config & write metadata', () => {
+    const writeFileSyncStub = sandbox.stub(fs, 'writeFileSync');
+    const plugin = normalizeRoute({ isSSR: true });
+
+    // @ts-expect-error ignore error, we know config type
+    plugin.config?.({ root: '/src', build: { outDir: '/build/client' } }, { isSsrBuild: true });
+    // @ts-expect-error ignore error, we know config type
+    plugin.writeBundle?.();
+
+    expect(writeFileSyncStub).to.not.called;
   });
 });
