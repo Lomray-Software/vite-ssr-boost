@@ -17,7 +17,7 @@ const cleanupAlias = (str: string): string => str.replace('/*', '');
 
 /**
  * Read tsconfig file and set vite aliases
- * @see SsrManifest.getAliases
+ * @see PathNormalize.getAliases
  * @constructor
  */
 function ViteMakeAliasesPlugin(options: IPluginOptions = {}): Plugin {

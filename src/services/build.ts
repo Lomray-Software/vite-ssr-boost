@@ -131,19 +131,22 @@ class Build {
    * Build assets manifest file
    */
   public async buildManifest(): Promise<void> {
-    console.info(chalk.blue('Building routes manifest file...'));
+    console.info(chalk.blue(`Building routes manifest file: ${this.pluginConfig.routesParsing}`));
 
+    const isNodeParsing = this.pluginConfig.routesParsing === 'node';
     const serverConfig = ServerConfig.init(
       { isProd: this.isProd, mode: this.params.mode },
-      { root: this.viteConfig.root },
+      { root: this.viteConfig.root, clientFile: this.pluginConfig.clientFile },
     );
 
     await SsrManifest.get(serverConfig, {
       buildDir: this.viteConfig.build.outDir,
       viteAliases: this.viteConfig.resolve.alias,
-    }).buildRoutesManifest();
+    }).buildRoutesManifest(isNodeParsing);
 
-    this.cleanupClientRoutes();
+    if (isNodeParsing) {
+      this.cleanupClientRoutes();
+    }
   }
 
   /**

@@ -33,9 +33,18 @@ describe('normalizeRoute', () => {
     normalizeRoute(...params).transform as TSimpleTransform;
 
   it('should return routes with injected pathId: lazy, Component', () => {
-    const result = getTransform({ isSSR: true })(routesCode1Before, allowedFileId);
+    const result = getTransform({ isSSR: true, isNodeParsing: true })(
+      routesCode1Before,
+      allowedFileId,
+    );
 
     expect(result?.code).to.equal(routesCode1After);
+  });
+
+  it('should return routes without injected pathId: lazy, Component', () => {
+    const result = getTransform({ isSSR: true })(routesCodeLazyBefore, allowedFileId);
+
+    expect(result?.code).to.equal(routesCodeLazyAfter);
   });
 
   it('should return routes with injected pathId: element,Component', () => {
@@ -92,7 +101,7 @@ describe('normalizeRoute', () => {
 
   it('should set config & get transformed route & write metadata', () => {
     const writeFileSyncStub = sandbox.stub(fs, 'writeFileSync');
-    const plugin = normalizeRoute({ isSSR: true });
+    const plugin = normalizeRoute({ isSSR: true, isNodeParsing: true });
     const bundle = {
       '/assets/index-JDj23ja.js': {
         type: 'chunk',

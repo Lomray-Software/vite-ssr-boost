@@ -36,6 +36,7 @@ describe('build', () => {
     );
     const writeFileSyncStub = sandbox.stub(fs, 'writeFileSync');
 
+    sandbox.stub(service, 'pluginConfig').value({ routesParsing: 'node' });
     sandbox
       .stub(fs, 'readFileSync')
       .onFirstCall()

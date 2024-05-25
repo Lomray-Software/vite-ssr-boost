@@ -365,6 +365,27 @@ const compiledRoutesCode1After = `{
 lazy:Jr(()=>cr(()=>import("./index-B19FHlDU.js"),__vite__mapDeps([4,1,5,2,6])))itePreload(() => import("./index-BlcC_
 `;
 
+const routesDetailsCode = `
+import type { TRouteObject } from '@lomray/vite-ssr-boost/interfaces/route-object';
+import RouteManager from '@services/route-manager';
+
+/**
+ * Details routes
+ */
+const detailsRoutes: TRouteObject[] = [
+  {
+    index: true,
+    lazy: () => import('@pages/details/index'),
+  },
+  {
+    path: RouteManager.path('details.user'),
+    lazy: () => import('@pages/details/user'),
+  },
+];
+
+export default detailsRoutes;
+`;
+
 export {
   routesCode1Before,
   routesCode1After,
@@ -378,4 +399,5 @@ export {
   routesCodeLazyAfter,
   compiledRoutesCode1Before,
   compiledRoutesCode1After,
+  routesDetailsCode,
 };

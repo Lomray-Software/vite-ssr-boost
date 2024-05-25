@@ -22,8 +22,8 @@ describe('ssr-meta', () => {
 
     const [file, data] = writeFileSyncStub.firstCall.args;
 
-    expect(file).to.eq(dataFile);
-    expect(JSON.parse(data as string)).to.deep.eq(newMeta);
+    expect(file).to.equal(dataFile);
+    expect(JSON.parse(data as string)).to.deep.equal(newMeta);
   });
 
   it('should read metadata from the meta.json file', () => {
@@ -33,7 +33,7 @@ describe('ssr-meta', () => {
     const res = readMeta(buildDir);
 
     expect(readFileSyncStub).to.calledWith(dataFile);
-    expect(res).to.deep.eq(testData);
+    expect(res).to.deep.equal(testData);
   });
 
   it('should return an empty object if the meta.json file does not exist', () => {
@@ -42,7 +42,7 @@ describe('ssr-meta', () => {
     const res = readMeta(buildDir);
 
     expect(readFileSyncStub).to.calledWith(`${buildDir}/meta.json`);
-    expect(res).to.deep.eq({});
+    expect(res).to.deep.equal({});
   });
 
   it('should remove the meta.json file', () => {

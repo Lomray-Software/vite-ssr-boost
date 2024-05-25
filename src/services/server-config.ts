@@ -21,6 +21,7 @@ interface IConfigParams {
   isProd: boolean;
   isSPA: boolean;
   indexFile: string;
+  clientFile: string;
   serverFile: string;
   host: string;
   port: number;
@@ -152,6 +153,7 @@ class ServerConfig {
       pluginConfig.pluginPath ?? path.resolve(path.dirname(dirInfo.pathname), '../');
     const indexFile = pluginConfig.indexFile ?? this.prodParams.indexFile!;
     const serverFile = pluginConfig.serverFile ?? this.prodParams.serverFile!;
+    const clientFile = pluginConfig.clientFile ?? this.prodParams.clientFile!;
     const host =
       typeof config?.server.host === 'boolean' || this.isHost
         ? '0.0.0.0'
@@ -163,6 +165,7 @@ class ServerConfig {
       publicDir,
       pluginPath,
       indexFile,
+      clientFile,
       serverFile,
       host,
       port,

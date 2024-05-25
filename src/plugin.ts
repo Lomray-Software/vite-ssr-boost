@@ -16,6 +16,11 @@ export interface IPluginOptions {
   clientFile?: string;
   // Path contains routes declaration files (need to detect route files). default: undefined, e.g.: /routes/
   routesPath?: string;
+  // how parse routes
+  // node - import routes file directly and walk through
+  // babel - use babel travers to walk through and avoid import routes file
+  // default: babel
+  routesParsing?: 'node' | 'babel';
   // Read aliases from tsconfig
   tsconfigAliases?: boolean | IMakeAliasesPluginOptions;
   customShortcuts?: {
@@ -30,6 +35,7 @@ const defaultOptions: IPluginOptions = {
   indexFile: 'index.html',
   serverFile: 'server.ts',
   clientFile: 'client.ts',
+  routesParsing: 'babel',
   tsconfigAliases: true,
 };
 
@@ -83,7 +89,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     },
   ];
 
-  const { tsconfigAliases, routesPath } = mergedOptions;
+  const { tsconfigAliases, routesPath, routesParsing } = mergedOptions;
 
   if (tsconfigAliases) {
     plugins.push(
@@ -91,7 +97,14 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     );
   }
 
-  plugins.push(ViteNormalizeRouterPlugin({ isSSR, isBuild, routesPath }));
+  plugins.push(
+    ViteNormalizeRouterPlugin({
+      isSSR,
+      isBuild,
+      routesPath,
+      isNodeParsing: routesParsing === 'node',
+    }),
+  );
 
   return plugins;
 }

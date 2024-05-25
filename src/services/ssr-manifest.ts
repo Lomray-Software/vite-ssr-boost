@@ -7,6 +7,9 @@ import type { RouteObject } from 'react-router-dom';
 import type { Alias, ModuleNode } from 'vite';
 import type { IAsyncRoute } from '@helpers/import-route';
 import type { IRequestContext } from '@node/render';
+import type { TRoutesTree } from '@services/parse-routes';
+import ParseRoutes from '@services/parse-routes';
+import PathNormalize from '@services/path-normalize';
 import PrepareServer from '@services/prepare-server';
 import ServerConfig from '@services/server-config';
 
@@ -60,6 +63,11 @@ class SsrManifest {
   protected readonly config: ServerConfig;
 
   /**
+   * Path normalize service
+   */
+  protected readonly pathNormalize: PathNormalize;
+
+  /**
    * Project root path
    */
   protected readonly root: string;
@@ -97,6 +105,7 @@ class SsrManifest {
     this.root = config.getParams().root;
     this.buildDir = buildDir;
     this.viteAliases = viteAliases ?? config.getVite()?.config?.resolve.alias;
+    this.pathNormalize = new PathNormalize(config, viteAliases);
   }
 
   /**
@@ -174,7 +183,7 @@ class SsrManifest {
   /**
    * Recursive walk routes and return id's with route import path
    */
-  protected async getRoutesIds(
+  protected async getAsyncRoutesIds(
     routes: RouteObject[],
     index?: string,
   ): Promise<Record<string, string | undefined>> {
@@ -190,14 +199,38 @@ class SsrManifest {
         try {
           const resolvedRoute: IAsyncRoute = await route.lazy();
 
-          result[routeId] = this.normalizeRoutePath(resolvedRoute?.pathId);
+          result[routeId] = this.pathNormalize.getAppPath(resolvedRoute?.pathId);
         } catch (e) {
           console.error(chalk.red('Failed to load route:'), route.path, e);
         }
       } else if (route.children) {
-        Object.assign(result, await this.getRoutesIds(route.children, routeId));
+        Object.assign(result, await this.getAsyncRoutesIds(route.children, routeId));
       }
     }
+
+    return result;
+  }
+
+  /**
+   * Same as 'getAsyncRoutesIds' but for routes tree from 'ParseRoutes'
+   */
+  protected getRoutesTreeIds(
+    routes: TRoutesTree[],
+    index?: string,
+  ): Record<string, string | undefined> {
+    const result: Record<string, string | undefined> = {};
+
+    routes.forEach((route, routeIndex) => {
+      const routeId = [index, String(routeIndex)].filter(Boolean).join('-');
+
+      if (route.import) {
+        result[routeId] = this.pathNormalize.getAppPath(route.import);
+      }
+
+      if (route.children.length > 0) {
+        Object.assign(result, this.getRoutesTreeIds(route.children, routeId));
+      }
+    });
 
     return result;
   }
@@ -261,15 +294,24 @@ class SsrManifest {
   /**
    * Build routes manifest file
    */
-  public async buildRoutesManifest(): Promise<void> {
+  public async buildRoutesManifest(isNodeParsing: boolean): Promise<void> {
     const prepareServer = PrepareServer.init(
       ServerConfig.init({ isProd: true }, { root: this.getOutDir() }),
     );
     const manifest = this.loadClientManifest();
-    const { routes } = await prepareServer.loadEntrypoint(false);
-    const routesPaths = await this.getRoutesIds(routes as RouteObject[]);
-    const postfixes = this.getRouteImportPostfix();
+    let routesPaths: Record<string, string | undefined>;
 
+    if (isNodeParsing) {
+      const { routes } = await prepareServer.loadEntrypoint(false);
+
+      routesPaths = await this.getAsyncRoutesIds(routes as RouteObject[]);
+    } else {
+      const routesService = new ParseRoutes(this.config, this.viteAliases);
+
+      routesPaths = this.getRoutesTreeIds(routesService.parse());
+    }
+
+    const postfixes = this.pathNormalize.getImportPostfix();
     const result: Record<string, IAsset[]> = {};
 
     // find route assets
@@ -288,66 +330,6 @@ class SsrManifest {
     fs.writeFileSync(this.getAssetsManifestFile(), JSON.stringify(result, null, 2), {
       encoding: 'utf-8',
     });
-  }
-
-  /**
-   * Get vite aliases
-   */
-  protected getAliases(): Record<string, string> {
-    const aliases: Record<string, string> = {};
-
-    this.viteAliases?.forEach(({ find, replacement }) => {
-      if (typeof find !== 'string') {
-        return;
-      }
-
-      aliases[find] = replacement;
-    });
-
-    return aliases;
-  }
-
-  /**
-   * Return route postfix
-   */
-  protected getRouteImportPostfix(): string[] {
-    return ['', '/index']
-      .map((prefix) => ['', '.js', '.ts', '.tsx'].map((ext) => `${prefix}${ext}`))
-      .flat();
-  }
-
-  /**
-   * Normalized route path
-   */
-  protected normalizeRoutePath(routePath?: string, withRoot = false): string | undefined {
-    if (!routePath) {
-      return;
-    }
-
-    let fullPath = '';
-
-    // relative import
-    if (routePath.startsWith('./') || routePath.startsWith('../')) {
-      fullPath = path.resolve(this.root, routePath);
-    } else {
-      // alias import
-      const aliases = this.getAliases();
-      // get alias
-      const [routeAlias] = routePath.split('/');
-
-      if (aliases[routeAlias]) {
-        fullPath = routePath.replace(routeAlias, aliases[routeAlias]);
-      }
-    }
-
-    // normalize slashes
-    fullPath = fullPath.split(path.win32.sep).join(path.posix.sep);
-
-    if (withRoot) {
-      return fullPath;
-    }
-
-    return fullPath.replace(this.root, '').replace(/^(\/)|(\/)$/g, '');
   }
 
   /**
@@ -380,7 +362,7 @@ class SsrManifest {
   protected getAssetsDev(routes?: AgnosticDataRouteMatch[]): IAsset[] {
     const routeIds =
       (routes
-        ?.map(({ route }) => this.normalizeRoutePath((route as IAsyncRoute)?.pathId, true))
+        ?.map(({ route }) => this.pathNormalize.getAppPath((route as IAsyncRoute)?.pathId, true))
         .filter(Boolean) as string[]) ?? [];
 
     if (!routeIds.length) {
@@ -388,7 +370,7 @@ class SsrManifest {
     }
 
     let assets: TAssets = {};
-    const postfixes = this.getRouteImportPostfix();
+    const postfixes = this.pathNormalize.getImportPostfix();
     const rootId = `${this.root}/${this.config.getPluginConfig()?.clientFile ?? 'client.ts'}`;
 
     [rootId, ...routeIds].forEach((moduleId) => {
