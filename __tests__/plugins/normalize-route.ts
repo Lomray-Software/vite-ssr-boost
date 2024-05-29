@@ -42,9 +42,18 @@ describe('normalizeRoute', () => {
   });
 
   it('should return routes without injected pathId: lazy, Component', () => {
-    const result = getTransform({ isSSR: true })(routesCodeLazyBefore, allowedFileId);
+    const result = getTransform({ isSSR: true, isBuild: true })(
+      routesCodeLazyBefore,
+      allowedFileId,
+    );
 
     expect(result?.code).to.equal(routesCodeLazyAfter);
+  });
+
+  it('should return routes with injected pathId (development mode): lazy, Component', () => {
+    const result = getTransform({ isSSR: true, isBuild: false })(routesCode2Before, allowedFileId);
+
+    expect(result?.code).to.equal(routesCode2After);
   });
 
   it('should return routes with injected pathId: element,Component', () => {

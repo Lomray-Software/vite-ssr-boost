@@ -371,7 +371,10 @@ class SsrManifest {
 
     let assets: TAssets = {};
     const postfixes = this.pathNormalize.getImportPostfix();
-    const rootId = `${this.root}/${this.config.getPluginConfig()?.clientFile ?? 'client.ts'}`;
+    const rootId = path.resolve(
+      this.root,
+      this.config.getPluginConfig()?.clientFile ?? 'client.ts',
+    );
 
     [rootId, ...routeIds].forEach((moduleId) => {
       for (const ext of postfixes) {

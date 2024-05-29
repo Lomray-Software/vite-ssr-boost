@@ -94,10 +94,11 @@ function ViteNormalizeRouterPlugin(options: IPluginOptions = {}): Plugin {
       routeFiles.set(id, '');
 
       return {
-        // always add pathId to routes for development
         code: normalizeAsyncRoutes(
+          // always add pathId to sync routes for development
           normalizeSyncRoutes(code, isBuild),
-          isSSR && (isNodeParsing || isBuild),
+          // always add pathId to async routes for development or if it's node parsing mode
+          isSSR && (isNodeParsing || !isBuild),
         ),
         map: { mappings: '' },
       };
