@@ -148,7 +148,7 @@ export default entryServer(App, routes, {
      */
     getState: () => {},
   }),
-}, App);
+});
 ```
 
 4. Replace `package.json` scripts:
