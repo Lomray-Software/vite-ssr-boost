@@ -61,7 +61,7 @@ async function entry<TAppProps>(
     </App>
   );
 
-  if (!IS_SSR_MODE) {
+  if (!IS_SSR_MODE || root.dataset['forceSpa'] === '1') {
     return ReactDOM.createRoot(root).render(<AppComponent />);
   }
 

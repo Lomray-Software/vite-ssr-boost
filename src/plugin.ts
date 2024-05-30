@@ -3,6 +3,8 @@ import type { Plugin } from 'vite';
 import CliActions from '@constants/cli-actions';
 import type { ICliContext } from '@constants/cli-context';
 import PLUGIN_NAME from '@constants/plugin-name';
+import ViteCreateSPAIndexPlugin from '@plugins/create-spa-index';
+import type { IPluginOptions as ICreateSPAIndex } from '@plugins/create-spa-index';
 import type { IPluginOptions as IMakeAliasesPluginOptions } from '@plugins/make-aliases';
 import ViteMakeAliasesPlugin from '@plugins/make-aliases';
 import ViteNormalizeRouterPlugin from '@plugins/normalize-route';
@@ -21,6 +23,8 @@ export interface IPluginOptions {
   // babel - use babel travers to walk through and avoid import routes file
   // default: babel
   routesParsing?: 'node' | 'babel';
+  // Create additional SPA entrypoint: index-spa.html
+  spaIndex?: boolean | ICreateSPAIndex;
   // Read aliases from tsconfig
   tsconfigAliases?: boolean | IMakeAliasesPluginOptions;
   customShortcuts?: {
@@ -37,6 +41,7 @@ const defaultOptions: IPluginOptions = {
   clientFile: 'client.ts',
   routesParsing: 'babel',
   tsconfigAliases: true,
+  spaIndex: false,
 };
 
 /**
@@ -89,12 +94,16 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     },
   ];
 
-  const { tsconfigAliases, routesPath, routesParsing } = mergedOptions;
+  const { tsconfigAliases, routesPath, routesParsing, spaIndex } = mergedOptions;
 
   if (tsconfigAliases) {
     plugins.push(
       ViteMakeAliasesPlugin(typeof tsconfigAliases === 'boolean' ? undefined : tsconfigAliases),
     );
+  }
+
+  if (spaIndex) {
+    plugins.push(ViteCreateSPAIndexPlugin(typeof spaIndex === 'boolean' ? undefined : spaIndex));
   }
 
   plugins.push(
