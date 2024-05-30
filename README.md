@@ -235,8 +235,8 @@ import type { TRouteObject } from '@lomray/vite-ssr-boost/interfaces/route-objec
 Client side components import example:
 ```typescript jsx
 <OnlyClient load={() => import('external-package')}>
-  {(LoadedComnponent) => (
-    <LoadedComnponent />
+  {(LoadedComponent) => (
+    <LoadedComponent />
   )}
 </OnlyClient>
 ```

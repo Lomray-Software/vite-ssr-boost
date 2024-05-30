@@ -67,7 +67,7 @@ class ParseRoutes {
     }
 
     const { routesPath, exportName } = routesEntrypoint;
-    const routeFilepath = this.resolveFilename(routesPath);
+    const routeFilepath = this.resolveFilename(routesPath, clientEntrypoint);
 
     return this.recursiveBuildRoutesTree(routeFilepath, exportName);
   }
