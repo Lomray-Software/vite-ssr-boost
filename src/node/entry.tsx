@@ -5,6 +5,7 @@ import { createStaticHandler } from 'react-router-dom/server.mjs';
 import type { TRouteObject } from '@interfaces/route-object';
 import type { IRenderOptions, IRenderParams, TRender } from '@node/render';
 import render from '@node/render';
+import type ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 
 export interface IInitServerRequestOut<T = Record<string, any>> {
@@ -13,7 +14,7 @@ export interface IInitServerRequestOut<T = Record<string, any>> {
 }
 
 export interface IEntrypointOptions<TAppProps = Record<string, any>> {
-  onServerCreated?: (app: Express) => Promise<void> | void;
+  onServerCreated?: (app: Express, serverApi: ServerApi) => Promise<void> | void;
   onRequest?: (
     req: Request,
     res: ExpressResponse,

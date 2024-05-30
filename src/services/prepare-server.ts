@@ -7,6 +7,7 @@ import type { Request } from 'express';
 import type { TRouteObject } from '@interfaces/route-object';
 import type { IEntrypointOptions, IPrepareRenderOut } from '@node/entry';
 import type { TRender } from '@node/render';
+import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 
 interface IPrepareServerEntrypointLoadOut<TAppProps = Record<string, any>> {
@@ -33,6 +34,11 @@ class PrepareServer {
   protected readonly config: ServerConfig;
 
   /**
+   * Server API
+   */
+  protected readonly serverApi: ServerApi;
+
+  /**
    * Entrypoint resolved params
    */
   protected entrypoint?: IPrepareServerEntrypointLoadOut;
@@ -50,15 +56,16 @@ class PrepareServer {
   /**
    * @constructor
    */
-  protected constructor(config: ServerConfig) {
+  protected constructor(config: ServerConfig, serverApi?: ServerApi) {
     this.config = config;
+    this.serverApi = serverApi ?? new ServerApi();
   }
 
   /**
    * Init service
    */
-  public static init(config: ServerConfig): PrepareServer {
-    return new PrepareServer(config);
+  public static init(config: ServerConfig, serverApi?: ServerApi): PrepareServer {
+    return new PrepareServer(config, serverApi);
   }
 
   /**
@@ -161,7 +168,7 @@ class PrepareServer {
    */
   public async onAppCreated(): Promise<PrepareServer> {
     await this.loadEntrypoint();
-    await this.onServerCreated?.(this.config.getApp()!);
+    await this.onServerCreated?.(this.config.getApp()!, this.serverApi);
 
     return this;
   }

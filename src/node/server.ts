@@ -8,6 +8,7 @@ import express from 'express';
 import printServerInfo from '@helpers/print-server-info';
 import type { IRequestContext } from '@node/render';
 import PrepareServer from '@services/prepare-server';
+import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 
 export interface ICreateServerOut {
@@ -20,6 +21,7 @@ export interface ICreateServerOut {
  */
 async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
   const app = express().disable('x-powered-by');
+  const serverApi = new ServerApi();
 
   config.setApp(app);
 
@@ -55,7 +57,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
     if (!isSPA) {
       // ignore index.html file in SSR mode
       app.use((req, _, next) => {
-        if (req.url === '/index.html') {
+        if (req.url === '/index.html' && !serverApi.hasAccessIndexHtml()) {
           req.url = '/index-not-found.html';
         }
 
@@ -70,7 +72,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
     );
   }
 
-  const prepareServer = PrepareServer.init(config);
+  const prepareServer = PrepareServer.init(config, serverApi);
 
   // SSR mode
   if (!config.isSPA) {
