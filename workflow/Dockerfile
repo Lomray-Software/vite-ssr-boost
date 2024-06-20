@@ -1,6 +1,11 @@
 FROM node:20.10.0-alpine
 
-MAINTAINER Yarmaliuk Mikhail <mikhail.yarmaliuk@lomray.com>
+LABEL org.opencontainers.image.title="ssr-boost"
+LABEL org.opencontainers.image.description="Container to run pre-built 'ssr-boost' Vike SSR applications"
+LABEL org.opencontainers.image.authors="Yarmaliuk Mikhail <mikhail.yarmaliuk@lomray.com>"
+LABEL org.opencontainers.image.url="https://github.com/Lomray-Software/vite-ssr-boost"
+LABEL org.opencontainers.image.vendor="Lomray Software"
+LABEL org.opencontainers.image.licenses=MIT
 
 ARG BUILD_PATH
 ARG RUN_TYPE=ssr
@@ -15,10 +20,13 @@ RUN mkdir -p $WEB_PATH
 
 WORKDIR $WEB_PATH
 
-COPY ${BUILD_PATH} $WEB_PATH/build
-COPY ./package.json $WEB_PATH/package.json
-COPY package-lock.json* yarn.lock* pnpm-lock.yaml* $WEB_PATH
+COPY package.json ./
+COPY package-lock.json* ./
+COPY yarn.lock* ./
+COPY pnpm-lock.yaml* ./
 
 RUN ${INSTALL_COMMAND}
+
+COPY ${BUILD_PATH} $WEB_PATH/build
 
 CMD npm run start:${TYPE} -- --host
