@@ -1,6 +1,6 @@
 FROM node:20.10.0-alpine
 
-LABEL org.opencontainers.image.title="ssr-boost"
+LABEL org.opencontainers.image.title="vite-ssr-boost"
 LABEL org.opencontainers.image.description="Container to run pre-built 'ssr-boost' Vike SSR applications"
 LABEL org.opencontainers.image.authors="Yarmaliuk Mikhail <mikhail.yarmaliuk@lomray.com>"
 LABEL org.opencontainers.image.url="https://github.com/Lomray-Software/vite-ssr-boost"
