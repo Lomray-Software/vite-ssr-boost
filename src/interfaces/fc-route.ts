@@ -1,5 +1,6 @@
 import type { FC, PropsWithChildren } from 'react';
 import type { RouteObject } from 'react-router/dist/lib/context';
+import type { FCC } from '@interfaces/fc';
 import type { IRequestContext } from '@node/render';
 
 declare module '@remix-run/router' {
@@ -16,7 +17,9 @@ declare module '@remix-run/router' {
 
 const keys = ['loader', 'action', 'ErrorBoundary', 'errorElement'] as const;
 
-type IRouteParams = Pick<RouteObject, (typeof keys)[number]> & { Suspense?: FC };
+type IRouteParams = Pick<RouteObject, (typeof keys)[number]> & {
+  Suspense?: FCC<Record<string, any>>;
+};
 
 type FCRoute<TProps = Record<string, any>> = FC<TProps> & IRouteParams;
 type FCCRoute<TProps = Record<string, any>> = FC<PropsWithChildren<TProps>> & IRouteParams;
