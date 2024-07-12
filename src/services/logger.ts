@@ -1,4 +1,21 @@
-import type { Logger as ViteLogger } from 'vite';
+import type { LogErrorOptions, Logger as ViteLogger, LogOptions } from 'vite';
+
+const LogLevels = {
+  error: 1,
+  warn: 2,
+  info: 3,
+};
+
+interface ILoggerOptions {
+  logLevel?: number;
+  logFilter?: (params: ILogParams) => boolean;
+}
+
+interface ILogParams {
+  level: keyof typeof LogLevels;
+  msg?: string;
+  options?: LogErrorOptions;
+}
 
 /**
  * Default production logger
@@ -7,48 +24,89 @@ class Logger implements ViteLogger {
   /**
    * @inheritDoc
    */
-  hasWarned: boolean;
+  public hasWarned: boolean;
+
+  /**
+   * Current log level
+   */
+  public loglevel: number;
+
+  /**
+   * Custom log filter
+   * Return 'true' to skip output
+   */
+  public logFilter: ILoggerOptions['logFilter'] | undefined;
+
+  /**
+   * @constructor
+   */
+  public constructor({ logFilter, logLevel = 3 }: ILoggerOptions = {}) {
+    this.loglevel = logLevel;
+    this.logFilter = logFilter;
+  }
 
   /**
    * @inheritDoc
    */
-  clearScreen(): void {
+  public clearScreen(): void {
     //
   }
 
   /**
-   * @inheritDoc
+   * Should we skip current log depends on current log level
    */
-  error(msg: string): void {
-    console.error(msg);
+  protected shouldSkipLog(level: number): boolean {
+    return level > this.loglevel;
+  }
+
+  /**
+   * Common log
+   */
+  protected log(params: ILogParams): void {
+    const { level, msg, options } = params;
+
+    if (this.shouldSkipLog(LogLevels[level]) || this.logFilter?.(params)) {
+      return;
+    }
+
+    const args = [msg, options?.error].filter(Boolean);
+
+    console[level](...args);
   }
 
   /**
    * @inheritDoc
    */
-  hasErrorLogged(): boolean {
+  public error(msg: string, options?: LogErrorOptions): void {
+    this.log({ msg, options, level: 'error' });
+  }
+
+  /**
+   * @inheritDoc
+   */
+  public hasErrorLogged(): boolean {
     return false;
   }
 
   /**
    * @inheritDoc
    */
-  info(msg: string): void {
-    console.info(msg);
+  public info(msg: string, options: LogOptions): void {
+    this.log({ msg, options, level: 'info' });
   }
 
   /**
    * @inheritDoc
    */
-  warn(msg: string): void {
-    console.warn(msg);
+  public warn(msg: string, options: LogOptions): void {
+    this.log({ msg, options, level: 'warn' });
   }
 
   /**
    * @inheritDoc
    */
-  warnOnce(msg: string): void {
-    console.warn(msg);
+  public warnOnce(msg: string, options: LogOptions): void {
+    this.warn(msg, options);
   }
 }
 

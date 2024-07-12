@@ -122,7 +122,14 @@ class PrepareServer {
       delete resolvedEntrypoint.init;
     }
 
-    const { render, init, routes, abortDelay } = resolvedEntrypoint;
+    const { render, init, routes, abortDelay, loggerProd, loggerDev } = resolvedEntrypoint;
+
+    if (loggerProd && isProd) {
+      this.config.setLogger(loggerProd);
+    } else if (loggerDev && !isProd) {
+      this.config.setLogger(loggerDev);
+    }
+
     const { onServerCreated, ...renderParams } =
       (await init?.({
         config: this.config,

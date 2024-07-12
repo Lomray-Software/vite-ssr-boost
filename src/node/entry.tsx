@@ -2,6 +2,7 @@ import type { Express, Request, Response as ExpressResponse } from 'express';
 import type { FC, PropsWithChildren } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { createStaticHandler } from 'react-router-dom/server.mjs';
+import type { Logger } from 'vite';
 import type { TRouteObject } from '@interfaces/route-object';
 import type { IRenderOptions, IRenderParams, TRender } from '@node/render';
 import render from '@node/render';
@@ -32,6 +33,8 @@ export interface IPrepareRenderOut<TAppProps = Record<string, any>> {
   init: IEntryServerOptions<TAppProps>['init'];
   routes: TRouteObject[];
   abortDelay?: number;
+  loggerProd?: Logger;
+  loggerDev?: Logger;
 }
 
 export interface IAppServerProps<T = Record<string, any>> {
@@ -42,10 +45,11 @@ export type TApp<T> = FC<PropsWithChildren<Record<string, any> & IAppServerProps
 
 export interface IEntryServerOptions<TAppProps = Record<string, any>> {
   abortDelay?: number;
-  hasEarlyHints?: boolean;
   init?: (params: {
     config: ServerConfig;
   }) => IEntrypointOptions<TAppProps> | Promise<IEntrypointOptions<TAppProps>>;
+  loggerProd?: IPrepareRenderOut['loggerProd'];
+  loggerDev?: IPrepareRenderOut['loggerDev'];
 }
 
 /**
@@ -54,7 +58,7 @@ export interface IEntryServerOptions<TAppProps = Record<string, any>> {
 function entry<TAppProps>(
   App: TApp<TAppProps>,
   routes: TRouteObject[],
-  { init, abortDelay }: IEntryServerOptions<TAppProps> = {},
+  { init, ...rest }: IEntryServerOptions<TAppProps> = {},
 ): IPrepareRenderOut<TAppProps> {
   const handler = createStaticHandler(routes as RouteObject[]);
 
@@ -62,7 +66,7 @@ function entry<TAppProps>(
     render: render.bind(null, { handler, App } as IRenderParams<TAppProps>) as TRender,
     init,
     routes,
-    abortDelay,
+    ...rest,
   };
 }
 

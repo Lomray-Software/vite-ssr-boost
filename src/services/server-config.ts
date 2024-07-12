@@ -227,6 +227,13 @@ class ServerConfig {
   public getLogger(): Logger {
     return this.logger;
   }
+
+  /**
+   * Set custom logger
+   */
+  public setLogger(logger: Logger): void {
+    this.logger = logger;
+  }
 }
 
 export default ServerConfig;
