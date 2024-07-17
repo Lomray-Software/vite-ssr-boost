@@ -1,7 +1,9 @@
+import type { CompressionOptions } from 'compression';
 import type { Express, Request, Response as ExpressResponse } from 'express';
 import type { FC, PropsWithChildren } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { createStaticHandler } from 'react-router-dom/server.mjs';
+import type { ServeStaticOptions } from 'serve-static';
 import type { Logger } from 'vite';
 import type { TRouteObject } from '@interfaces/route-object';
 import type { IRenderOptions, IRenderParams, TRender } from '@node/render';
@@ -35,6 +37,10 @@ export interface IPrepareRenderOut<TAppProps = Record<string, any>> {
   abortDelay?: number;
   loggerProd?: Logger;
   loggerDev?: Logger;
+  middlewares?: {
+    compression?: CompressionOptions | false;
+    expressStatic?: ServeStaticOptions | false;
+  };
 }
 
 export interface IAppServerProps<T = Record<string, any>> {
@@ -50,6 +56,7 @@ export interface IEntryServerOptions<TAppProps = Record<string, any>> {
   }) => IEntrypointOptions<TAppProps> | Promise<IEntrypointOptions<TAppProps>>;
   loggerProd?: IPrepareRenderOut['loggerProd'];
   loggerDev?: IPrepareRenderOut['loggerDev'];
+  middlewares?: IPrepareRenderOut['middlewares'];
 }
 
 /**

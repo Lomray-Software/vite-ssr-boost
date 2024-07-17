@@ -25,6 +25,8 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
 
   config.setApp(app);
 
+  const prepareServer = PrepareServer.init(config, serverApi);
+
   if (!config.isProd) {
     // Create Vite server in middleware mode and configure the app type as
     // 'custom', disabling Vite's own HTML serving logic so parent server
@@ -49,10 +51,19 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
     app.use(vite.middlewares);
 
     config.setVite(vite);
-  } else {
-    const { root, publicDir, isSPA } = config.getParams();
+  }
 
-    app.use(compression());
+  if (!config.isSPA) {
+    await prepareServer.onAppCreated();
+  }
+
+  if (config.isProd) {
+    const { root, publicDir, isSPA } = config.getParams();
+    const { compression: compressionConfig, expressStatic } = prepareServer.getMiddlewaresConfig();
+
+    if (compressionConfig) {
+      app.use(compression(compressionConfig));
+    }
 
     if (!isSPA) {
       // ignore index.html file in SSR mode
@@ -65,19 +76,18 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
       });
     }
 
-    app.use(
-      express.static(path.resolve(`${root}/${publicDir}`), {
-        index: isSPA ? undefined : false,
-      }),
-    );
+    if (expressStatic) {
+      app.use(
+        express.static(path.resolve(`${root}/${publicDir}`), {
+          ...expressStatic,
+          index: isSPA ? undefined : false,
+        }),
+      );
+    }
   }
-
-  const prepareServer = PrepareServer.init(config, serverApi);
 
   // SSR mode
   if (!config.isSPA) {
-    await prepareServer.onAppCreated();
-
     app.use('*', (req, res, next) => {
       void (async () => {
         try {

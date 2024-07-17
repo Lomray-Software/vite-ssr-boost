@@ -54,6 +54,11 @@ class PrepareServer {
   protected html: string;
 
   /**
+   * Middlewares configs
+   */
+  protected middlewaresConfigs?: IPrepareRenderOut['middlewares'];
+
+  /**
    * @constructor
    */
   protected constructor(config: ServerConfig, serverApi?: ServerApi) {
@@ -122,7 +127,10 @@ class PrepareServer {
       delete resolvedEntrypoint.init;
     }
 
-    const { render, init, routes, abortDelay, loggerProd, loggerDev } = resolvedEntrypoint;
+    const { render, init, routes, abortDelay, loggerProd, loggerDev, middlewares } =
+      resolvedEntrypoint;
+
+    this.middlewaresConfigs = middlewares;
 
     if (loggerProd && isProd) {
       this.config.setLogger(loggerProd);
@@ -178,6 +186,28 @@ class PrepareServer {
     await this.onServerCreated?.(this.config.getApp()!, this.serverApi);
 
     return this;
+  }
+
+  /**
+   * Return SSR express middlewares configs
+   */
+  public getMiddlewaresConfig(): NonNullable<PrepareServer['middlewaresConfigs']> {
+    const { compression, expressStatic } = this.middlewaresConfigs ?? {};
+
+    return {
+      compression:
+        compression !== false
+          ? {
+              ...(compression ?? {}),
+            }
+          : false,
+      expressStatic:
+        expressStatic !== false
+          ? {
+              ...(expressStatic ?? {}),
+            }
+          : false,
+    };
   }
 }
 
