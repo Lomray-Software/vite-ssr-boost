@@ -38,6 +38,7 @@ export default {
     'node:url',
     'node:http',
     'node:https',
+    '@babel/types',
   ],
   plugins: [
     folderInput(),

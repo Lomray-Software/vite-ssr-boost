@@ -2,6 +2,7 @@ import fs from 'fs';
 import { resolve } from 'node:path';
 import path from 'path';
 import babelGenerate from '@babel/generator';
+import type * as GenerateTypes from '@babel/generator';
 import * as parser from '@babel/parser';
 import type { ParseResult } from '@babel/parser';
 import babelTraverse from '@babel/traverse';
@@ -26,7 +27,9 @@ import {
 import type { Alias } from 'vite';
 import PathNormalize from '@services/path-normalize';
 import type ServerConfig from '@services/server-config';
-
+//
+// @ts-expect-error known import problem
+const generate = (babelGenerate.default ?? babelGenerate) as (typeof GenerateTypes)['default'];
 // @ts-expect-error known import problem
 const traverse = (babelTraverse.default ?? babelTraverse) as (typeof TraverseTypes)['default'];
 
@@ -464,7 +467,7 @@ class ParseRoutes {
       },
     });
 
-    return babelGenerate(ast, {
+    return generate(ast, {
       retainLines: true,
     }).code;
   }
