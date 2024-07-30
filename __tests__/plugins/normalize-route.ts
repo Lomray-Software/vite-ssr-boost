@@ -13,6 +13,9 @@ import {
   routesCodeLazyAfter,
   routesCode4Before,
   routesCode4After,
+  routesCode5Before,
+  routesCode5After,
+  routesCodeLazyAfterClean,
 } from '@__mocks__/route-file';
 import normalizeRoute from '@plugins/normalize-route';
 
@@ -47,7 +50,7 @@ describe('normalizeRoute', () => {
       allowedFileId,
     );
 
-    expect(result?.code).to.equal(routesCodeLazyAfter);
+    expect(result?.code).to.equal(routesCodeLazyAfterClean);
   });
 
   it('should return routes with injected pathId (development mode): lazy, Component', () => {
@@ -97,11 +100,9 @@ describe('normalizeRoute', () => {
 
   it('should return the original code when importPath is not defined', () => {
     const code = `
-      const routes = [
-        { path: '/', Component: Home },
-        { path: '/about', Component: About },
-      ];
-    `;
+const routes = [
+{ path: '/', Component: Home },
+{ path: '/about', Component: About }];`;
 
     const result = getTransform()(code, allowedFileId);
 
@@ -150,5 +151,14 @@ describe('normalizeRoute', () => {
     plugin.writeBundle?.();
 
     expect(writeFileSyncStub).to.not.called;
+  });
+
+  it('should return routes with injected pathId: Components has JSX props', () => {
+    const result = getTransform({ isSSR: true, isNodeParsing: true })(
+      routesCode5Before,
+      allowedFileId,
+    );
+
+    expect(result?.code).to.equal(routesCode5After);
   });
 });

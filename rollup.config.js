@@ -63,6 +63,8 @@ export default {
       targets: [
         { src: 'package.json', dest: dest },
         { src: 'README.md', dest: dest },
+        { src: 'SECURITY.md', dest: dest },
+        { src: 'LICENSE', dest: dest },
         { src: 'workflow', dest: dest },
       ]
     })

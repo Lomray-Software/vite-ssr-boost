@@ -2,7 +2,7 @@
 <h4 align='center'>Super easy framework based on Vite for create awesome SSR or SPA applications on React and React Router.</h4>
 
 <p align="center">
-    <img  src="./logo.png" alt="Vite SSR BOOST logo" width="250" height="250">
+    <img src="https://raw.githubusercontent.com/Lomray-Software/vite-ssr-boost/prod/logo.png" alt="Vite SSR BOOST logo" width="250" height="250">
 </p>
 
 ### Key features:

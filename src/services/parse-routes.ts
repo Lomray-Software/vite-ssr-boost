@@ -1,11 +1,28 @@
 import fs from 'fs';
 import { resolve } from 'node:path';
 import path from 'path';
+import babelGenerate from '@babel/generator';
 import * as parser from '@babel/parser';
 import type { ParseResult } from '@babel/parser';
 import babelTraverse from '@babel/traverse';
 import type * as TraverseTypes from '@babel/traverse';
-import type { CallExpression, File as BabelFile, VariableDeclaration } from '@babel/types';
+import type {
+  CallExpression,
+  File as BabelFile,
+  VariableDeclaration,
+  ObjectExpression,
+} from '@babel/types';
+import {
+  isObjectProperty,
+  isIdentifier,
+  identifier,
+  stringLiteral,
+  objectProperty,
+  isArrayExpression,
+  isJSXElement,
+  isJSXIdentifier,
+  isObjectExpression,
+} from '@babel/types';
 import type { Alias } from 'vite';
 import PathNormalize from '@services/path-normalize';
 import type ServerConfig from '@services/server-config';
@@ -319,6 +336,28 @@ class ParseRoutes {
   }
 
   /**
+   * Parse imports map from ast
+   */
+  private static parseImportsMap(ast: ParseResult<BabelFile>): IMapImports {
+    const importsMap: IMapImports = {};
+
+    traverse(ast, {
+      ImportDeclaration(nodePath) {
+        const importNode = nodePath.node;
+
+        importNode.specifiers.forEach((specifier) => {
+          importsMap[specifier.local.name] = {
+            path: importNode.source.value,
+            isDefault: specifier.type === 'ImportDefaultSpecifier',
+          };
+        });
+      },
+    });
+
+    return importsMap;
+  }
+
+  /**
    * Recursive build routes tree with dynamic imports
    */
   private recursiveBuildRoutesTree(
@@ -342,20 +381,7 @@ class ParseRoutes {
       return results;
     }
 
-    const importsMap: IMapImports = {};
-
-    traverse(ast, {
-      ImportDeclaration(nodePath) {
-        const importNode = nodePath.node;
-
-        importNode.specifiers.forEach((specifier) => {
-          importsMap[specifier.local.name] = {
-            path: importNode.source.value,
-            isDefault: specifier.type === 'ImportDefaultSpecifier',
-          };
-        });
-      },
-    });
+    const importsMap = ParseRoutes.parseImportsMap(ast);
 
     // @ts-expect-error missing types
     const elements = routesNode.declarations[0].init?.elements as TraverseTypes.Node[];
@@ -363,6 +389,84 @@ class ParseRoutes {
     results.push(...this.parseRoutesArray(elements, importsMap, filename));
 
     return results;
+  }
+
+  /**
+   * Add pathId to static routes
+   */
+  private static processRouteFileCode(
+    nodePath: TraverseTypes.NodePath<ObjectExpression>,
+    importsMap: IMapImports,
+  ): void {
+    nodePath.node.properties.forEach((property) => {
+      if (isObjectProperty(property) && isIdentifier(property.key)) {
+        if (property.key.name === 'element' || property.key.name === 'Component') {
+          let componentName = '';
+
+          if (isJSXElement(property.value) && isJSXIdentifier(property.value.openingElement.name)) {
+            componentName = property.value.openingElement.name.name;
+          } else if (isIdentifier(property.value)) {
+            componentName = property.value.name;
+          }
+
+          const parent = nodePath.findParent((p) => isArrayExpression(p.node));
+          const importName = importsMap[componentName]?.path;
+
+          if (parent && importName) {
+            const pathIdProperty = objectProperty(identifier('pathId'), stringLiteral(importName));
+
+            // Insert the pathId property right after the element property
+            nodePath.node.properties.splice(
+              nodePath.node.properties.indexOf(property) + 1,
+              0,
+              pathIdProperty,
+            );
+          }
+        }
+
+        if (property.key.name === 'children' && isArrayExpression(property.value)) {
+          // Process each object in the children array recursively
+          property.value.elements.forEach((element) => {
+            if (isObjectExpression(element)) {
+              ParseRoutes.processRouteFileCode(
+                { node: element } as TraverseTypes.NodePath<ObjectExpression>,
+                importsMap,
+              );
+            }
+          });
+        }
+      }
+    });
+  }
+
+  /**
+   * Inject pathId to sync routes
+   */
+  public static injectPathId(code: string): string {
+    if (!code) {
+      return code;
+    }
+
+    const ast = parser.parse(code, {
+      sourceType: 'module',
+      plugins: ['typescript', 'jsx'],
+    });
+
+    if (!ast) {
+      return code;
+    }
+
+    const importsMap = ParseRoutes.parseImportsMap(ast);
+
+    traverse(ast, {
+      ObjectExpression(nodePath) {
+        ParseRoutes.processRouteFileCode(nodePath, importsMap);
+      },
+    });
+
+    return babelGenerate(ast, {
+      retainLines: true,
+    }).code;
   }
 }
 

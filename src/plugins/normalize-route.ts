@@ -3,6 +3,7 @@ import type { Plugin } from 'vite';
 import PLUGIN_NAME from '@constants/plugin-name';
 import isRoutesFile from '@helpers/is-route-file';
 import { writeMeta } from '@helpers/ssr-meta';
+import ParseRoutes from '@services/parse-routes';
 
 export interface IPluginOptions {
   isSSR?: boolean;
@@ -20,28 +21,7 @@ const normalizeSyncRoutes = (code: string, isBuild = false): string => {
     return code;
   }
 
-  const imports: Record<string, string> = [
-    ...code.matchAll(/import\s+(\w+)\sfrom\s+['"]([^'"]+)['"]/g),
-  ].reduce(
-    (res, [, key, value]) => ({
-      [key]: value,
-      ...res,
-    }),
-    {},
-  );
-
-  return code.replace(
-    /(.*?(?:Component|element):[\s<]*(\w+)[^,}]*),*/gs,
-    (fullMatch, before: string, routeName: string) => {
-      const importPath = imports?.[routeName];
-
-      if (!importPath) {
-        return fullMatch;
-      }
-
-      return `${before},pathId: '${importPath}',`;
-    },
-  );
+  return ParseRoutes.injectPathId(code);
 };
 
 /**

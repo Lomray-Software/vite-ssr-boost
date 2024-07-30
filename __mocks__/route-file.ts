@@ -74,54 +74,53 @@ import DetailsRoutes from './details';
  * Application routes
  */
 const routes: TRouteObject[] = [
+{
+  ErrorBoundary: NotFound,
+  Component: AppLayout, pathId: "@components/layouts/app",
+  children: [
   {
-    ErrorBoundary: NotFound,
-    Component: AppLayout,pathId: '@components/layouts/app',
-    children: [
-      {
-        index: true,
-        lazy: n(() => import('@pages/home'),'@pages/home'),
-      },
-      {
-        path: RouteManager.path('details'),
-        children: DetailsRoutes,
-      },
-      {
-        path: RouteManager.path('errorBoundary'),
-        lazy: n(() => import('@pages/error-boundary'),'@pages/error-boundary'),
-      },
-      {
-        path: RouteManager.path('nestedSuspense'),
-        lazy: n(() => import('@pages/nested-suspense'),'@pages/nested-suspense'),
-      },
-      {
-        path: RouteManager.path('redirect'),
-        lazy: n(() => import('@pages/redirect'),'@pages/redirect'),
-      },
-      {
-        path: RouteManager.path('redirect'),
-        lazy: n(() => import('@pages/redirect'),'@pages/redirect'),
-      },
-      {
-        path: RouteManager.path('notLazy'),
-        Component: NotLazyPage,pathId: '@pages/not-lazy',
-      },
-      {
-        path: RouteManager.path('notLazy'),
-        Component: NotLazyPage,pathId: '@pages/not-lazy',
-      },
-      {
-        Component: NotLazyPage,pathId: '@pages/not-lazy',
-        path: RouteManager.path('notLazy'),
-      },
-      { Component: NotLazyPage,pathId: '@pages/not-lazy', path: RouteManager.path('notLazy') },
-      { path: RouteManager.path('notLazy'), Component: NotLazyPage ,pathId: '@pages/not-lazy',},
-    ],
+    index: true,
+    lazy: n(() => import('@pages/home'),'@pages/home')
   },
-];
+  {
+    path: RouteManager.path('details'),
+    children: DetailsRoutes
+  },
+  {
+    path: RouteManager.path('errorBoundary'),
+    lazy: n(() => import('@pages/error-boundary'),'@pages/error-boundary')
+  },
+  {
+    path: RouteManager.path('nestedSuspense'),
+    lazy: n(() => import('@pages/nested-suspense'),'@pages/nested-suspense')
+  },
+  {
+    path: RouteManager.path('redirect'),
+    lazy: n(() => import('@pages/redirect'),'@pages/redirect')
+  },
+  {
+    path: RouteManager.path('redirect'),
+    lazy: n(() => import('@pages/redirect'),'@pages/redirect')
+  },
+  {
+    path: RouteManager.path('notLazy'),
+    Component: NotLazyPage, pathId: "@pages/not-lazy"
+  },
+  {
+    path: RouteManager.path('notLazy'),
+    Component: NotLazyPage, pathId: "@pages/not-lazy"
+  },
+  {
+    Component: NotLazyPage, pathId: "@pages/not-lazy",
+    path: RouteManager.path('notLazy')
+  },
+  { Component: NotLazyPage, pathId: "@pages/not-lazy", path: RouteManager.path('notLazy') },
+  { path: RouteManager.path('notLazy'), Component: NotLazyPage, pathId: "@pages/not-lazy" }]
 
-export default routes;
-`;
+}];
+
+
+export default routes;`;
 
 const routesCode2Before = `
 import type { TRouteObject } from '@lomray/vite-ssr-boost/interfaces/route-object';
@@ -154,18 +153,17 @@ import RouteManager from '@services/route-manager';
  * Application routes
  */
 const routes: TRouteObject[] = [
-  {
-    path: RouteManager.path('notLazy'),
-    element: <NotLazyPage />,pathId: '@pages/not-lazy',
-  },
-  { path: RouteManager.path('notLazy'), element: <NotLazyPage />    ,pathId: '@pages/not-lazy',},
-  { element: <NotLazyPage /> ,pathId: '@pages/not-lazy',},
-  { element: <NotLazyPage />,pathId: '@pages/not-lazy', path: RouteManager.path('notLazy')  },
-  { Component: NotLazyPage  ,pathId: '@pages/not-lazy',},
-];
+{
+  path: RouteManager.path('notLazy'),
+  element: <NotLazyPage />, pathId: "@pages/not-lazy"
+},
+{ path: RouteManager.path('notLazy'), element: <NotLazyPage />, pathId: "@pages/not-lazy" },
+{ element: <NotLazyPage />, pathId: "@pages/not-lazy" },
+{ element: <NotLazyPage />, pathId: "@pages/not-lazy", path: RouteManager.path('notLazy') },
+{ Component: NotLazyPage, pathId: "@pages/not-lazy" }];
 
-export default routes;
-`;
+
+export default routes;`;
 
 const routesCode3Before = `
 import NotLazyPage from '@pages/not-lazy';
@@ -192,16 +190,15 @@ import NotLazyPage from '@pages/not-lazy';
  * Application routes
  */
 const routes: TRouteObject[] = [
-  {
-    element: <NotLazyPage />,pathId: '@pages/not-lazy',
-    path: RouteManager.path('notLazy'),
-  },
-  {path:RouteManager.path('notLazy'),Component:NotLazyPage,pathId: '@pages/not-lazy',},
-  {Component:NotLazyPage,pathId: '@pages/not-lazy',path:RouteManager.path('notLazy')},
-];
+{
+  element: <NotLazyPage />, pathId: "@pages/not-lazy",
+  path: RouteManager.path('notLazy')
+},
+{ path: RouteManager.path('notLazy'), Component: NotLazyPage, pathId: "@pages/not-lazy" },
+{ Component: NotLazyPage, pathId: "@pages/not-lazy", path: RouteManager.path('notLazy') }];
 
-export default routes;
-`;
+
+export default routes;`;
 
 const routesCodeLazyBefore = `
 import RouteManager from '@services/route-manager';
@@ -220,6 +217,21 @@ export default routes;
 `;
 
 const routesCodeLazyAfter = `import n from '@lomray/vite-ssr-boost/helpers/import-route';
+import RouteManager from '@services/route-manager';
+
+/**
+ * Application routes
+ */
+const routes: TRouteObject[] = [
+{
+  path: RouteManager.path('errorBoundary'),
+  lazy: n(() => import('@pages/error-boundary'))
+}];
+
+
+export default routes;`;
+
+const routesCodeLazyAfterClean = `import n from '@lomray/vite-ssr-boost/helpers/import-route';
 import RouteManager from '@services/route-manager';
 
 /**
@@ -278,24 +290,23 @@ const GuestLayout = lazy(() => import('@components/layouts/guest'));
  * Application routes
  */
 const routes: TRouteObject[] = [
+{
+  Component: AppLayout, pathId: "@components/layouts/app",
+  children: [
   {
-    Component: AppLayout,pathId: '@components/layouts/app',
+    Component: GuestLayout,
     children: [
-      {
-        Component: GuestLayout,
-        children: [
-          {
-            path: RouteManager.path('signIn'),
-            lazy: n(() => import('@pages/sign-in')),
-          },
-        ],
-      },
-    ],
-  },
-];
+    {
+      path: RouteManager.path('signIn'),
+      lazy: n(() => import('@pages/sign-in'))
+    }]
 
-export default routes;
-`;
+  }]
+
+}];
+
+
+export default routes;`;
 
 const compiledRoutesCode1Before = `{
   ErrorBoundary: NotFound,
@@ -386,6 +397,37 @@ const detailsRoutes: TRouteObject[] = [
 export default detailsRoutes;
 `;
 
+const routesCode5JXSProp = 'sampleProp={false}';
+
+const routesCode5Before = `
+import NotLazyPage from '@pages/not-lazy';
+
+const routes: TRouteObject[] = [
+  {
+    element: <NotLazyPage propsTest="test" ${routesCode5JXSProp} />,
+    path: RouteManager.path('notLazy'),
+  },
+  {path:RouteManager.path('notLazy'),Component:NotLazyPage},
+  {Component:NotLazyPage,path:RouteManager.path('notLazy')},
+];
+
+export default routes;
+`;
+
+const routesCode5After = `
+import NotLazyPage from '@pages/not-lazy';
+
+const routes: TRouteObject[] = [
+{
+  element: <NotLazyPage propsTest="test" ${routesCode5JXSProp} />, pathId: "@pages/not-lazy",
+  path: RouteManager.path('notLazy')
+},
+{ path: RouteManager.path('notLazy'), Component: NotLazyPage, pathId: "@pages/not-lazy" },
+{ Component: NotLazyPage, pathId: "@pages/not-lazy", path: RouteManager.path('notLazy') }];
+
+
+export default routes;`;
+
 export {
   routesCode1Before,
   routesCode1After,
@@ -397,7 +439,10 @@ export {
   routesCode4After,
   routesCodeLazyBefore,
   routesCodeLazyAfter,
+  routesCodeLazyAfterClean,
   compiledRoutesCode1Before,
   compiledRoutesCode1After,
   routesDetailsCode,
+  routesCode5Before,
+  routesCode5After,
 };
