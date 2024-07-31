@@ -6,6 +6,7 @@ interface IOnlyClient<T> {
   children: (Component: ComponentType<T>) => ReactNode;
   fallback?: ReactNode;
   errorComponent?: ReactNode;
+  isMemorized?: boolean;
 }
 
 const defaultError = <p>Failed to load client side component.</p>;
@@ -19,6 +20,7 @@ function OnlyClient<T>({
   children,
   fallback,
   errorComponent = defaultError,
+  isMemorized = false,
 }: IOnlyClient<T>): ReactNode {
   const [Component, setComponent] = useState<ComponentType<unknown> | null>(null);
 
@@ -38,7 +40,7 @@ function OnlyClient<T>({
 
       setComponent(LoadedComponent);
     });
-  }, []);
+  }, [isMemorized ? true : children]);
 
   return Component ? <Component /> : fallback;
 }

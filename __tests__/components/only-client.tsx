@@ -1,5 +1,5 @@
 import { render, waitFor } from '@testing-library/react';
-import React, { Suspense } from 'react';
+import React from 'react';
 import { renderToString } from 'react-dom/server';
 import sinon from 'sinon';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -21,9 +21,7 @@ describe('OnlyClient', () => {
 
   it('should render loaded component', async () => {
     const { getByText } = render(
-      <Suspense fallback={<div>Loading...</div>}>
-        <OnlyClient load={mockLoad}>{(Component) => <Component />}</OnlyClient>
-      </Suspense>,
+      <OnlyClient load={mockLoad}>{(Component) => <Component />}</OnlyClient>,
     );
 
     await waitFor(() => expect(getByText('Loaded Component')).to.exist);
@@ -31,15 +29,13 @@ describe('OnlyClient', () => {
 
   it('should render fallback component while loading', async () => {
     const { getByText } = render(
-      <Suspense fallback={<div>Loading...</div>}>
-        <OnlyClient
-          load={mockLoad}
-          fallback={<MockFallback />}
-          errorComponent={<MockErrorComponent />}
-        >
-          {(Component) => <Component />}
-        </OnlyClient>
-      </Suspense>,
+      <OnlyClient
+        load={mockLoad}
+        fallback={<MockFallback />}
+        errorComponent={<MockErrorComponent />}
+      >
+        {(Component) => <Component />}
+      </OnlyClient>,
     );
 
     expect(getByText('Fallback Component')).to.exist;
@@ -49,15 +45,13 @@ describe('OnlyClient', () => {
   it('should render error component if loading fails', async () => {
     const mockLoadWithError = () => Promise.reject(new Error('Load Error'));
     const { getByText } = render(
-      <Suspense fallback={<div>Loading...</div>}>
-        <OnlyClient
-          load={mockLoadWithError}
-          fallback={<MockFallback />}
-          errorComponent={<MockErrorComponent />}
-        >
-          {(Component) => <Component />}
-        </OnlyClient>
-      </Suspense>,
+      <OnlyClient
+        load={mockLoadWithError}
+        fallback={<MockFallback />}
+        errorComponent={<MockErrorComponent />}
+      >
+        {(Component) => <Component />}
+      </OnlyClient>,
     );
 
     await waitFor(() => expect(getByText('Error Component')).to.exist);
