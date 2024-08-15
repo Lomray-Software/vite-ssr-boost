@@ -24,6 +24,7 @@ export interface IPluginOptions {
   // default: babel
   routesParsing?: 'node' | 'babel';
   // Create additional SPA entrypoint: index-spa.html
+  // Can be used for service worker: createHandlerBoundToURL("index-spa.html")
   spaIndex?: boolean | ICreateSPAIndex;
   // Read aliases from tsconfig
   tsconfigAliases?: boolean | IMakeAliasesPluginOptions;
@@ -33,6 +34,8 @@ export interface IPluginOptions {
     action: (cliContext: ICliContext) => Promise<void> | void;
     isOnlyDev?: boolean;
   }[];
+  // Additional entry points for build
+  entrypoint?: [];
 }
 
 const defaultOptions: IPluginOptions = {

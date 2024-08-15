@@ -163,7 +163,7 @@ program
         isServerless: serverless,
         clientOptions,
         serverOptions,
-        mode,
+        mode: mode!,
       });
     },
   );
@@ -239,7 +239,7 @@ program
     const buildOptions = '-w';
 
     await runBuild({
-      mode,
+      mode: mode!,
       isWatch: true,
       isOnlyClient: onlyClient,
       clientOptions: buildOptions,

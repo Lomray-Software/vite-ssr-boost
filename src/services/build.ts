@@ -1,17 +1,38 @@
-import type childProcess from 'node:child_process';
+import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import chalk from 'chalk';
 import type { ResolvedConfig } from 'vite';
 import { resolveConfig } from 'vite';
+import viteResetCache from '@cli/helpers/vite-reset-cache';
+import { createDevMarker } from '@helpers/dev-marker';
 import type { IPluginConfig } from '@helpers/plugin-config';
 import getPluginConfig from '@helpers/plugin-config';
-import { readMeta } from '@helpers/ssr-meta';
+import processStop from '@helpers/process-stop';
+import { readMeta, removeMeta } from '@helpers/ssr-meta';
 import ServerConfig from '@services/server-config';
 import SsrManifest from '@services/ssr-manifest';
 
-interface IBuildParams {
+export interface IBuildParams {
   mode: string;
+  onFinish?: () => void;
+  clientOptions?: string;
+  serverOptions?: string;
+  isOnlyClient?: boolean;
+  isWatch?: boolean;
+  isUnlockRobots?: boolean;
+  isEject?: boolean;
+  isServerless?: boolean;
+  isNoWarnings?: boolean;
+}
+
+interface IBuildProcess {
+  promise: Promise<number | null | string>;
+  command: childProcess.ChildProcess;
+}
+
+interface ISpawnBuildParams {
+  shouldWait?: boolean;
 }
 
 /**
@@ -21,61 +42,74 @@ class Build {
   /**
    * Is production build
    */
-  public isProd: boolean;
+  protected isProd: boolean;
 
   /**
    * Node environment
    */
-  public nodeEnv: string;
+  protected nodeEnv: string;
 
   /**
    * Build folder
    */
-  public buildDir: string;
-
-  /**
-   * Relative build dir
-   */
-  public outDir: string;
-
-  /**
-   * Server file
-   */
-  public serverFile: string;
+  protected buildDir: string;
 
   /**
    * Vite config
    */
-  public viteConfig: ResolvedConfig;
+  protected viteConfig: ResolvedConfig;
 
   /**
    * Plugin config
    */
-  public pluginConfig: IPluginConfig;
+  protected pluginConfig: IPluginConfig;
 
   /**
    * Build params
    */
-  protected params: IBuildParams;
+  protected params: IBuildParams = {
+    mode: '',
+    clientOptions: '',
+    serverOptions: '',
+    isOnlyClient: false,
+    isWatch: false,
+    isUnlockRobots: false,
+    isEject: false,
+    isServerless: false,
+    isNoWarnings: false,
+  };
+
+  /**
+   * Abort controller for builds
+   */
+  protected abortController: AbortController | null = null;
+
+  /**
+   * Running builds
+   */
+  protected runningBuild: { name: string; buildProcess: IBuildProcess }[] = [];
+
+  /**
+   * Listener for preview has attached
+   */
+  protected hasPreviewModeExitListener = false;
 
   /**
    * @constructor
    */
-  constructor(params: IBuildParams) {
+  public constructor(params: IBuildParams) {
     this.params = params;
   }
 
   /**
    * Make config
    */
-  public async makeConfig(): Promise<void> {
+  protected async makeConfig(): Promise<void> {
     const { mode } = this.params;
 
     this.viteConfig = await resolveConfig({}, 'build', mode, 'production');
     this.pluginConfig = getPluginConfig(this.viteConfig);
     this.buildDir = path.resolve(this.viteConfig.root, this.viteConfig.build.outDir);
-    this.outDir = this.viteConfig.build.outDir;
-    this.serverFile = this.pluginConfig.serverFile;
     this.nodeEnv = process.env.NODE_ENV || 'production';
     this.isProd = this.nodeEnv === 'production';
   }
@@ -91,13 +125,34 @@ class Build {
   }
 
   /**
+   * Return is prod indicator value
+   */
+  public getIsProd(): boolean {
+    return this.isProd;
+  }
+
+  /**
+   * Return node env value
+   */
+  public getNodeEnv(): string {
+    return this.nodeEnv;
+  }
+
+  /**
+   * Return build names
+   */
+  public getRunningBuildNames(): string[] {
+    return this.runningBuild.map(({ name }) => name);
+  }
+
+  /**
    * Promisify spawn process
    */
-  public promisifyProcess(
+  protected promisifyProcess(
     command: childProcess.ChildProcess,
     isRejectWarnings = false,
-  ): { promise: Promise<number | null | string>; command: childProcess.ChildProcess } {
-    const promise = new Promise<number | null | string>((resolve, reject) => {
+  ): IBuildProcess {
+    const promise = new Promise<number | null | string>((resolve, reject): void => {
       command.on('exit', (code) => {
         resolve(code);
       });
@@ -130,7 +185,7 @@ class Build {
   /**
    * Build assets manifest file
    */
-  public async buildManifest(): Promise<void> {
+  protected async buildManifest(): Promise<void> {
     console.info(chalk.blue(`Building routes manifest file: ${this.pluginConfig.routesParsing}`));
 
     const isNodeParsing = this.pluginConfig.routesParsing === 'node';
@@ -178,7 +233,7 @@ class Build {
   /**
    * Change general directive Disallow to Allow in robots.txt.
    */
-  public unlockRobots(): void {
+  protected unlockRobots(): void {
     const robotsFile = `${this.buildDir}/client/robots.txt`;
 
     if (!fs.existsSync(robotsFile)) {
@@ -199,7 +254,7 @@ class Build {
   /**
    * Eject cli to run app via node
    */
-  public eject(): void {
+  protected eject(): void {
     const entrypoint = `${this.buildDir}/server/start.js`;
     const script =
       "import runProd from '@lomray/vite-ssr-boost/cli/run-prod.js';\n\n" +
@@ -223,7 +278,7 @@ class Build {
   /**
    * Create serverless entrypoint
    */
-  public createServerless(): void {
+  protected createServerless(): void {
     const entrypoint = `${this.buildDir}/server/serverless.js`;
     const script =
       "import runServerless from '@lomray/vite-ssr-boost/cli/run-serverless.js';\n\n" +
@@ -232,6 +287,177 @@ class Build {
     fs.writeFileSync(entrypoint, script, {
       encoding: 'utf-8',
     });
+  }
+
+  /**
+   * Build specified entrypoint
+   */
+  protected async spawnBuild(
+    name: string,
+    buildOptions: string,
+    params: ISpawnBuildParams = {},
+  ): Promise<void> {
+    const { mode, isOnlyClient, isNoWarnings } = this.params;
+    const { shouldWait = false } = params;
+    const modeOpt = mode ? `--mode ${mode}` : '';
+
+    const buildProcess = this.promisifyProcess(
+      childProcess.spawn(`vite build ${buildOptions} ${modeOpt} --emptyOutDir`, {
+        signal: this.abortController!.signal,
+        stdio: [process.stdin, 'pipe', 'pipe'],
+        shell: true,
+        env: {
+          ...process.env,
+          FORCE_COLOR: '2',
+          SSR_BOOST_IS_SSR: isOnlyClient ? '0' : '1',
+          SSR_BOOST_ACTION: global.viteBoostAction,
+        },
+      }),
+      isNoWarnings,
+    );
+
+    this.runningBuild.push({ name, buildProcess });
+
+    if (!shouldWait) {
+      return;
+    }
+
+    await this.waitLastBuild();
+  }
+
+  /**
+   * Wait latest build and stop process in case error
+   */
+  protected async waitLastBuild(): Promise<void> {
+    const latestProcess = this.runningBuild.at(-1);
+
+    if (!latestProcess) {
+      return;
+    }
+
+    const exitCode = await latestProcess.buildProcess.promise;
+
+    processStop(exitCode, true);
+  }
+
+  /**
+   * Run preview mode
+   */
+  protected runPreviewMode(): void {
+    if (!this.hasPreviewModeExitListener) {
+      process.on('exit', () => {
+        this.abortController!.abort();
+      });
+
+      this.hasPreviewModeExitListener = true;
+    }
+
+    const { onFinish } = this.params;
+    let buildCount = this.runningBuild.length;
+
+    /**
+     * Detect finished builds for process
+     */
+    const listener = (buff: Uint8Array): void => {
+      const msg = Buffer.from(buff).toString();
+
+      if (msg.includes('built in')) {
+        buildCount -= 1;
+
+        if (!buildCount) {
+          this.runningBuild.forEach(({ buildProcess }) => {
+            buildProcess.command.stdout?.removeListener('data', listener);
+          });
+          createDevMarker(this.isProd, this.viteConfig);
+          onFinish?.();
+        }
+      }
+    };
+
+    /**
+     * Listen output for call onFinish
+     */
+    this.runningBuild.forEach(({ buildProcess }) => {
+      buildProcess.command.stdout?.on('data', listener);
+    });
+  }
+
+  /**
+   * Run app build
+   */
+  public async build(): Promise<void> {
+    await this.makeConfig();
+    // this is required step - build with different env may cause problems
+    await viteResetCache();
+    this.clearBuildFolder();
+
+    const {
+      clientOptions,
+      serverOptions,
+      onFinish,
+      isWatch,
+      isOnlyClient,
+      isEject,
+      isServerless,
+      isUnlockRobots,
+    } = this.params;
+    const { outDir } = this.viteConfig.build;
+
+    this.abortController = new AbortController();
+    this.runningBuild = [];
+
+    /**
+     * Build client
+     */
+    await this.spawnBuild('client', `${clientOptions} --outDir ${outDir}/client`, {
+      shouldWait: !isWatch,
+    });
+
+    /**
+     * Build server
+     */
+    if (!isOnlyClient) {
+      await this.spawnBuild(
+        'server',
+        `${serverOptions} --outDir ${outDir}/server --ssr ${this.pluginConfig.serverFile}`,
+        {
+          shouldWait: !isWatch,
+        },
+      );
+
+      if (!isWatch) {
+        await this.buildManifest();
+
+        if (isEject) {
+          this.eject();
+        }
+
+        if (isServerless) {
+          this.createServerless();
+        }
+      }
+    }
+
+    /**
+     * Build additional endpoints
+     */
+
+    /**
+     * Preview mode
+     */
+    if (isWatch) {
+      this.runPreviewMode();
+
+      return;
+    }
+
+    if (isUnlockRobots) {
+      this.unlockRobots();
+    }
+
+    createDevMarker(this.isProd, this.viteConfig);
+    removeMeta(this.buildDir);
+    onFinish?.();
   }
 }
 
