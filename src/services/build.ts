@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import type { ResolvedConfig } from 'vite';
 import { resolveConfig } from 'vite';
 import viteResetCache from '@cli/helpers/vite-reset-cache';
+import createFocusOnly from '@helpers/create-focus-only';
 import { createDevMarker } from '@helpers/dev-marker';
 import type { IPluginConfig } from '@helpers/plugin-config';
 import getPluginConfig from '@helpers/plugin-config';
@@ -18,7 +19,7 @@ export interface IBuildParams {
   onFinish?: () => void;
   clientOptions?: string;
   serverOptions?: string;
-  isOnlyClient?: boolean;
+  focusOnly?: 'all' | 'app' | 'client' | 'server' | 'endpoint';
   isWatch?: boolean;
   isUnlockRobots?: boolean;
   isEject?: boolean;
@@ -33,6 +34,20 @@ interface IBuildProcess {
 
 interface ISpawnBuildParams {
   shouldWait?: boolean;
+  env?: Record<string, string>;
+}
+
+export interface IBuildEndpoint {
+  // endpoint name
+  name: string;
+  // custom index file, default: indexFile from plugin config
+  indexFile?: string;
+  // custom entry file for replace in indexFile, default: undefined (do nothing)
+  clientFile?: string;
+  // custom server file, indexFile and clientFile will be ignored
+  serverFile?: string;
+  // additional options for vite build command
+  options?: string;
 }
 
 /**
@@ -71,7 +86,7 @@ class Build {
     mode: '',
     clientOptions: '',
     serverOptions: '',
-    isOnlyClient: false,
+    focusOnly: 'app',
     isWatch: false,
     isUnlockRobots: false,
     isEject: false,
@@ -98,7 +113,7 @@ class Build {
    * @constructor
    */
   public constructor(params: IBuildParams) {
-    this.params = params;
+    this.params = { ...this.params, ...params };
   }
 
   /**
@@ -297,8 +312,8 @@ class Build {
     buildOptions: string,
     params: ISpawnBuildParams = {},
   ): Promise<void> {
-    const { mode, isOnlyClient, isNoWarnings } = this.params;
-    const { shouldWait = false } = params;
+    const { mode, focusOnly, isNoWarnings } = this.params;
+    const { shouldWait = false, env = {} } = params;
     const modeOpt = mode ? `--mode ${mode}` : '';
 
     const buildProcess = this.promisifyProcess(
@@ -308,8 +323,9 @@ class Build {
         shell: true,
         env: {
           ...process.env,
+          ...env,
           FORCE_COLOR: '2',
-          SSR_BOOST_IS_SSR: isOnlyClient ? '0' : '1',
+          SSR_BOOST_IS_SSR: createFocusOnly(focusOnly).isOnlyClient() ? '0' : '1',
           SSR_BOOST_ACTION: global.viteBoostAction,
         },
       }),
@@ -396,27 +412,30 @@ class Build {
       serverOptions,
       onFinish,
       isWatch,
-      isOnlyClient,
+      focusOnly,
       isEject,
       isServerless,
       isUnlockRobots,
     } = this.params;
     const { outDir } = this.viteConfig.build;
+    const focus = createFocusOnly(focusOnly);
 
     this.abortController = new AbortController();
     this.runningBuild = [];
 
-    /**
-     * Build client
-     */
-    await this.spawnBuild('client', `${clientOptions} --outDir ${outDir}/client`, {
-      shouldWait: !isWatch,
-    });
+    if (focus.isClient()) {
+      /**
+       * Build client
+       */
+      await this.spawnBuild('client', `${clientOptions} --outDir ${outDir}/client`, {
+        shouldWait: !isWatch,
+      });
+    }
 
     /**
      * Build server
      */
-    if (!isOnlyClient) {
+    if (focus.isServer()) {
       await this.spawnBuild(
         'server',
         `${serverOptions} --outDir ${outDir}/server --ssr ${this.pluginConfig.serverFile}`,
@@ -441,6 +460,20 @@ class Build {
     /**
      * Build additional endpoints
      */
+    const { entrypoint } = this.pluginConfig;
+
+    if (entrypoint?.length && focus.isEndpoint()) {
+      for (const { name, options = '', serverFile } of entrypoint) {
+        const ssrOptions = serverFile ? `--ssr ${serverFile}` : '';
+
+        await this.spawnBuild(name, `${options} ${ssrOptions} --outDir ${outDir}/${name}`, {
+          shouldWait: !isWatch,
+          env: {
+            SSR_BOOST_CUSTOM_ENTRYPOINT_BUILD_NAME: name,
+          },
+        });
+      }
+    }
 
     /**
      * Preview mode

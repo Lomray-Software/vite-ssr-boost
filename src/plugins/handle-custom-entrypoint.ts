@@ -1,0 +1,99 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
+import type { Plugin } from 'vite';
+import PLUGIN_NAME from '@constants/plugin-name';
+import type { IBuildEndpoint } from '@services/build';
+
+export interface IPluginOptions {
+  entrypoint: IBuildEndpoint[];
+}
+
+const pluginName = `${PLUGIN_NAME}-handle-custom-entrypoint`;
+
+/**
+ * Find current entrypoint by env
+ */
+const getCurrentEntrypoint = (entrypoint: IBuildEndpoint[]): IBuildEndpoint | null => {
+  const currentEntrypointName = process.env.SSR_BOOST_CUSTOM_ENTRYPOINT_BUILD_NAME;
+
+  for (const entry of entrypoint) {
+    if (entry.name === currentEntrypointName && !entry.serverFile) {
+      return entry;
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Return custom entrypoint instead default (index.html).
+ *
+ * E.g. for build multiple entrypoint
+ * @constructor
+ */
+function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
+  const { entrypoint } = options;
+  let outPath = '';
+  let origClientFile = '';
+
+  return {
+    name: pluginName,
+    enforce: 'pre',
+    /**
+     * Apply only on build but not for SSR and only for custom endpoint
+     */
+    apply(_, { command, isSsrBuild }): boolean {
+      return command === 'build' && !isSsrBuild && Boolean(getCurrentEntrypoint(entrypoint));
+    },
+    config(config) {
+      const { indexFile } = getCurrentEntrypoint(entrypoint)!;
+      const buildConfig = config.build ?? {};
+      const indexFilePath = indexFile ? path.resolve(config.root ?? '', indexFile) : undefined;
+
+      return {
+        ...config,
+        build: {
+          ...buildConfig,
+          rollupOptions: {
+            ...(buildConfig.rollupOptions ?? {}),
+            input: indexFilePath,
+          },
+        },
+      };
+    },
+    configResolved(config) {
+      const pluginConfig = config.plugins.find((plugin) => plugin.name === PLUGIN_NAME);
+
+      outPath = path.resolve(config.root, config.build.outDir);
+      // @ts-expect-error pluginOptions is custom param
+      origClientFile = (pluginConfig.pluginOptions as Record<string, any>).clientFile as string;
+    },
+    transform(code, id): string {
+      if (id.endsWith('.html')) {
+        const { clientFile } = getCurrentEntrypoint(entrypoint) || {};
+
+        if (clientFile) {
+          return code.replace(path.basename(origClientFile), clientFile);
+        }
+      }
+
+      return code;
+    },
+    closeBundle() {
+      const { indexFile } = getCurrentEntrypoint(entrypoint)!;
+
+      if (!indexFile) {
+        return;
+      }
+
+      const indexFilePath = path.resolve(outPath, path.basename(indexFile));
+
+      if (fs.existsSync(indexFilePath)) {
+        fs.renameSync(indexFilePath, path.resolve(outPath, 'index.html'));
+      }
+    },
+  };
+}
+
+export { ViteHandleCustomEntrypointPlugin, getCurrentEntrypoint };

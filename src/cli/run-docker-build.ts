@@ -2,13 +2,15 @@ import childProcess from 'node:child_process';
 import path from 'node:path';
 import { cwd } from 'node:process';
 import { resolveConfig } from 'vite';
+import createFocusOnly from '@helpers/create-focus-only';
 import getPluginConfig from '@helpers/plugin-config';
+import type { IBuildParams } from '@services/build';
 
 interface IRunDockerBuildParams {
   imageName: string;
   dockerOptions?: string;
   dockerFile?: string;
-  isOnlyClient?: boolean;
+  focusOnly?: IBuildParams['focusOnly'];
   mode?: string;
 }
 
@@ -18,7 +20,7 @@ interface IRunDockerBuildParams {
 async function runDockerBuild({
   imageName,
   dockerFile,
-  isOnlyClient = false,
+  focusOnly,
   dockerOptions = '',
   mode = '',
 }: IRunDockerBuildParams): Promise<void> {
@@ -31,7 +33,7 @@ async function runDockerBuild({
   } = config;
   const projectRoot = cwd();
   const buildDir = `.${path.resolve(root, outDir).replace(projectRoot, '')}`; // relative path
-  const runType = isOnlyClient ? 'spa' : 'ssr';
+  const runType = createFocusOnly(focusOnly).isOnlyClient() ? 'spa' : 'ssr';
   const docFile = dockerFile || `${pluginConfig.pluginPath}/workflow/Dockerfile`;
 
   childProcess.execSync(

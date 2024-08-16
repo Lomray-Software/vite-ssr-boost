@@ -60,9 +60,12 @@ const hostOption = new Option(
   '--host',
   'Ability to access the local instance on other devices under the same network.',
 ).default(false);
-const onlyClientOption = new Option('--only-client', 'Build/run only client side part.').default(
-  false,
-);
+const focusOnlyOption = new Option(
+  '--focus-only [focusOnly]',
+  'Build or Start only specified part of app.',
+)
+  .default('app')
+  .choices(['all', 'app', 'client', 'server', 'endpoint']);
 const portOption = new Option('--port [port]', 'Server port.').default(3000);
 const envModeOption = new Option('--mode [mode]', 'Env mode.')
   .env('VITE_ENV_MODE')
@@ -108,7 +111,7 @@ program
 program
   .command(CliActions.build)
   .description('Create production build.')
-  .addOption(onlyClientOption)
+  .addOption(focusOnlyOption)
   .addOption(envModeOption)
   .addOption(
     new Option(
@@ -146,7 +149,7 @@ program
   )
   .action(
     async ({
-      onlyClient,
+      focusOnly,
       clientOptions,
       serverOptions,
       mode,
@@ -156,7 +159,7 @@ program
       throwWarnings,
     }: IBuildActionParams) => {
       await runBuild({
-        isOnlyClient: onlyClient,
+        focusOnly,
         isUnlockRobots: unlockRobots,
         isNoWarnings: throwWarnings,
         isEject: eject,
@@ -173,19 +176,19 @@ program
   .description('Run production server.')
   .addOption(hostOption)
   .addOption(portOption)
-  .addOption(onlyClientOption)
+  .addOption(focusOnlyOption)
   .addOption(buildDirOption)
   .addOption(
     new Option('--module-preload', 'Add module preload scripts to server output.').default(false),
   )
-  .action(({ host, port, onlyClient, modulePreload, buildDir }: IStartActionParams) => {
+  .action(({ host, port, focusOnly, modulePreload, buildDir }: IStartActionParams) => {
     const command = async (isPrintInfo?: boolean): Promise<void> => {
       const { server, config } = await runProd({
         version,
         isHost: host,
         isPrintInfo,
         port,
-        onlyClient,
+        focusOnly,
         modulePreload,
         buildDir,
       });
@@ -204,12 +207,12 @@ program
 program
   .command(CliActions.preview)
   .description('Build and preview production.')
-  .addOption(onlyClientOption)
+  .addOption(focusOnlyOption)
   .addOption(hostOption)
   .addOption(portOption)
   .addOption(envModeOption)
   .addOption(buildDirOption)
-  .action(async ({ host, port, onlyClient, mode, buildDir }: IPreviewActionParams) => {
+  .action(async ({ host, port, focusOnly, mode, buildDir }: IPreviewActionParams) => {
     global.viteBoostStartTime = performance.now();
 
     const command = async (isPrintInfo?: boolean): Promise<void> => {
@@ -218,7 +221,7 @@ program
         isHost: host,
         isPrintInfo,
         port,
-        onlyClient,
+        focusOnly,
         buildDir,
       });
 
@@ -241,7 +244,7 @@ program
     await runBuild({
       mode: mode!,
       isWatch: true,
-      isOnlyClient: onlyClient,
+      focusOnly,
       clientOptions: buildOptions,
       serverOptions: buildOptions,
       onFinish: () => {
@@ -266,21 +269,15 @@ program
       'Name of the Dockerfile (Default is PLUGIN_PATH/workflow/Dockerfile).',
     ),
   )
-  .addOption(onlyClientOption)
+  .addOption(focusOnlyOption)
   .addOption(envModeOption)
   .action(
-    async ({
-      imageName,
-      dockerOptions,
-      dockerFile,
-      onlyClient,
-      mode,
-    }: IBuildDockerActionParams) => {
+    async ({ imageName, dockerOptions, dockerFile, focusOnly, mode }: IBuildDockerActionParams) => {
       await runDockerBuild({
         imageName,
         dockerOptions,
         dockerFile,
-        isOnlyClient: onlyClient,
+        focusOnly,
         mode,
       });
     },

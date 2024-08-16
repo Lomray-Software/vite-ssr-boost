@@ -5,9 +5,11 @@ import type { ICliContext } from '@constants/cli-context';
 import PLUGIN_NAME from '@constants/plugin-name';
 import ViteCreateSPAIndexPlugin from '@plugins/create-spa-index';
 import type { IPluginOptions as ICreateSPAIndex } from '@plugins/create-spa-index';
+import { ViteHandleCustomEntrypointPlugin } from '@plugins/handle-custom-entrypoint';
 import type { IPluginOptions as IMakeAliasesPluginOptions } from '@plugins/make-aliases';
 import ViteMakeAliasesPlugin from '@plugins/make-aliases';
 import ViteNormalizeRouterPlugin from '@plugins/normalize-route';
+import type { IBuildEndpoint } from '@services/build';
 
 export interface IPluginOptions {
   // default: index.html
@@ -35,7 +37,7 @@ export interface IPluginOptions {
     isOnlyDev?: boolean;
   }[];
   // Additional entry points for build
-  entrypoint?: [];
+  entrypoint?: IBuildEndpoint[];
 }
 
 const defaultOptions: IPluginOptions = {
@@ -97,7 +99,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     },
   ];
 
-  const { tsconfigAliases, routesPath, routesParsing, spaIndex } = mergedOptions;
+  const { tsconfigAliases, routesPath, routesParsing, spaIndex, entrypoint } = mergedOptions;
 
   if (tsconfigAliases) {
     plugins.push(
@@ -107,6 +109,10 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
 
   if (spaIndex) {
     plugins.push(ViteCreateSPAIndexPlugin(typeof spaIndex === 'boolean' ? undefined : spaIndex));
+  }
+
+  if (entrypoint?.length) {
+    plugins.push(ViteHandleCustomEntrypointPlugin({ entrypoint }));
   }
 
   plugins.push(

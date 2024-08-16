@@ -1,6 +1,8 @@
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
+import createFocusOnly from '@helpers/create-focus-only';
 import createServer from '@node/server';
+import type { IBuildParams } from '@services/build';
 import ServerConfig from '@services/server-config';
 
 interface IRunProdParams {
@@ -8,7 +10,7 @@ interface IRunProdParams {
   port?: number;
   isHost?: boolean;
   isPrintInfo?: boolean;
-  onlyClient?: boolean; // SPA mode
+  focusOnly?: IBuildParams['focusOnly'];
   mode?: string;
   modulePreload?: boolean;
   buildDir?: string;
@@ -28,7 +30,7 @@ async function runProd({
   isPrintInfo,
   port,
   buildDir,
-  onlyClient = false,
+  focusOnly,
   modulePreload = false,
 }: IRunProdParams): Promise<IRunProdOut> {
   if (!global.viteBoostStartTime) {
@@ -36,7 +38,12 @@ async function runProd({
   }
 
   const config = ServerConfig.init(
-    { isHost, isProd: true, isOnlyClient: onlyClient, isModulePreload: modulePreload },
+    {
+      isHost,
+      isProd: true,
+      isOnlyClient: createFocusOnly(focusOnly).isOnlyClient(),
+      isModulePreload: modulePreload,
+    },
     { port, root: buildDir },
   );
   const { run } = await createServer(config);

@@ -1,3 +1,5 @@
+import type { IBuildParams } from '@services/build';
+
 export interface IDevActionParams {
   host?: boolean;
   resetCache?: boolean;
@@ -5,7 +7,7 @@ export interface IDevActionParams {
 }
 
 export interface IBuildActionParams {
-  onlyClient?: boolean;
+  focusOnly?: IBuildParams['focusOnly'];
   clientOptions?: string;
   serverOptions?: string;
   mode?: string;
@@ -18,7 +20,7 @@ export interface IBuildActionParams {
 export interface IStartActionParams {
   host?: boolean;
   port?: number;
-  onlyClient?: boolean;
+  focusOnly?: IBuildParams['focusOnly'];
   modulePreload?: boolean;
   buildDir?: string;
 }
@@ -31,7 +33,7 @@ export interface IBuildDockerActionParams {
   imageName: string;
   dockerOptions?: string;
   dockerFile?: string;
-  onlyClient?: boolean;
+  focusOnly?: IBuildParams['focusOnly'];
   mode?: string;
 }
 

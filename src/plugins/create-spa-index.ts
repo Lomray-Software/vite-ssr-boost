@@ -1,3 +1,4 @@
+import process from 'node:process';
 import type { Plugin } from 'vite';
 import PLUGIN_NAME from '@constants/plugin-name';
 
@@ -26,7 +27,9 @@ function ViteCreateSPAIndexPlugin(options: IPluginOptions = {}): Plugin {
      * Apply only on build but not for SSR
      */
     apply(_, { command, isSsrBuild }): boolean {
-      return command === 'build' && !isSsrBuild;
+      return (
+        command === 'build' && !isSsrBuild && !process.env.SSR_BOOST_CUSTOM_ENTRYPOINT_BUILD_NAME
+      );
     },
     transformIndexHtml(html): string {
       spaHtml = html.replace(`id="${rootId}"`, `id="${rootId}" data-force-spa="1"`);
