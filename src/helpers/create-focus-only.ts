@@ -7,7 +7,7 @@ const createFocusOnly = (focus: IBuildParams['focusOnly']) => ({
   isOnlyClient: () => focus === 'client',
   isClient: () => ['all', 'app', 'client'].includes(focus!),
   isServer: () => ['all', 'app', 'server'].includes(focus!),
-  isEndpoint: () => ['all', 'endpoint'].includes(focus!),
+  isEntrypoint: () => ['all', 'entrypoint'].includes(focus!),
 });
 
 export default createFocusOnly;

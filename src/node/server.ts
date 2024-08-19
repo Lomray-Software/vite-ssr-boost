@@ -53,12 +53,14 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
     config.setVite(vite);
   }
 
-  if (!config.isSPA) {
+  const { isSPA } = config.getParams();
+
+  if (!isSPA) {
     await prepareServer.onAppCreated();
   }
 
   if (config.isProd) {
-    const { root, publicDir, isSPA } = config.getParams();
+    const { root, publicDir } = config.getParams();
     const { compression: compressionConfig, expressStatic } = prepareServer.getMiddlewaresConfig();
 
     if (compressionConfig) {
@@ -87,7 +89,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
   }
 
   // SSR mode
-  if (!config.isSPA) {
+  if (!isSPA) {
     app.use('*', (req, res, next) => {
       void (async () => {
         try {

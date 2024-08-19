@@ -19,7 +19,7 @@ export interface IBuildParams {
   onFinish?: () => void;
   clientOptions?: string;
   serverOptions?: string;
-  focusOnly?: 'all' | 'app' | 'client' | 'server' | 'endpoint';
+  focusOnly?: 'all' | 'app' | 'client' | 'server' | 'entrypoint';
   isWatch?: boolean;
   isUnlockRobots?: boolean;
   isEject?: boolean;
@@ -34,12 +34,14 @@ interface IBuildProcess {
 
 interface ISpawnBuildParams {
   shouldWait?: boolean;
+  focusOnly?: IBuildParams['focusOnly'];
   env?: Record<string, string>;
 }
 
-export interface IBuildEndpoint {
-  // endpoint name
+export interface IBuildEntrypoint {
+  // entrypoint name
   name: string;
+  type: 'spa' | 'ssr';
   // custom index file, default: indexFile from plugin config
   indexFile?: string;
   // custom entry file for replace in indexFile, default: undefined (do nothing)
@@ -312,8 +314,8 @@ class Build {
     buildOptions: string,
     params: ISpawnBuildParams = {},
   ): Promise<void> {
-    const { mode, focusOnly, isNoWarnings } = this.params;
-    const { shouldWait = false, env = {} } = params;
+    const { mode, isNoWarnings } = this.params;
+    const { focusOnly = this.params.focusOnly, shouldWait = false, env = {} } = params;
     const modeOpt = mode ? `--mode ${mode}` : '';
 
     const buildProcess = this.promisifyProcess(
@@ -458,16 +460,17 @@ class Build {
     }
 
     /**
-     * Build additional endpoints
+     * Build additional entrypoint
      */
     const { entrypoint } = this.pluginConfig;
 
-    if (entrypoint?.length && focus.isEndpoint()) {
-      for (const { name, options = '', serverFile } of entrypoint) {
-        const ssrOptions = serverFile ? `--ssr ${serverFile}` : '';
+    if (entrypoint?.length && focus.isEntrypoint()) {
+      for (const { name, type, serverFile, options = '' } of entrypoint) {
+        const cliOptions = serverFile && type === 'ssr' ? `--ssr ${serverFile}` : '';
 
-        await this.spawnBuild(name, `${options} ${ssrOptions} --outDir ${outDir}/${name}`, {
+        await this.spawnBuild(name, `${options} ${cliOptions} --outDir ${outDir}/${name}`, {
           shouldWait: !isWatch,
+          focusOnly: type === 'ssr' ? 'server' : 'client',
           env: {
             SSR_BOOST_CUSTOM_ENTRYPOINT_BUILD_NAME: name,
           },

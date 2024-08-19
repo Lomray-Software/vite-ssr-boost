@@ -1,15 +1,19 @@
 import path from 'node:path';
+import process from 'node:process';
 import type { Plugin } from 'vite';
 import CliActions from '@constants/cli-actions';
 import type { ICliContext } from '@constants/cli-context';
 import PLUGIN_NAME from '@constants/plugin-name';
 import ViteCreateSPAIndexPlugin from '@plugins/create-spa-index';
 import type { IPluginOptions as ICreateSPAIndex } from '@plugins/create-spa-index';
-import { ViteHandleCustomEntrypointPlugin } from '@plugins/handle-custom-entrypoint';
+import {
+  ViteHandleCustomEntrypointPlugin,
+  getCurrentEntrypoint,
+} from '@plugins/handle-custom-entrypoint';
 import type { IPluginOptions as IMakeAliasesPluginOptions } from '@plugins/make-aliases';
 import ViteMakeAliasesPlugin from '@plugins/make-aliases';
 import ViteNormalizeRouterPlugin from '@plugins/normalize-route';
-import type { IBuildEndpoint } from '@services/build';
+import type { IBuildEntrypoint } from '@services/build';
 
 export interface IPluginOptions {
   // default: index.html
@@ -37,7 +41,7 @@ export interface IPluginOptions {
     isOnlyDev?: boolean;
   }[];
   // Additional entry points for build
-  entrypoint?: IBuildEndpoint[];
+  entrypoint?: IBuildEntrypoint[];
 }
 
 const defaultOptions: IPluginOptions = {
@@ -57,6 +61,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
   const dirInfo = new URL(import.meta.url);
   const action = (global.viteBoostAction || process.env.SSR_BOOST_ACTION) as CliActions;
   const mergedOptions: IPluginOptions = { ...defaultOptions, ...options };
+  const entrypointConfig = getCurrentEntrypoint(mergedOptions.entrypoint ?? []);
   const isSSR = process.env.SSR_BOOST_IS_SSR === '1' || action === CliActions.dev;
   const isBuild = action === CliActions.build;
 
@@ -75,7 +80,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
       config(config, { isSsrBuild }) {
         config.define = {
           ...(config.define ?? {}),
-          __IS_SSR__: isSSR,
+          __IS_SSR__: entrypointConfig ? entrypointConfig.type === 'ssr' : isSSR,
         };
 
         config.build = {
@@ -99,7 +104,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     },
   ];
 
-  const { tsconfigAliases, routesPath, routesParsing, spaIndex, entrypoint } = mergedOptions;
+  const { tsconfigAliases, routesPath, routesParsing, spaIndex } = mergedOptions;
 
   if (tsconfigAliases) {
     plugins.push(
@@ -111,8 +116,8 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     plugins.push(ViteCreateSPAIndexPlugin(typeof spaIndex === 'boolean' ? undefined : spaIndex));
   }
 
-  if (entrypoint?.length) {
-    plugins.push(ViteHandleCustomEntrypointPlugin({ entrypoint }));
+  if (entrypointConfig) {
+    plugins.push(ViteHandleCustomEntrypointPlugin({ entrypoint: entrypointConfig }));
   }
 
   plugins.push(

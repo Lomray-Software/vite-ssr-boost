@@ -1,6 +1,7 @@
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
 import createServer from '@node/server';
+import { setCurrentEntrypointName } from '@plugins/handle-custom-entrypoint';
 import ServerConfig from '@services/server-config';
 
 interface IRunDevParams {
@@ -8,6 +9,8 @@ interface IRunDevParams {
   isHost?: boolean;
   isPrintInfo?: boolean;
   mode?: string;
+  port?: number;
+  entrypointName?: string;
 }
 
 interface IRunDevOut {
@@ -18,10 +21,26 @@ interface IRunDevOut {
 /**
  * Run development server
  */
-async function runDev({ version, isHost, isPrintInfo, mode }: IRunDevParams): Promise<IRunDevOut> {
+async function runDev({
+  version,
+  isHost,
+  isPrintInfo,
+  mode,
+  port,
+  entrypointName,
+}: IRunDevParams): Promise<IRunDevOut> {
   global.viteBoostStartTime = performance.now();
 
-  const config = ServerConfig.init({ isHost, mode });
+  if (entrypointName) {
+    setCurrentEntrypointName(entrypointName);
+  }
+
+  const config = ServerConfig.init(
+    { isHost, mode, entrypointName },
+    {
+      port,
+    },
+  );
   const { run } = await createServer(config);
 
   return {

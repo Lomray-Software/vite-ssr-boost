@@ -1,6 +1,6 @@
-import process from 'node:process';
 import type { Plugin } from 'vite';
 import PLUGIN_NAME from '@constants/plugin-name';
+import { getCurrentEntrypointName } from '@plugins/handle-custom-entrypoint';
 
 export interface IPluginOptions {
   filename?: string;
@@ -27,9 +27,7 @@ function ViteCreateSPAIndexPlugin(options: IPluginOptions = {}): Plugin {
      * Apply only on build but not for SSR
      */
     apply(_, { command, isSsrBuild }): boolean {
-      return (
-        command === 'build' && !isSsrBuild && !process.env.SSR_BOOST_CUSTOM_ENTRYPOINT_BUILD_NAME
-      );
+      return command === 'build' && !isSsrBuild && !getCurrentEntrypointName();
     },
     transformIndexHtml(html): string {
       spaHtml = html.replace(`id="${rootId}"`, `id="${rootId}" data-force-spa="1"`);

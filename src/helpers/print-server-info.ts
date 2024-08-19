@@ -23,7 +23,7 @@ async function printServerInfo(
   { server, version = 'unknown' }: IPrintServerInfoParams = {},
 ): Promise<void> {
   const { action } = config.getPluginConfig() ?? {};
-  const { isProd, host, root } = config.getParams();
+  const { isProd, host, root, isSPA } = config.getParams();
   const devMarker = getMarkerFile(root);
 
   const Logger = config.getLogger();
@@ -54,8 +54,10 @@ async function printServerInfo(
     viteConfig?.mode || isProdBuild
       ? config.mode
       : `production ${chalk.red('NODE_ENV=development')}`;
+  const type = isSPA ? 'SPA' : 'SSR';
 
   Logger.info(chalk.dim(chalk.green('  ➜')) + chalk.dim('  Mode:    ') + chalk.blue(mode));
+  Logger.info(chalk.dim(chalk.green('  ➜')) + chalk.dim('  Type:    ') + chalk.blue(type));
 
   if (!isProd) {
     const vite = config.getVite()!;

@@ -2,8 +2,10 @@ import type { IBuildParams } from '@services/build';
 
 export interface IDevActionParams {
   host?: boolean;
+  port?: number;
   resetCache?: boolean;
   mode?: string;
+  entrypoint?: string;
 }
 
 export interface IBuildActionParams {

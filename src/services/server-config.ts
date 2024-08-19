@@ -4,6 +4,7 @@ import type { Express } from 'express';
 import type { Logger, ViteDevServer } from 'vite';
 import type { IPluginConfig } from '@helpers/plugin-config';
 import getPluginConfig from '@helpers/plugin-config';
+import type { IBuildEntrypoint } from '@services/build';
 import DefaultLogger from '@services/logger';
 
 interface IConfigOptions {
@@ -12,6 +13,7 @@ interface IConfigOptions {
   isOnlyClient?: boolean; // SPA mode
   isModulePreload?: boolean;
   mode?: string;
+  entrypointName?: string;
 }
 
 interface IConfigParams {
@@ -47,14 +49,14 @@ class ServerConfig {
   public readonly isModulePreload: boolean;
 
   /**
-   * SPA mode
-   */
-  public readonly isSPA: boolean;
-
-  /**
    * Env mode
    */
   public readonly mode: string;
+
+  /**
+   * Run specified entrypoint
+   */
+  protected readonly entrypointName?: string;
 
   /**
    * Vite config - only for development
@@ -72,9 +74,9 @@ class ServerConfig {
   protected params: IConfigParams;
 
   /**
-   * Default production params
+   * Default params
    */
-  protected prodParams: Partial<IConfigParams>;
+  protected defaultParams: Partial<IConfigParams>;
 
   /**
    * Vite logger for dev mode or console for production
@@ -91,6 +93,7 @@ class ServerConfig {
    */
   protected constructor(
     {
+      entrypointName,
       isProd = false,
       isHost = false,
       isOnlyClient = false,
@@ -101,15 +104,15 @@ class ServerConfig {
   ) {
     this.isProd = isProd;
     this.isHost = isHost;
-    this.isSPA = isOnlyClient;
     this.isModulePreload = isModulePreload;
     this.mode = mode;
-    this.prodParams = {
+    this.entrypointName = entrypointName;
+    this.defaultParams = {
       publicDir: '/client', // default for production,
       indexFile: '/client/index.html',
       serverFile: '/server/server.js',
       host: '127.0.0.1',
-      port: 3000,
+      isSPA: isOnlyClient,
       ...prodParams,
     };
 
@@ -143,33 +146,40 @@ class ServerConfig {
    * Make config params
    */
   protected makeParams(): void {
+    this.applyEntrypointConfig();
+
     const pluginConfig = (this.getPluginConfig() ?? {}) as Partial<IPluginConfig>;
     const { config } = this.vite ?? {};
-
-    const root = config?.root ?? this.getBuildDir(this.prodParams.root);
-    const publicDir = config?.publicDir ?? this.prodParams.publicDir!;
-    const dirInfo = new URL(import.meta.url);
-    const pluginPath =
-      pluginConfig.pluginPath ?? path.resolve(path.dirname(dirInfo.pathname), '../');
-    const indexFile = pluginConfig.indexFile ?? this.prodParams.indexFile!;
-    const serverFile = pluginConfig.serverFile ?? this.prodParams.serverFile!;
-    const clientFile = pluginConfig.clientFile ?? this.prodParams.clientFile!;
-    const host =
-      typeof config?.server.host === 'boolean' || this.isHost
-        ? '0.0.0.0'
-        : config?.server.host ?? this.prodParams.host!;
-    const port = config?.server.port ?? (this.isProd ? this.prodParams.port! : 5173);
-
-    this.params = {
+    const {
       root,
       publicDir,
-      pluginPath,
       indexFile,
       clientFile,
       serverFile,
+      host: defaultHost,
+      isSPA,
+    } = this.defaultParams;
+    const dirInfo = new URL(import.meta.url);
+    const pluginPath =
+      pluginConfig.pluginPath ?? path.resolve(path.dirname(dirInfo.pathname), '../');
+    const entrypoint = this.getEntrypoint();
+
+    const host =
+      typeof config?.server.host === 'boolean' || this.isHost
+        ? '0.0.0.0'
+        : config?.server.host ?? defaultHost!;
+    const port = Number(config?.env.VITE_PORT ?? config?.server.port ?? this.defaultParams.port!);
+
+    this.params = {
+      root: config?.root ?? this.getBuildDir(root),
+      publicDir: config?.publicDir ?? publicDir!,
+      indexFile: pluginConfig.indexFile ?? indexFile!,
+      clientFile: pluginConfig.clientFile ?? clientFile!,
+      serverFile: pluginConfig.serverFile ?? serverFile!,
+      pluginPath,
       host,
       port,
-      isSPA: this.isSPA,
+      isSPA: entrypoint ? entrypoint.type === 'spa' : isSPA!,
       isProd: this.isProd,
     };
     this.logger = this.vite?.config.logger ?? new DefaultLogger();
@@ -207,7 +217,7 @@ class ServerConfig {
   }
 
   /**
-   * return plugin config
+   * Return plugin config
    * NOTE: only on development mode
    */
   public getPluginConfig(): IPluginConfig | undefined {
@@ -233,6 +243,37 @@ class ServerConfig {
    */
   public setLogger(logger: Logger): void {
     this.logger = logger;
+  }
+
+  /**
+   * Apply config to specified entrypoint
+   */
+  protected applyEntrypointConfig(): void {
+    const config = this.getPluginConfig();
+
+    if (!this.vite || !config || !this.entrypointName) {
+      return;
+    }
+
+    const entrypointConfig = this.getEntrypoint();
+
+    // apply specified entrypoint config
+    if (entrypointConfig) {
+      (['indexFile', 'clientFile', 'serverFile'] as const).forEach((optName) => {
+        if (entrypointConfig[optName]) {
+          config[optName] = entrypointConfig[optName]!;
+        }
+      });
+    }
+  }
+
+  /**
+   * Get current entrypoint
+   */
+  protected getEntrypoint(): IBuildEntrypoint | undefined {
+    const config = this.vite ? getPluginConfig(this.vite.config) : undefined;
+
+    return config?.entrypoint.find(({ name }) => name === this.entrypointName);
   }
 }
 

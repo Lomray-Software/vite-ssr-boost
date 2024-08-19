@@ -65,7 +65,7 @@ const focusOnlyOption = new Option(
   'Build or Start only specified part of app.',
 )
   .default('app')
-  .choices(['all', 'app', 'client', 'server', 'endpoint']);
+  .choices(['all', 'app', 'client', 'server', 'entrypoint']);
 const portOption = new Option('--port [port]', 'Server port.').default(3000);
 const envModeOption = new Option('--mode [mode]', 'Env mode.')
   .env('VITE_ENV_MODE')
@@ -80,9 +80,11 @@ program
   .command(CliActions.dev)
   .description('Run development server.')
   .addOption(hostOption)
+  .addOption(portOption)
   .addOption(new Option('--reset-cache', 'Clear vite cache before run.').default(false))
   .addOption(new Option('--mode [mode]', 'Env mode.').env('VITE_ENV_MODE').default('development'))
-  .action(async ({ host, resetCache, mode }: IDevActionParams) => {
+  .addOption(new Option('--entrypoint [entrypoint]', 'Run only entrypoint by name.'))
+  .action(async ({ host, port, resetCache, mode, entrypoint }: IDevActionParams) => {
     if (resetCache) {
       await viteResetCache();
     }
@@ -94,7 +96,9 @@ program
         version,
         isHost: host,
         isPrintInfo,
+        port,
         mode,
+        entrypointName: entrypoint,
       });
 
       cliContext.server = server;

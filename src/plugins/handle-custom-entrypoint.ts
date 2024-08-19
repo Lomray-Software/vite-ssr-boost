@@ -3,19 +3,37 @@ import path from 'node:path';
 import process from 'node:process';
 import type { Plugin } from 'vite';
 import PLUGIN_NAME from '@constants/plugin-name';
-import type { IBuildEndpoint } from '@services/build';
+import type { IBuildEntrypoint } from '@services/build';
 
 export interface IPluginOptions {
-  entrypoint: IBuildEndpoint[];
+  entrypoint: IBuildEntrypoint;
 }
 
 const pluginName = `${PLUGIN_NAME}-handle-custom-entrypoint`;
 
 /**
+ * Get current entrypoint name
+ */
+const getCurrentEntrypointName = (): string | undefined =>
+  process.env.SSR_BOOST_CUSTOM_ENTRYPOINT_BUILD_NAME;
+
+/**
+ * Set current entrypoint name
+ */
+const setCurrentEntrypointName = (name: string): void => {
+  process.env.SSR_BOOST_CUSTOM_ENTRYPOINT_BUILD_NAME = name;
+};
+
+/**
  * Find current entrypoint by env
  */
-const getCurrentEntrypoint = (entrypoint: IBuildEndpoint[]): IBuildEndpoint | null => {
-  const currentEntrypointName = process.env.SSR_BOOST_CUSTOM_ENTRYPOINT_BUILD_NAME;
+const getCurrentEntrypoint = (
+  entrypoint: IBuildEntrypoint[],
+  currentEntrypointName = getCurrentEntrypointName(),
+): IBuildEntrypoint | null => {
+  if (!entrypoint.length || !currentEntrypointName) {
+    return null;
+  }
 
   for (const entry of entrypoint) {
     if (entry.name === currentEntrypointName && !entry.serverFile) {
@@ -41,13 +59,13 @@ function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
     name: pluginName,
     enforce: 'pre',
     /**
-     * Apply only on build but not for SSR and only for custom endpoint
+     * Apply only on build but not for SSR and only for custom entrypoint
      */
     apply(_, { command, isSsrBuild }): boolean {
-      return command === 'build' && !isSsrBuild && Boolean(getCurrentEntrypoint(entrypoint));
+      return command === 'build' && !isSsrBuild && Boolean(entrypoint);
     },
     config(config) {
-      const { indexFile } = getCurrentEntrypoint(entrypoint)!;
+      const { indexFile } = entrypoint;
       const buildConfig = config.build ?? {};
       const indexFilePath = indexFile ? path.resolve(config.root ?? '', indexFile) : undefined;
 
@@ -71,7 +89,7 @@ function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
     },
     transform(code, id): string {
       if (id.endsWith('.html')) {
-        const { clientFile } = getCurrentEntrypoint(entrypoint) || {};
+        const { clientFile } = entrypoint;
 
         if (clientFile) {
           return code.replace(path.basename(origClientFile), clientFile);
@@ -81,7 +99,7 @@ function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
       return code;
     },
     closeBundle() {
-      const { indexFile } = getCurrentEntrypoint(entrypoint)!;
+      const { indexFile } = entrypoint;
 
       if (!indexFile) {
         return;
@@ -96,4 +114,9 @@ function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
   };
 }
 
-export { ViteHandleCustomEntrypointPlugin, getCurrentEntrypoint };
+export {
+  ViteHandleCustomEntrypointPlugin,
+  getCurrentEntrypoint,
+  getCurrentEntrypointName,
+  setCurrentEntrypointName,
+};
