@@ -61,8 +61,8 @@ function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
     /**
      * Apply only on build but not for SSR and only for custom entrypoint
      */
-    apply(_, { command, isSsrBuild }): boolean {
-      return command === 'build' && !isSsrBuild && Boolean(entrypoint);
+    apply(_, { isSsrBuild }): boolean {
+      return !isSsrBuild && Boolean(entrypoint);
     },
     config(config) {
       const { indexFile } = entrypoint;
@@ -92,11 +92,23 @@ function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
         const { clientFile } = entrypoint;
 
         if (clientFile) {
-          return code.replace(path.basename(origClientFile), clientFile);
+          return code.replace(origClientFile, clientFile);
         }
       }
 
       return code;
+    },
+    /**
+     * Development mode
+     */
+    transformIndexHtml(html, { originalUrl, server }): string {
+      const { clientFile } = entrypoint;
+
+      if (clientFile && server?.config.command === 'serve' && originalUrl?.endsWith('.html')) {
+        return html.replace(origClientFile, clientFile);
+      }
+
+      return html;
     },
     closeBundle() {
       const { indexFile } = entrypoint;
