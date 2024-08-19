@@ -273,7 +273,7 @@ class ServerConfig {
   protected getEntrypoint(): IBuildEntrypoint | undefined {
     const config = this.vite ? getPluginConfig(this.vite.config) : undefined;
 
-    return config?.entrypoint.find(({ name }) => name === this.entrypointName);
+    return config?.entrypoint?.find(({ name }) => name === this.entrypointName);
   }
 }
 
