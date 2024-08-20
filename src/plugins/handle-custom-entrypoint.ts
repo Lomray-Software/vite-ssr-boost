@@ -87,16 +87,22 @@ function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
       // @ts-expect-error pluginOptions is custom param
       origClientFile = (pluginConfig.pluginOptions as Record<string, any>).clientFile as string;
     },
-    transform(code, id): string {
+    transform(code, id) {
       if (id.endsWith('.html')) {
         const { clientFile } = entrypoint;
 
         if (clientFile) {
-          return code.replace(origClientFile, clientFile);
+          return {
+            code: code.replace(origClientFile, clientFile),
+            map: this.getCombinedSourcemap(),
+          };
         }
       }
 
-      return code;
+      return {
+        code,
+        map: this.getCombinedSourcemap(),
+      };
     },
     /**
      * Development mode
