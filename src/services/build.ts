@@ -49,7 +49,7 @@ export interface IBuildEntrypoint {
   // custom server file, indexFile and clientFile will be ignored
   serverFile?: string;
   // additional options for vite build command
-  options?: string;
+  buildOptions?: string;
 }
 
 /**
@@ -465,10 +465,10 @@ class Build {
     const { entrypoint } = this.pluginConfig;
 
     if (entrypoint?.length && focus.isEntrypoint()) {
-      for (const { name, type, serverFile, options = '' } of entrypoint) {
+      for (const { name, type, serverFile, buildOptions = '' } of entrypoint) {
         const cliOptions = serverFile && type === 'ssr' ? `--ssr ${serverFile}` : '';
 
-        await this.spawnBuild(name, `${options} ${cliOptions} --outDir ${outDir}/${name}`, {
+        await this.spawnBuild(name, `${buildOptions} ${cliOptions} --outDir ${outDir}/${name}`, {
           shouldWait: !isWatch,
           focusOnly: type === 'ssr' ? 'server' : 'client',
           env: {
