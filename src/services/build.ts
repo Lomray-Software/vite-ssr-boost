@@ -316,7 +316,7 @@ class Build {
   ): Promise<void> {
     const { mode, isNoWarnings } = this.params;
     const { focusOnly = this.params.focusOnly, shouldWait = false, env = {} } = params;
-    const modeOpt = mode ? `--mode ${mode}` : '';
+    const modeOpt = mode && !buildOptions.includes('--mode') ? `--mode ${mode}` : '';
 
     const buildProcess = this.promisifyProcess(
       childProcess.spawn(`vite build ${buildOptions} ${modeOpt} --emptyOutDir`, {
