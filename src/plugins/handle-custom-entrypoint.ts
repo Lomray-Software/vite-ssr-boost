@@ -45,6 +45,16 @@ const getCurrentEntrypoint = (
 };
 
 /**
+ * Replace entrypoint in html file
+ */
+const replaceEntrypoint = (code: string, originalPath: string, endpointPath: string): string => {
+  const cleanOrigPath = originalPath.replace('./', '/');
+  const cleanEndpointPath = endpointPath.replace('./', '/');
+
+  return code.replace(cleanOrigPath, cleanEndpointPath);
+};
+
+/**
  * Return custom entrypoint instead default (index.html).
  *
  * E.g. for build multiple entrypoint
@@ -93,7 +103,7 @@ function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
 
         if (clientFile) {
           return {
-            code: code.replace(origClientFile, clientFile),
+            code: replaceEntrypoint(code, origClientFile, clientFile),
             map: this.getCombinedSourcemap(),
           };
         }
@@ -111,7 +121,7 @@ function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
       const { clientFile } = entrypoint;
 
       if (clientFile && server?.config.command === 'serve' && originalUrl?.endsWith('.html')) {
-        return html.replace(origClientFile, clientFile);
+        return replaceEntrypoint(html, origClientFile, clientFile);
       }
 
       return html;
