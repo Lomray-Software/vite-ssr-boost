@@ -167,7 +167,7 @@ class ServerConfig {
     const host =
       typeof config?.server.host === 'boolean' || this.isHost
         ? '0.0.0.0'
-        : config?.server.host ?? defaultHost!;
+        : (config?.server.host ?? defaultHost!);
     const port = Number(config?.env.VITE_PORT ?? config?.server.port ?? this.defaultParams.port!);
 
     this.params = {
