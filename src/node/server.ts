@@ -2,6 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import type { Server } from 'node:net';
 import path from 'path';
+import { GracefulShutdownManager } from '@moebius/http-graceful-shutdown';
 import compression from 'compression';
 import type { Express } from 'express';
 import express from 'express';
@@ -159,6 +160,20 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
         }
 
         void printServerInfo(config, { version, server });
+      });
+
+      const shutdownManager = new GracefulShutdownManager(server);
+
+      process.on('SIGTERM', () => {
+        shutdownManager.terminate(() => {
+          console.log('Server has been gracefully terminated');
+        });
+      });
+
+      process.on('SIGINT', () => {
+        shutdownManager.terminate(() => {
+          console.log('Server has been gracefully terminated');
+        });
       });
 
       return server;
