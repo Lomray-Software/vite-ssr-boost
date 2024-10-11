@@ -110,7 +110,9 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
 
           await render(config, context, renderParams);
         } catch (e) {
-          config.getLogger().error('Failed to handle request', { error: e as Error });
+          config
+            .getLogger()
+            .error(`Failed to handle request: ${(e as Error)?.message}`, { error: e as Error });
           next();
         }
       })();
@@ -124,7 +126,9 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
 
           res.send(html);
         } catch (e) {
-          config.getLogger().error('Failed to handle request', { error: e as Error });
+          config
+            .getLogger()
+            .error(`Failed to handle request: ${(e as Error)?.message}`, { error: e as Error });
           next();
         }
       })();
