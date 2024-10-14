@@ -49,6 +49,11 @@ class PrepareServer {
   protected onServerCreated?: IEntrypointOptions['onServerCreated'];
 
   /**
+   * Hook which calls after express server started
+   */
+  public onServerStarted?: IEntrypointOptions['onServerStarted'];
+
+  /**
    * Html shell
    */
   protected html: string;
@@ -138,7 +143,7 @@ class PrepareServer {
       this.config.setLogger(loggerDev);
     }
 
-    const { onServerCreated, ...renderParams } =
+    const { onServerCreated, onServerStarted, ...renderParams } =
       (await init?.({
         config: this.config,
       })) ?? {};
@@ -150,6 +155,7 @@ class PrepareServer {
       ...renderParams,
     };
     this.onServerCreated = onServerCreated;
+    this.onServerStarted = onServerStarted;
 
     return this.entrypoint;
   }

@@ -1,3 +1,4 @@
+import type { Server } from 'node:net';
 import type { CompressionOptions } from 'compression';
 import type { Express, Request, Response as ExpressResponse } from 'express';
 import type { FC, PropsWithChildren } from 'react';
@@ -19,6 +20,7 @@ export interface IInitServerRequestOut<T = Record<string, any>> {
 
 export interface IEntrypointOptions<TAppProps = Record<string, any>> {
   onServerCreated?: (app: Express, serverApi: ServerApi) => Promise<void> | void;
+  onServerStarted?: (app: Express, serverApi: ServerApi, server: Server) => Promise<void> | void;
   onRequest?: (
     req: Request,
     res: ExpressResponse,

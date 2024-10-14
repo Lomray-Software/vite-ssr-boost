@@ -154,6 +154,8 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
           ? https.createServer(config.getVite()!.config.server.https!, app)
           : http.createServer(app)
       ).listen(port, host, () => {
+        void prepareServer.onServerStarted?.(app, serverApi, server);
+
         if (!isPrintInfo) {
           return;
         }
