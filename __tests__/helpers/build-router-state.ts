@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import type { StaticHandlerContext } from 'react-router-dom/server';
+import type { StaticHandlerContext } from 'react-router';
 import { describe, it } from 'vitest';
 import buildRouterState from '@helpers/build-router-state';
 

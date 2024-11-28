@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import React from 'react';
-import type { NavigateProps } from 'react-router-dom';
-import { Navigate as DefaultNavigate } from 'react-router-dom';
+import type { NavigateProps } from 'react-router';
+import { Navigate as DefaultNavigate } from 'react-router';
 import { useServerContext } from '@context/server';
 
 interface INavigate {

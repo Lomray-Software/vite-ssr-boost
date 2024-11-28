@@ -1,9 +1,8 @@
 import fs from 'node:fs';
 import type { Socket } from 'node:net';
 import path from 'node:path';
-import type { AgnosticDataRouteMatch } from '@remix-run/router/dist/utils';
 import chalk from 'chalk';
-import type { RouteObject } from 'react-router-dom';
+import type { RouteObject, RouterState } from 'react-router';
 import type { Alias, ModuleNode } from 'vite';
 import type { IAsyncRoute } from '@helpers/import-route';
 import type { IRequestContext } from '@node/render';
@@ -345,7 +344,7 @@ class SsrManifest {
   /**
    * Get route assets
    */
-  protected getAssets(routes?: AgnosticDataRouteMatch[]): IAsset[] {
+  protected getAssets(routes?: RouterState['matches']): IAsset[] {
     if (this.config.getVite()) {
       return this.getAssetsDev(routes);
     }
@@ -369,7 +368,7 @@ class SsrManifest {
   /**
    * Get development route assets
    */
-  protected getAssetsDev(routes?: AgnosticDataRouteMatch[]): IAsset[] {
+  protected getAssetsDev(routes?: RouterState['matches']): IAsset[] {
     const routeIds =
       (routes
         ?.map(({ route }) => this.pathNormalize.getAppPath((route as IAsyncRoute)?.pathId, true))

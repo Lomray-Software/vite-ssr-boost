@@ -1,4 +1,4 @@
-import type { StaticHandlerContext } from 'react-router-dom/server';
+import type { StaticHandlerContext } from 'react-router';
 import htmlEscape from '@helpers/html-escape';
 import serializeErrors from '@helpers/serialize-errors';
 

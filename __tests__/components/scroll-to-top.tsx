@@ -1,7 +1,7 @@
 import { render, act, fireEvent, screen } from '@testing-library/react';
 import React from 'react';
-import type { RouteObject } from 'react-router-dom';
-import { Outlet, createBrowserRouter, Link, RouterProvider } from 'react-router-dom';
+import type { RouteObject } from 'react-router';
+import { Outlet, createBrowserRouter, Link, RouterProvider } from 'react-router';
 import sinon from 'sinon';
 import { describe, it, expect, afterEach } from 'vitest';
 import ScrollToTop from '@components/scroll-to-top';

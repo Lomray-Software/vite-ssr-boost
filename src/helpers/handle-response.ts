@@ -1,5 +1,5 @@
 import type { Response as ExpressResponse } from 'express';
-import type { StaticHandlerContext } from 'react-router-dom/server';
+import type { StaticHandlerContext } from 'react-router';
 
 /**
  * Handle router or server context response

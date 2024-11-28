@@ -1,10 +1,11 @@
-import type { ImmutableRouteKey } from '@remix-run/router/utils';
-import type { IndexRouteObject, NonIndexRouteObject } from 'react-router-dom';
+import type { IndexRouteObject, NonIndexRouteObject } from 'react-router';
 import withSuspense from '@components/with-suspense';
 import type { FCCRoute, FCRoute } from '@interfaces/fc-route';
 import { keys } from '@interfaces/fc-route';
 
 export type IDynamicRoute = () => Promise<{ default: FCRoute | FCCRoute<any> }>;
+
+export type ImmutableRouteKey = 'lazy' | 'caseSensitive' | 'path' | 'id' | 'index' | 'children';
 
 export type IAsyncRoute = { pathId?: string } & (
   | Omit<IndexRouteObject, ImmutableRouteKey>

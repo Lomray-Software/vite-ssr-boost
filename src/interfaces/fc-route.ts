@@ -1,9 +1,9 @@
 import type { FC, PropsWithChildren } from 'react';
-import type { RouteObject } from 'react-router/dist/lib/context';
+import type { RouteObject } from 'react-router';
 import type { FCC } from '@interfaces/fc';
 import type { IRequestContext } from '@node/render';
 
-declare module '@remix-run/router' {
+declare module 'react-router' {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   export interface LoaderFunctionArgs {
     context?: IRequestContext;

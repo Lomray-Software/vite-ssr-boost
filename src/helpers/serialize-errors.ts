@@ -1,5 +1,5 @@
-import { isRouteErrorResponse } from 'react-router-dom';
-import type { StaticHandlerContext } from 'react-router-dom/server';
+import { isRouteErrorResponse } from 'react-router';
+import type { StaticHandlerContext } from 'react-router';
 
 /**
  * Serialize react router errors

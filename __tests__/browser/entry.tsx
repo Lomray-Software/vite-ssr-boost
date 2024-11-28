@@ -1,10 +1,9 @@
-import type { Router as RemixRouter } from '@remix-run/router';
 import { render, cleanup } from '@testing-library/react';
 import { expect } from 'chai';
 import type { ReactNode } from 'react';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import type { RouteObject } from 'react-router-dom';
+import type { DataRouter, RouteObject } from 'react-router';
 import sinon from 'sinon';
 import { afterEach, beforeEach, describe, it } from 'vitest';
 import type { TApp } from '@browser/entry';
@@ -80,7 +79,7 @@ describe('browserEntry', () => {
 
     const { isSSRMode, router } = initStub.firstCall.firstArg as {
       isSSRMode: boolean;
-      router: RemixRouter;
+      router: DataRouter;
     };
     const [, AppRoot] = hydrateStub.firstCall.args;
     const { getByTestId } = render(<div children={AppRoot} />);

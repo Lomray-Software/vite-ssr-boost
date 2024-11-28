@@ -1,10 +1,9 @@
-import type { StaticHandler } from '@remix-run/router';
 import chalk from 'chalk';
 import type { Request, Response as ExpressResponse } from 'express';
 import React from 'react';
 import { renderToPipeableStream } from 'react-dom/server';
-import type { StaticHandlerContext } from 'react-router-dom/server';
-import { createStaticRouter, StaticRouterProvider } from 'react-router-dom/server.mjs';
+import type { StaticHandlerContext, StaticHandler } from 'react-router';
+import { createStaticRouter, StaticRouterProvider } from 'react-router';
 import StreamError from '@constants/stream-error';
 import type { IServerContext } from '@context/server';
 import { ServerProvider } from '@context/server';

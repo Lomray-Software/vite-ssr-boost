@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
 import React from 'react';
-import { createBrowserRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import Navigate from '@components/navigate';
 import { ServerContext } from '@context/server';

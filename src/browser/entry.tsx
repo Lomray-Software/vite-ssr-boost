@@ -1,9 +1,8 @@
-import type { Router as RemixRouter } from '@remix-run/router/dist/router';
 import type { FC, PropsWithChildren } from 'react';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import type { RouteObject } from 'react-router-dom';
-import { createBrowserRouter, matchRoutes, RouterProvider } from 'react-router-dom';
+import type { DataRouter, RouteObject } from 'react-router';
+import { createBrowserRouter, matchRoutes, RouterProvider } from 'react-router';
 import { IS_SSR_MODE } from '@constants/common';
 import type { TRouteObject } from '@interfaces/route-object';
 
@@ -13,7 +12,7 @@ export interface IAppClientProps<T = undefined> {
 
 export interface IInitPropsParams {
   isSSRMode: boolean;
-  router: RemixRouter;
+  router: DataRouter;
 }
 
 export type TApp<T> = FC<PropsWithChildren<IAppClientProps<T>>>;
