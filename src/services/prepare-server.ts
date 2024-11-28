@@ -186,7 +186,10 @@ class PrepareServer {
         // remove 'async' attribute from app entrypoint for development
         // it might cause problems with preambles from @vitejs/plugin-react
         .replace(
-          new RegExp(`<script[^>]*?\\bsrc=["']/?${clientFileEntry}["'][^>]*?\\sasync\\b`, 'g'),
+          new RegExp(
+            `<script[^>]*?\\bsrc=["']/?${clientFileEntry}([^"']*)["'][^>]*?\\sasync\\b`,
+            'g',
+          ),
           (match) => match.replace(/\sasync\b/, ''),
         );
     }
