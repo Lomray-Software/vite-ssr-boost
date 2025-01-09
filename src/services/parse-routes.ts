@@ -17,7 +17,9 @@ import {
   isObjectProperty,
   isIdentifier,
   identifier,
+  isBooleanLiteral,
   stringLiteral,
+  booleanLiteral,
   objectProperty,
   isArrayExpression,
   isJSXElement,
@@ -409,6 +411,14 @@ class ParseRoutes {
         // async routes
         if (property.key.name === 'lazy' && property.value.type === 'ArrowFunctionExpression') {
           const importCall = property.value.body as CallExpression;
+          const isOnlyClientPropIndex = nodePath.node.properties.findIndex(
+            (p) =>
+              isObjectProperty(p) &&
+              isIdentifier(p.key) &&
+              isBooleanLiteral(p.value) &&
+              p.key.name === 'isOnlyClient' &&
+              p.value.value,
+          );
 
           /**
            * Wrap lazy import with:
@@ -420,8 +430,15 @@ class ParseRoutes {
               type: 'Identifier',
               name: 'n',
             },
-            arguments: [property.value],
+            arguments:
+              isOnlyClientPropIndex !== -1
+                ? [property.value, booleanLiteral(true)]
+                : [property.value],
           };
+
+          if (isOnlyClientPropIndex !== -1) {
+            nodePath.node.properties.splice(isOnlyClientPropIndex, 1);
+          }
 
           addImportRouteWrapper();
 

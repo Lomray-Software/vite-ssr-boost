@@ -4,7 +4,7 @@ import React from 'react';
 import type { FCAny, FCC } from '@interfaces/fc';
 
 /**
- * Wrap component in suspense
+ * HOC: Wrap component in suspense
  */
 const withSuspense = <T extends Record<string, any>>(
   Component: FCAny<T>,

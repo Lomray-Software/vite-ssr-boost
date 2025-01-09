@@ -326,9 +326,6 @@ const routes: RouteObject[] = [
     element: <AppLayout />, // support
     lazy: () => import('./pages/home'), // support
     lazy: () => import(importPath), // not support, but you can move logic in separate file and import it with supported case
-    lazy: () => { // not support
-        return import('./pages/home');
-    } 
   }
 ];
 ```

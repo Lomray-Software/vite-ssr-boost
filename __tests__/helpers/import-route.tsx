@@ -1,17 +1,27 @@
+import { render } from '@testing-library/react';
 import { expect } from 'chai';
-import { describe, it } from 'vitest';
+import React from 'react';
+import sinon from 'sinon';
+import { afterEach, describe, it } from 'vitest';
+import * as COMMON_CONSTANTS from '@constants/common';
 import type { IDynamicRoute } from '@helpers/import-route';
 import importRoute from '@helpers/import-route';
 import type { FCRoute } from '@interfaces/fc-route';
 import { keys } from '@interfaces/fc-route';
 
 describe('importRoute', () => {
-  const Component = (() => null) as unknown as FCRoute;
+  const sandbox = sinon.createSandbox();
+
+  const Component = (() => 'Test') as unknown as FCRoute;
   const getDynamicRoute = (props: Record<string, any> = {}, isDefaultExport = false) =>
     (() =>
       Promise.resolve(
         isDefaultExport ? { default: { Component, ...props } } : { Component, ...props },
       )) as unknown as IDynamicRoute;
+
+  afterEach(() => {
+    sandbox.restore();
+  });
 
   it('should import dynamic route and return an IAsyncRoute object with Component', async () => {
     const result = await importRoute(getDynamicRoute())();
@@ -60,5 +70,22 @@ describe('importRoute', () => {
     Object.entries(allowedKeys).forEach(([key, value]) => {
       expect(result).to.have.property(key).and.to.equal(value);
     });
+  });
+
+  it('should return empty element for client only rendering', async () => {
+    sandbox.stub(COMMON_CONSTANTS, 'IS_SERVER').value(true);
+
+    const result = await importRoute(getDynamicRoute(), true)();
+
+    expect(result.element).to.equal(null);
+  });
+
+  it('should handle dynamic route wrap Component with renderClient', async () => {
+    const result = await importRoute(getDynamicRoute(), true)();
+    const ClientComponent = result.Component!;
+
+    const { container } = render(<ClientComponent />);
+
+    expect(container.textContent).to.equal('Test');
   });
 });

@@ -1,5 +1,7 @@
 import type { IndexRouteObject, NonIndexRouteObject } from 'react-router';
+import renderClient from '@components/render-client';
 import withSuspense from '@components/with-suspense';
+import { IS_SERVER } from '@constants/common';
 import type { FCCRoute, FCRoute } from '@interfaces/fc-route';
 import { keys } from '@interfaces/fc-route';
 
@@ -15,13 +17,21 @@ export type IAsyncRoute = { pathId?: string } & (
 /**
  * Import dynamic route
  */
-const importRoute = (route: IDynamicRoute): (() => Promise<IAsyncRoute>) => {
+const importRoute = (route: IDynamicRoute, isOnlyClient = false): (() => Promise<IAsyncRoute>) => {
   return async (): Promise<IAsyncRoute> => {
+    if (isOnlyClient && IS_SERVER) {
+      return { element: null };
+    }
+
     const resolved = await route();
 
     // fallback to react router export style
     if ('Component' in resolved) {
-      return { ...resolved } as IAsyncRoute;
+      const Component = isOnlyClient
+        ? renderClient(resolved.Component as FCRoute | FCCRoute<any>)
+        : resolved.Component;
+
+      return { ...resolved, Component } as IAsyncRoute;
     }
 
     const Component = resolved.default;
@@ -36,6 +46,10 @@ const importRoute = (route: IDynamicRoute): (() => Promise<IAsyncRoute>) => {
 
     if (Component.Suspense) {
       result.Component = withSuspense(Component, Component.Suspense);
+    }
+
+    if (isOnlyClient) {
+      result.Component = renderClient(result.Component as FCRoute | FCCRoute<any>);
     }
 
     return result;

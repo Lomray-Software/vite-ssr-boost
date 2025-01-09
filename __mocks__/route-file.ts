@@ -32,6 +32,7 @@ const routes: TRouteObject[] = [
       {
         path: RouteManager.path('nestedSuspense'),
         lazy: () => import('@pages/nested-suspense'),
+        isOnlyClient: true,
       },
       {
         path: RouteManager.path('redirect'),
@@ -92,7 +93,8 @@ const routes: TRouteObject[] = [
   },
   {
     path: RouteManager.path('nestedSuspense'),
-    lazy: n(() => import('@pages/nested-suspense')), pathId: "@pages/nested-suspense"
+    lazy: n(() => import('@pages/nested-suspense'), true), pathId: "@pages/nested-suspense"
+
   },
   {
     path: RouteManager.path('redirect'),
