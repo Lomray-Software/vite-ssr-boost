@@ -25,6 +25,7 @@ import {
   isObjectExpression,
 } from '@babel/types';
 import type { Alias } from 'vite';
+import PLUGIN_NAME from '@constants/plugin-name';
 import PathNormalize from '@services/path-normalize';
 import type ServerConfig from '@services/server-config';
 //
@@ -400,9 +401,56 @@ class ParseRoutes {
   private static processRouteFileCode(
     nodePath: TraverseTypes.NodePath<ObjectExpression>,
     importsMap: IMapImports,
+    shouldAddPathId: boolean,
+    addImportRouteWrapper: () => void,
   ): void {
     nodePath.node.properties.forEach((property) => {
       if (isObjectProperty(property) && isIdentifier(property.key)) {
+        // async routes
+        if (property.key.name === 'lazy' && property.value.type === 'ArrowFunctionExpression') {
+          const importCall = property.value.body as CallExpression;
+
+          /**
+           * Wrap lazy import with:
+           * @see importRoute
+           */
+          property.value = {
+            type: 'CallExpression',
+            callee: {
+              type: 'Identifier',
+              name: 'n',
+            },
+            arguments: [property.value],
+          };
+
+          addImportRouteWrapper();
+
+          if (importCall.type === 'CallExpression' && importCall.callee.type === 'Import') {
+            const [importArg] = importCall.arguments;
+            // current object has part of array (inside array)
+            const parent = nodePath.findParent?.((p) => isArrayExpression(p.node));
+
+            if (
+              parent &&
+              importArg.type === 'StringLiteral' &&
+              importArg.value &&
+              shouldAddPathId
+            ) {
+              const pathIdProperty = objectProperty(
+                identifier('pathId'),
+                stringLiteral(importArg.value),
+              );
+
+              // Insert the pathId property right after the element property
+              nodePath.node.properties.splice(
+                nodePath.node.properties.indexOf(property) + 1,
+                0,
+                pathIdProperty,
+              );
+            }
+          }
+        }
+
         if (property.key.name === 'element' || property.key.name === 'Component') {
           let componentName = '';
 
@@ -412,10 +460,11 @@ class ParseRoutes {
             componentName = property.value.name;
           }
 
-          const parent = nodePath.findParent((p) => isArrayExpression(p.node));
+          // current object has part of array (inside array)
+          const parent = nodePath.findParent?.((p) => isArrayExpression(p.node));
           const importName = importsMap[componentName]?.path;
 
-          if (parent && importName) {
+          if (parent && importName && shouldAddPathId) {
             const pathIdProperty = objectProperty(identifier('pathId'), stringLiteral(importName));
 
             // Insert the pathId property right after the element property
@@ -434,6 +483,8 @@ class ParseRoutes {
               ParseRoutes.processRouteFileCode(
                 { node: element } as TraverseTypes.NodePath<ObjectExpression>,
                 importsMap,
+                shouldAddPathId,
+                addImportRouteWrapper,
               );
             }
           });
@@ -443,9 +494,10 @@ class ParseRoutes {
   }
 
   /**
-   * Inject pathId to sync routes
+   * Inject pathId to sync/async routes
+   * Add async wrapper (see import-routes)
    */
-  public static injectPathId(code: string): string {
+  public static handleRoutes(code: string, shouldAddPathId: boolean): string {
     if (!code) {
       return code;
     }
@@ -460,12 +512,34 @@ class ParseRoutes {
     }
 
     const importsMap = ParseRoutes.parseImportsMap(ast);
+    let shouldAddRoutesImport = false;
 
     traverse(ast, {
-      ObjectExpression(nodePath) {
-        ParseRoutes.processRouteFileCode(nodePath, importsMap);
+      ObjectExpression(nodePath): void {
+        ParseRoutes.processRouteFileCode(nodePath, importsMap, shouldAddPathId, () => {
+          shouldAddRoutesImport = true;
+        });
       },
     });
+
+    if (shouldAddRoutesImport) {
+      ast.program.body.unshift({
+        type: 'ImportDeclaration',
+        specifiers: [
+          {
+            type: 'ImportDefaultSpecifier',
+            local: {
+              type: 'Identifier',
+              name: 'n',
+            },
+          },
+        ],
+        source: {
+          type: 'StringLiteral',
+          value: `${PLUGIN_NAME}/helpers/import-route`,
+        },
+      });
+    }
 
     return generate(ast, {
       retainLines: true,

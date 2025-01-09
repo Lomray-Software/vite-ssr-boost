@@ -10,7 +10,6 @@ import { createDevMarker } from '@helpers/dev-marker';
 import type { IPluginConfig } from '@helpers/plugin-config';
 import getPluginConfig from '@helpers/plugin-config';
 import processStop from '@helpers/process-stop';
-import { readMeta, removeMeta } from '@helpers/ssr-meta';
 import ServerConfig from '@services/server-config';
 import SsrManifest from '@services/ssr-manifest';
 
@@ -202,50 +201,19 @@ class Build {
   /**
    * Build assets manifest file
    */
-  protected async buildManifest(): Promise<void> {
-    console.info(chalk.blue(`Building routes manifest file: ${this.pluginConfig.routesParsing}`));
+  protected buildManifest(): void {
+    console.info(chalk.blue('Building routes manifest file'));
 
-    const isNodeParsing = this.pluginConfig.routesParsing === 'node';
     const serverConfig = ServerConfig.init(
       { isProd: this.isProd, mode: this.params.mode },
       { root: this.viteConfig.root, clientFile: this.pluginConfig.clientFile },
     );
 
-    await SsrManifest.get(serverConfig, {
+    SsrManifest.get(serverConfig, {
       buildDir: this.viteConfig.build.outDir,
       viteAliases: this.viteConfig.resolve.alias,
       basename: this.viteConfig.base,
-    }).buildRoutesManifest(isNodeParsing);
-
-    if (isNodeParsing) {
-      this.cleanupClientRoutes();
-    }
-  }
-
-  /**
-   * Remove pathId from client route files
-   */
-  private cleanupClientRoutes(): void {
-    const { routeFiles } = readMeta(this.buildDir);
-    const files = new Set(Object.values(routeFiles ?? []));
-
-    if (!files.size) {
-      return;
-    }
-
-    files.forEach((file) => {
-      const filepath = `${this.buildDir}/client/${file}`;
-
-      try {
-        const result = fs
-          .readFileSync(filepath, { encoding: 'utf-8' })
-          .replace(/(lazy:.*?\((.*?)\)),\s?".*?"\)/g, '$1)');
-
-        fs.writeFileSync(filepath, result);
-      } catch (e) {
-        console.log(`Failed cleanup client route ${filepath}:`, e);
-      }
-    });
+    }).buildRoutesManifest();
   }
 
   /**
@@ -448,7 +416,7 @@ class Build {
       );
 
       if (!isWatch) {
-        await this.buildManifest();
+        this.buildManifest();
 
         if (isEject) {
           this.eject();
@@ -493,7 +461,6 @@ class Build {
     }
 
     createDevMarker(this.isProd, this.viteConfig);
-    removeMeta(this.buildDir);
     onFinish?.();
   }
 }

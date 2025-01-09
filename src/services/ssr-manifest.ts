@@ -2,15 +2,14 @@ import fs from 'node:fs';
 import type { Socket } from 'node:net';
 import path from 'node:path';
 import chalk from 'chalk';
-import type { RouteObject, RouterState } from 'react-router';
+import type { RouterState } from 'react-router';
 import type { Alias, ModuleNode } from 'vite';
 import type { IAsyncRoute } from '@helpers/import-route';
 import type { IRequestContext } from '@node/render';
 import type { TRoutesTree } from '@services/parse-routes';
 import ParseRoutes from '@services/parse-routes';
 import PathNormalize from '@services/path-normalize';
-import PrepareServer from '@services/prepare-server';
-import ServerConfig from '@services/server-config';
+import type ServerConfig from '@services/server-config';
 
 interface ISsrManifestParams {
   buildDir?: string;
@@ -190,37 +189,6 @@ class SsrManifest {
   }
 
   /**
-   * Recursive walk routes and return id's with route import path
-   */
-  protected async getAsyncRoutesIds(
-    routes: RouteObject[],
-    index?: string,
-  ): Promise<Record<string, string | undefined>> {
-    const result: Record<string, string | undefined> = {};
-
-    // reason: await + array index
-    // eslint-disable-next-line @typescript-eslint/no-for-in-array
-    for (const routeIndex in routes) {
-      const route = routes[routeIndex];
-      const routeId = [index, routeIndex].filter(Boolean).join('-');
-
-      if (route.lazy) {
-        try {
-          const resolvedRoute: IAsyncRoute = await route.lazy();
-
-          result[routeId] = this.pathNormalize.getAppPath(resolvedRoute?.pathId);
-        } catch (e) {
-          console.error(chalk.red('Failed to load route:'), route.path, e);
-        }
-      } else if (route.children) {
-        Object.assign(result, await this.getAsyncRoutesIds(route.children, routeId));
-      }
-    }
-
-    return result;
-  }
-
-  /**
    * Same as 'getAsyncRoutesIds' but for routes tree from 'ParseRoutes'
    */
   protected getRoutesTreeIds(
@@ -303,22 +271,10 @@ class SsrManifest {
   /**
    * Build routes manifest file
    */
-  public async buildRoutesManifest(isNodeParsing: boolean): Promise<void> {
-    const prepareServer = PrepareServer.init(
-      ServerConfig.init({ isProd: true }, { root: this.getOutDir() }),
-    );
+  public buildRoutesManifest(): void {
     const manifest = this.loadClientManifest();
-    let routesPaths: Record<string, string | undefined>;
-
-    if (isNodeParsing) {
-      const { routes } = await prepareServer.loadEntrypoint(false);
-
-      routesPaths = await this.getAsyncRoutesIds(routes as RouteObject[]);
-    } else {
-      const routesService = new ParseRoutes(this.config, this.viteAliases);
-
-      routesPaths = this.getRoutesTreeIds(routesService.parse());
-    }
+    const routesService = new ParseRoutes(this.config, this.viteAliases);
+    const routesPaths = this.getRoutesTreeIds(routesService.parse());
 
     const postfixes = this.pathNormalize.getImportPostfix();
     const result: Record<string, IAsset[]> = {};

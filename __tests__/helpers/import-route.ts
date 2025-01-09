@@ -13,13 +13,11 @@ describe('importRoute', () => {
         isDefaultExport ? { default: { Component, ...props } } : { Component, ...props },
       )) as unknown as IDynamicRoute;
 
-  it('should import dynamic route and return an IAsyncRoute object with Component and pathId', async () => {
-    const id = 'routeId';
-    const result = await importRoute(getDynamicRoute(), id)();
+  it('should import dynamic route and return an IAsyncRoute object with Component', async () => {
+    const result = await importRoute(getDynamicRoute())();
 
     expect(result.Component).to.be.a('function');
     expect(result.Component).to.equal(Component);
-    expect(result.pathId).to.equal(id);
   });
 
   it('should handle dynamic route with additional properties', async () => {

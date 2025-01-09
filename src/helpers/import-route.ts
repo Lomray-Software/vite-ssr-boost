@@ -15,17 +15,17 @@ export type IAsyncRoute = { pathId?: string } & (
 /**
  * Import dynamic route
  */
-const importRoute = (route: IDynamicRoute, id?: string): (() => Promise<IAsyncRoute>) => {
+const importRoute = (route: IDynamicRoute): (() => Promise<IAsyncRoute>) => {
   return async (): Promise<IAsyncRoute> => {
     const resolved = await route();
 
     // fallback to react router export style
     if ('Component' in resolved) {
-      return { ...resolved, pathId: id } as IAsyncRoute;
+      return { ...resolved } as IAsyncRoute;
     }
 
     const Component = resolved.default;
-    const result: IAsyncRoute = { Component, pathId: id };
+    const result: IAsyncRoute = { Component };
 
     keys.forEach((key) => {
       if (Component[key]) {

@@ -36,10 +36,7 @@ describe('normalizeRoute', () => {
     normalizeRoute(...params).transform as TSimpleTransform;
 
   it('should return routes with injected pathId: lazy, Component', () => {
-    const result = getTransform({ isSSR: true, isNodeParsing: true })(
-      routesCode1Before,
-      allowedFileId,
-    );
+    const result = getTransform({ isSSR: true })(routesCode1Before, allowedFileId);
 
     expect(result?.code).to.equal(routesCode1After);
   });
@@ -60,19 +57,19 @@ describe('normalizeRoute', () => {
   });
 
   it('should return routes with injected pathId: element,Component', () => {
-    const result = getTransform()(routesCode2Before, allowedFileId);
+    const result = getTransform({ isSSR: true })(routesCode2Before, allowedFileId);
 
     expect(result?.code).to.equal(routesCode2After);
   });
 
   it('should return routes with injected pathId formatting: element,Component', () => {
-    const result = getTransform()(routesCode3Before, allowedFileId);
+    const result = getTransform({ isSSR: true })(routesCode3Before, allowedFileId);
 
     expect(result?.code).to.equal(routesCode3After);
   });
 
   it('should return original routes', () => {
-    const result = getTransform()(routesCode4Before, allowedFileId);
+    const result = getTransform({ isSSR: true })(routesCode4Before, allowedFileId);
 
     expect(result?.code).to.equal(routesCode4After);
   });
@@ -109,38 +106,6 @@ const routes = [
     expect(result?.code).to.equal(code);
   });
 
-  it('should set config & get transformed route & write metadata', () => {
-    const writeFileSyncStub = sandbox.stub(fs, 'writeFileSync');
-    const plugin = normalizeRoute({ isSSR: true, isNodeParsing: true });
-    const bundle = {
-      '/assets/index-JDj23ja.js': {
-        type: 'chunk',
-        modules: { [allowedFileId]: 'test' },
-      },
-      '/assets/index-Jx9999.js': {
-        type: 'chunk',
-        modules: { '/': 'test' },
-      },
-    };
-
-    // @ts-expect-error ignore error, we know config type
-    plugin.transform(routesCode1Before, allowedFileId);
-    // @ts-expect-error ignore error, we know config type
-    plugin.generateBundle?.({}, bundle);
-    // @ts-expect-error ignore error, we know config type
-    plugin.config?.({ root: '/src', build: { outDir: '/build/client' } }, { isSsrBuild: false });
-    // @ts-expect-error ignore error, we know config type
-    plugin.writeBundle?.();
-
-    const [, data] = writeFileSyncStub.firstCall.args;
-
-    expect(JSON.parse(data as string)).to.deep.equal({
-      routeFiles: {
-        [allowedFileId]: Object.keys(bundle)[0],
-      },
-    });
-  });
-
   it('should ignore set config & write metadata', () => {
     const writeFileSyncStub = sandbox.stub(fs, 'writeFileSync');
     const plugin = normalizeRoute({ isSSR: true });
@@ -154,10 +119,7 @@ const routes = [
   });
 
   it('should return routes with injected pathId: Components has JSX props', () => {
-    const result = getTransform({ isSSR: true, isNodeParsing: true })(
-      routesCode5Before,
-      allowedFileId,
-    );
+    const result = getTransform({ isSSR: true })(routesCode5Before, allowedFileId);
 
     expect(result?.code).to.equal(routesCode5After);
   });

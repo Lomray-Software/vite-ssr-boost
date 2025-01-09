@@ -24,11 +24,6 @@ export interface IPluginOptions {
   clientFile?: string;
   // Path contains routes declaration files (need to detect route files). default: undefined, e.g.: /routes/
   routesPath?: string;
-  // how parse routes
-  // node - import routes file directly and walk through
-  // babel - use babel travers to walk through and avoid import routes file
-  // default: babel
-  routesParsing?: 'node' | 'babel';
   // Create additional SPA entrypoint: index-spa.html
   // Can be used for service worker: createHandlerBoundToURL("index-spa.html")
   spaIndex?: boolean | ICreateSPAIndex;
@@ -48,7 +43,6 @@ const defaultOptions: IPluginOptions = {
   indexFile: 'index.html',
   serverFile: 'server.ts',
   clientFile: 'client.ts',
-  routesParsing: 'babel',
   tsconfigAliases: true,
   spaIndex: false,
 };
@@ -104,7 +98,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     },
   ];
 
-  const { tsconfigAliases, routesPath, routesParsing, spaIndex } = mergedOptions;
+  const { tsconfigAliases, routesPath, spaIndex } = mergedOptions;
 
   if (tsconfigAliases) {
     plugins.push(
@@ -120,14 +114,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
     plugins.push(ViteHandleCustomEntrypointPlugin({ entrypoint: entrypointConfig }));
   }
 
-  plugins.push(
-    ViteNormalizeRouterPlugin({
-      isSSR,
-      isBuild,
-      routesPath,
-      isNodeParsing: routesParsing === 'node',
-    }),
-  );
+  plugins.push(ViteNormalizeRouterPlugin({ isSSR, isBuild, routesPath }));
 
   return plugins;
 }
