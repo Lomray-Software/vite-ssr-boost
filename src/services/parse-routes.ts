@@ -19,7 +19,7 @@ import {
   identifier,
   isBooleanLiteral,
   stringLiteral,
-  booleanLiteral,
+  isFunction,
   objectProperty,
   isArrayExpression,
   isJSXElement,
@@ -411,13 +411,8 @@ class ParseRoutes {
         // async routes
         if (property.key.name === 'lazy' && property.value.type === 'ArrowFunctionExpression') {
           const importCall = property.value.body as CallExpression;
-          const isOnlyClientPropIndex = nodePath.node.properties.findIndex(
-            (p) =>
-              isObjectProperty(p) &&
-              isIdentifier(p.key) &&
-              isBooleanLiteral(p.value) &&
-              p.key.name === 'isOnlyClient' &&
-              p.value.value,
+          const onlyClientProp = nodePath.node.properties.find(
+            (p) => isObjectProperty(p) && isIdentifier(p.key) && p.key.name === 'onlyClient',
           );
 
           /**
@@ -431,13 +426,17 @@ class ParseRoutes {
               name: 'n',
             },
             arguments:
-              isOnlyClientPropIndex !== -1
-                ? [property.value, booleanLiteral(true)]
+              isObjectProperty(onlyClientProp) &&
+              (isBooleanLiteral(onlyClientProp.value) ||
+                isJSXElement(onlyClientProp.value) ||
+                isFunction(onlyClientProp.value) ||
+                isIdentifier(onlyClientProp.value))
+                ? [property.value, onlyClientProp.value]
                 : [property.value],
           };
 
-          if (isOnlyClientPropIndex !== -1) {
-            nodePath.node.properties.splice(isOnlyClientPropIndex, 1);
+          if (onlyClientProp) {
+            nodePath.node.properties = nodePath.node.properties.filter((p) => p !== onlyClientProp);
           }
 
           addImportRouteWrapper();

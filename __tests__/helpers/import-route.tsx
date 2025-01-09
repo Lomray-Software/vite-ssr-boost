@@ -77,7 +77,16 @@ describe('importRoute', () => {
 
     const result = await importRoute(getDynamicRoute(), true)();
 
-    expect(result.element).to.equal(null);
+    expect(result.Component).to.equal(null);
+  });
+
+  it('should return Fallback component for client only rendering', async () => {
+    sandbox.stub(COMMON_CONSTANTS, 'IS_SERVER').value(true);
+
+    const Fallback = () => null;
+    const result = await importRoute(getDynamicRoute(), Fallback)();
+
+    expect(result.Component).to.equal(Fallback);
   });
 
   it('should handle dynamic route wrap Component with renderClient', async () => {

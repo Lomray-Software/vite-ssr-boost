@@ -1,9 +1,12 @@
+import type { FC, ReactNode } from 'react';
+import { isValidElement } from 'react';
 import type { IndexRouteObject, NonIndexRouteObject } from 'react-router';
 import renderClient from '@components/render-client';
 import withSuspense from '@components/with-suspense';
 import { IS_SERVER } from '@constants/common';
 import type { FCCRoute, FCRoute } from '@interfaces/fc-route';
 import { keys } from '@interfaces/fc-route';
+import type { TOnlyClientProp } from '@interfaces/route-object';
 
 export type IDynamicRoute = () => Promise<{ default: FCRoute | FCCRoute<any> }>;
 
@@ -15,20 +18,42 @@ export type IAsyncRoute = { pathId?: string } & (
 );
 
 /**
+ * Return right fallback syntax
+ */
+const getFallback = (
+  Fallback?: TOnlyClientProp,
+): { element: ReactNode } | { Component: FC | null } => {
+  if (isValidElement(Fallback)) {
+    return { element: Fallback };
+  }
+
+  if ((typeof Fallback === 'function' || typeof Fallback === 'object') && Fallback !== null) {
+    return { Component: Fallback as FC };
+  }
+
+  return { Component: null };
+};
+
+/**
  * Import dynamic route
  */
-const importRoute = (route: IDynamicRoute, isOnlyClient = false): (() => Promise<IAsyncRoute>) => {
+const importRoute = (
+  route: IDynamicRoute,
+  onlyClient?: TOnlyClientProp,
+): (() => Promise<IAsyncRoute>) => {
   return async (): Promise<IAsyncRoute> => {
-    if (isOnlyClient && IS_SERVER) {
-      return { element: null };
+    const Fallback = getFallback(onlyClient);
+
+    if (onlyClient && IS_SERVER) {
+      return Fallback;
     }
 
     const resolved = await route();
 
     // fallback to react router export style
     if ('Component' in resolved) {
-      const Component = isOnlyClient
-        ? renderClient(resolved.Component as FCRoute | FCCRoute<any>)
+      const Component = onlyClient
+        ? renderClient(resolved.Component as FCRoute | FCCRoute<any>, Fallback)
         : resolved.Component;
 
       return { ...resolved, Component } as IAsyncRoute;
@@ -48,8 +73,8 @@ const importRoute = (route: IDynamicRoute, isOnlyClient = false): (() => Promise
       result.Component = withSuspense(Component, Component.Suspense);
     }
 
-    if (isOnlyClient) {
-      result.Component = renderClient(result.Component as FCRoute | FCCRoute<any>);
+    if (onlyClient) {
+      result.Component = renderClient(result.Component as FCRoute | FCCRoute<any>, Fallback);
     }
 
     return result;
