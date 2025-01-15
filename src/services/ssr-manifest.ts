@@ -3,7 +3,7 @@ import type { Socket } from 'node:net';
 import path from 'node:path';
 import chalk from 'chalk';
 import type { RouterState } from 'react-router';
-import type { Alias, ModuleNode } from 'vite';
+import type { Alias, ModuleNode, RenderBuiltAssetUrl } from 'vite';
 import type { IAsyncRoute } from '@helpers/import-route';
 import type { IRequestContext } from '@node/render';
 import type { TRoutesTree } from '@services/parse-routes';
@@ -15,6 +15,7 @@ interface ISsrManifestParams {
   buildDir?: string;
   viteAliases?: Alias[];
   basename?: string;
+  renderBuiltUrl?: RenderBuiltAssetUrl;
 }
 
 interface IManifest {
@@ -97,6 +98,11 @@ class SsrManifest {
   protected readonly basename?: string;
 
   /**
+   * Vite renderBuiltUrl config func
+   */
+  protected readonly renderBuiltUrl?: RenderBuiltAssetUrl;
+
+  /**
    * Loaded assets manifest file
    */
   protected routesAssets: Record<string, IAsset[]> | null = null;
@@ -106,7 +112,7 @@ class SsrManifest {
    */
   protected constructor(
     config: ServerConfig,
-    { buildDir, viteAliases, basename }: ISsrManifestParams = {},
+    { buildDir, viteAliases, basename, renderBuiltUrl }: ISsrManifestParams = {},
   ) {
     this.config = config;
     this.root = config.getParams().root;
@@ -114,6 +120,7 @@ class SsrManifest {
     this.viteAliases = viteAliases ?? config.getVite()?.config?.resolve.alias;
     this.pathNormalize = new PathNormalize(config, viteAliases);
     this.basename = basename;
+    this.renderBuiltUrl = renderBuiltUrl;
   }
 
   /**
@@ -239,8 +246,16 @@ class SsrManifest {
 
           // keep only js,css,image,fonts files
           if (type) {
+            const filename = path.posix.normalize(`${this.basename}/${asset}`);
+            const modifiedFilename = this.renderBuiltUrl?.(filename, {
+              type: 'asset',
+              ssr: true,
+              hostId: '',
+              hostType: filename.split('.').at(-1)?.toLowerCase() as 'js',
+            });
+
             res[asset] = {
-              url: path.posix.normalize(`${this.basename}/${asset}`),
+              url: typeof modifiedFilename === 'string' ? modifiedFilename : filename,
               weight: isEntry ? 1.9 : this.getAssetWeight(asset),
               type,
               isNested,
