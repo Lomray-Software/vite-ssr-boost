@@ -6,7 +6,7 @@ on:
     types: [opened, synchronize, reopened]
 
 env:
-  NODE_VERSION: 20.10.0
+  NODE_VERSION: 20.18.3
   ENABLE_CACHE: yes
 
 jobs:
