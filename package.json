@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "chalk": "^5.4.1",
-    "commander": "^12.1.0",
+    "commander": "^13.1.0",
     "compression": "^1.8.0",
     "express": "^4.21.2",
     "hoist-non-react-statics": "^3.3.2",
