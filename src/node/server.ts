@@ -93,7 +93,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
 
   // SSR mode
   if (!isSPA) {
-    app.use('*', (req, res, next) => {
+    app.use(/(.*)/, (req, res, next) => {
       void (async () => {
         try {
           const [{ render, onRequest, ...renderParams }, clientHtml] = await Promise.all([
@@ -126,7 +126,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
     });
   } else {
     // SPA mode, redirect any request to index.html
-    app.use('*', (req, res, next) => {
+    app.use(/(.*)/, (req, res, next) => {
       void (async () => {
         try {
           const html = (await prepareServer.loadHtml(req)).join('');
