@@ -3,14 +3,15 @@ import { expect } from 'chai';
 import type { ReactNode } from 'react';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import type { DataRouter, RouteObject } from 'react-router';
+import type { DataRouter } from 'react-router';
 import sinon from 'sinon';
 import { afterEach, beforeEach, describe, it } from 'vitest';
 import type { TApp } from '@browser/entry';
 import entry from '@browser/entry';
 import * as COMMON_CONSTANTS from '@constants/common';
+import type { TRouteObject } from '@interfaces/route-object';
 
-const routes: RouteObject[] = [
+const routes: TRouteObject[] = [
   {
     path: '/',
     element: <div data-testid="home-page">Home</div>,
@@ -93,7 +94,7 @@ describe('browserEntry', () => {
     sandbox.stub(window, 'location').value({ pathname: '/lazy' });
     sandbox.stub(ReactDOM, 'hydrateRoot');
 
-    const localRoutes: RouteObject[] = [
+    const localRoutes: TRouteObject[] = [
       {
         path: '/lazy',
         // @ts-ignore

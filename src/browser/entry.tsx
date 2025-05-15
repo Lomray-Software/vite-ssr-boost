@@ -48,12 +48,18 @@ async function entry<TAppProps>(
   if (lazyMatches && lazyMatches?.length > 0) {
     await Promise.all(
       lazyMatches.map(async (m) => {
-        const routeModule = await m.route.lazy?.();
+        const { lazy } = m.route;
 
-        Object.assign(m.route, {
-          ...routeModule,
-          lazy: undefined,
-        });
+        if (typeof lazy === 'function') {
+          const lazyResult = await lazy();
+
+          if (lazyResult) {
+            Object.assign(m.route, {
+              ...lazyResult,
+              lazy: undefined,
+            });
+          }
+        }
       }),
     );
   }
