@@ -13,7 +13,7 @@ export interface IPluginOptions {
 }
 
 const pluginName = `${PLUGIN_NAME}-make-aliases`;
-const cleanupAlias = (str: string): string => str.replace('/*', '');
+const cleanupAlias = (str: string): string => str.replace(/\/?\*$/, '');
 
 /**
  * Read tsconfig file and set vite aliases

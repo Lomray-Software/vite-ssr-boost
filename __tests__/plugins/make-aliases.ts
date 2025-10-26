@@ -19,6 +19,7 @@ describe('ViteMakeAliasesPlugin', () => {
     const aliases = {
       '@src/*': ['./src/*'],
       '@components/*': ['./src/components/*'],
+      '@/*': ['*'],
     };
 
     sandbox.stub(fs, 'existsSync').returns(true);
@@ -35,6 +36,7 @@ describe('ViteMakeAliasesPlugin', () => {
     expect(result.resolve?.alias).to.deep.equal([
       { find: '@src', replacement: `${root}/src` },
       { find: '@components', replacement: `${root}/src/components` },
+      { find: '@', replacement: `${root}` },
     ]);
   });
 
