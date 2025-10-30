@@ -100,8 +100,13 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
             prepareServer.loadEntrypoint(),
             prepareServer.loadHtml(req),
           ]);
-          const { appProps, hasEarlyHints, shouldSkip } = (await onRequest?.(req, res)) ?? {};
+          const { appProps, hasEarlyHints, shouldSkip, shouldCancel } =
+            (await onRequest?.(req, res)) ?? {};
           const [header, footer] = clientHtml;
+
+          if (shouldCancel) {
+            return;
+          }
 
           if (shouldSkip) {
             return next();

@@ -24,7 +24,7 @@
   "computeResources": [
     {
       "name": "default",
-      "runtime": "nodejs18.x",
+      "runtime": "nodejs22.x",
       "entrypoint": "build/server/start.js"
     }
   ]

@@ -14,7 +14,11 @@ on:
       node-version:
         required: false
         type: string
-        default: 20.18.3
+        default: 22.21.0
+      npm-cache:
+        required: false
+        type: string
+        default: npm
     secrets:
       github-token:
         required: true
@@ -38,7 +42,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
-          cache: 'npm'
+          cache: ${{ inputs.npm-cache }}
 
       - uses: actions/download-artifact@v4
         with:

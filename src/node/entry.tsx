@@ -16,6 +16,7 @@ export interface IInitServerRequestOut<T = Record<string, any>> {
   appProps?: T;
   hasEarlyHints?: boolean;
   shouldSkip?: boolean;
+  shouldCancel?: boolean;
 }
 
 export interface IEntrypointOptions<TAppProps = Record<string, any>> {

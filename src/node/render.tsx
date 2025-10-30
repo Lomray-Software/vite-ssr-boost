@@ -115,7 +115,7 @@ async function render(
   const router = createStaticRouter(handler.dataRoutes, context.routerContext);
   const write = res.write.bind(res) as ExpressResponse['write'];
   const Logger = config.getLogger();
-  let abortTimer: NodeJS.Timer | undefined = undefined;
+  let abortTimer: NodeJS.Timeout | undefined = undefined;
 
   /**
    * Listen response and stream to add possibility modify html on fly
