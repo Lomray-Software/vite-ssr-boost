@@ -1,4 +1,4 @@
-FROM node:20.10.0-alpine
+FROM node:22.21.0-alpine
 
 LABEL org.opencontainers.image.title="vite-ssr-boost"
 LABEL org.opencontainers.image.description="Container to run pre-built 'vite-ssr-boost' applications"

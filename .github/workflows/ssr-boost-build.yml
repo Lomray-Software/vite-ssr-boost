@@ -6,7 +6,11 @@ on:
       node-version:
         required: false
         type: string
-        default: 20.18.3
+        default: 22.21.0
+      npm-cache:
+        required: false
+        type: string
+        default: npm
       app-build-args:
         required: false
         type: string
@@ -47,7 +51,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
-          cache: 'npm'
+          cache: ${{ inputs.npm-cache }}
 
       - name: Install dependencies
         run: npm ci

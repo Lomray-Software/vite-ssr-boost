@@ -1,5 +1,5 @@
 {
-  "runtime": "nodejs18.x",
+  "runtime": "nodejs22.x",
   "handler": "index.js",
   "launcherType": "Nodejs",
   "shouldAddHelpers": true
