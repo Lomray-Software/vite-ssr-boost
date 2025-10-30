@@ -22,7 +22,7 @@
   },
   "homepage": "https://github.com/Lomray-Software/vite-ssr-boost",
   "author": "Mikhail Yarmaliuk",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "scripts": {
     "build": "rollup -c",
     "build:watch": "rollup -c -w",
@@ -65,7 +65,7 @@
     "jsdom": "^27.0.1",
     "lint-staged": "^16.2.6",
     "prettier": "^3.6.2",
-    "rollup": "^4.40.2",
+    "rollup": "^4.52.5",
     "rollup-plugin-copy": "^3.5.0",
     "rollup-plugin-folder-input": "^1.0.1",
     "rollup-plugin-peer-deps-external": "^2.2.4",
@@ -85,6 +85,11 @@
     "react-dom": ">=18.2.0",
     "react-router": ">=7.0.1",
     "vite": ">=5"
+  },
+  "overrides": {
+    "rollup-plugin-ts": {
+      "browserslist-generator": "^3.0.0"
+    }
   },
   "bin": {
     "ssr-boost": "cli.js"
