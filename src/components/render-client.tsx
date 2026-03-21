@@ -32,7 +32,9 @@ const renderClient = <T extends Record<string, any>>(
     return null;
   };
 
-  hoistNonReactStatics(Element, Component);
+  if (Component) {
+    hoistNonReactStatics(Element, Component);
+  }
 
   return Element;
 };

@@ -400,7 +400,7 @@ class SsrManifest {
               isNested: Boolean(skipModules.size),
               isPreload: false,
             };
-          } catch (e) {
+          } catch {
             console.warn(chalk.yellowBright('Failed to parse style: ', file));
           }
         }

@@ -1,8 +1,7 @@
 import fs from 'fs';
 import path from 'node:path';
-import { expect } from 'chai';
 import sinon from 'sinon';
-import { afterEach, describe, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   routesCode1Before,
   routesCode2Before,
@@ -48,7 +47,7 @@ describe('parse-routes', () => {
   });
 
   it('should not find client entrypoint and throw error', () => {
-    expect(() => routesService.parse()).to.throw('Unable to find routes file');
+    expect(() => routesService.parse()).toThrow('Unable to find routes file');
   });
 
   it('should not find routes import in client entrypoint and throw error', () => {
@@ -58,7 +57,7 @@ describe('parse-routes', () => {
     void entryClient(App, routes, {});
     `);
 
-    expect(() => routesService.parse()).to.throw('Unable to find routes file');
+    expect(() => routesService.parse()).toThrow('Unable to find routes file');
   });
 
   it('should parse ssr boost client entrypoint and find routes import', () => {

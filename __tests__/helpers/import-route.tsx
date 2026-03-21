@@ -1,8 +1,7 @@
 import { render } from '@testing-library/react';
-import { expect } from 'chai';
 import React from 'react';
 import sinon from 'sinon';
-import { afterEach, describe, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import * as COMMON_CONSTANTS from '@constants/common';
 import type { IDynamicRoute } from '@helpers/import-route';
 import importRoute from '@helpers/import-route';
@@ -26,15 +25,15 @@ describe('importRoute', () => {
   it('should import dynamic route and return an IAsyncRoute object with Component', async () => {
     const result = await importRoute(getDynamicRoute())();
 
-    expect(result.Component).to.be.a('function');
+    expect(result.Component).toBeTypeOf('function');
     expect(result.Component).to.equal(Component);
   });
 
   it('should handle dynamic route with additional properties', async () => {
     const result = await importRoute(getDynamicRoute({ someProp: 'value' }))();
 
-    expect(result.Component).to.be.a('function');
-    expect(result).to.have.property('someProp').and.to.equal('value');
+    expect(result.Component).toBeTypeOf('function');
+    expect(result).toHaveProperty('someProp', 'value');
   });
 
   it('should handle dynamic route with Suspense and wrap Component with withSuspense', async () => {
@@ -47,9 +46,9 @@ describe('importRoute', () => {
       ),
     )();
 
-    expect(result.Component).to.be.a('function');
+    expect(result.Component).toBeTypeOf('function');
     expect(result.Component).to.not.equal(Component);
-    expect(result).to.not.have.property('Suspense');
+    expect(result).not.toHaveProperty('Suspense');
   });
 
   it('should handle dynamic route with other keys and copy them to the result', async () => {
@@ -65,10 +64,10 @@ describe('importRoute', () => {
       ),
     )();
 
-    expect(result.Component).to.not.undefined;
-    expect(result).to.not.have.property('notAllowedKey');
+    expect(result.Component).toBeDefined();
+    expect(result).not.toHaveProperty('notAllowedKey');
     Object.entries(allowedKeys).forEach(([key, value]) => {
-      expect(result).to.have.property(key).and.to.equal(value);
+      expect(result).toHaveProperty(key, value);
     });
   });
 

@@ -1,7 +1,6 @@
 import fs from 'node:fs';
-import { expect } from 'chai';
 import sinon from 'sinon';
-import { afterEach, describe, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   routesCode1Before,
   routesCode1After,
@@ -92,7 +91,7 @@ describe('normalizeRoute', () => {
       allowedFileId,
     );
 
-    expect(result).to.be.undefined;
+    expect(result).toBeUndefined();
   });
 
   it('should return the original code when importPath is not defined', () => {
@@ -115,7 +114,7 @@ const routes = [
     // @ts-expect-error ignore error, we know config type
     plugin.writeBundle?.();
 
-    expect(writeFileSyncStub).to.not.called;
+    expect(writeFileSyncStub.called).toBe(false);
   });
 
   it('should return routes with injected pathId: Components has JSX props', () => {

@@ -1,7 +1,6 @@
-import { expect } from 'chai';
 import sinon from 'sinon';
 import type { ResolvedConfig } from 'vite';
-import { afterEach, describe, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import CliActions from '@constants/cli-actions';
 import PLUGIN_NAME from '@constants/plugin-name';
 import type { IPluginConfig } from '@helpers/plugin-config';
@@ -43,7 +42,7 @@ describe('getPluginConfig', () => {
     const errorStub = sandbox.stub(console, 'error');
 
     try {
-      expect(() => getPluginConfig(viteConfig as unknown as ResolvedConfig)).to.throw(
+      expect(() => getPluginConfig(viteConfig as unknown as ResolvedConfig)).toThrow(
         `Failed to get to plugin config. Make sure you add the plugin '${PLUGIN_NAME}' to the VITE config.`,
       );
     } finally {
@@ -63,7 +62,7 @@ describe('getPluginConfig', () => {
     const errorStub = sandbox.stub(console, 'error');
 
     try {
-      expect(() => getPluginConfig(viteConfig as unknown as ResolvedConfig)).to.throw(
+      expect(() => getPluginConfig(viteConfig as unknown as ResolvedConfig)).toThrow(
         `Failed to get to plugin config. Make sure you add the plugin '${PLUGIN_NAME}' to the VITE config.`,
       );
     } finally {

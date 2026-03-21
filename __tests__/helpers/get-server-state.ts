@@ -1,5 +1,5 @@
-import { expect } from 'chai';
 import { afterEach, beforeEach, describe, it } from 'vitest';
+import { expect } from 'vitest';
 import getServerState from '@helpers/get-server-state';
 
 describe('getServerState', () => {
@@ -28,7 +28,7 @@ describe('getServerState', () => {
     const result = getServerState(stateName);
 
     expect(result).to.deep.equal(serverState);
-    expect((window as Record<string, any>)[stateName]).to.be.undefined;
+    expect((window as Record<string, any>)[stateName]).toBeUndefined();
   });
 
   it('should return the server state without removing it if shouldRemove is false', () => {
@@ -52,6 +52,6 @@ describe('getServerState', () => {
     const result = getServerState<Record<string, number>>(stateName);
 
     expect(result).to.deep.equal(serverState);
-    expect((window as Record<string, any>)[stateName]).to.be.undefined;
+    expect((window as Record<string, any>)[stateName]).toBeUndefined();
   });
 });

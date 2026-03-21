@@ -1,7 +1,6 @@
 import { render } from '@testing-library/react';
-import { expect } from 'chai';
 import React from 'react';
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import ResponseStatus from '@components/response-status';
 import type { IServerContext } from '@context/server';
 import { ServerProvider } from '@context/server';

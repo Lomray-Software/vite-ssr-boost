@@ -1,8 +1,7 @@
 import fs from 'node:fs';
-import { expect } from 'chai';
 import sinon from 'sinon';
 import type { UserConfig } from 'vite';
-import { afterEach, describe, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import PLUGIN_NAME from '@constants/plugin-name';
 import ViteMakeAliasesPlugin from '@plugins/make-aliases';
 
@@ -51,7 +50,7 @@ describe('ViteMakeAliasesPlugin', () => {
       consoleStub.calledOnceWithExactly(
         `${PLUGIN_NAME}-make-aliases: tsconfig not exist in "${tsconfigPath}"`,
       ),
-    ).to.be.true;
+    ).toBe(true);
   });
 
   it('should use default values when options are not provided', () => {
@@ -70,5 +69,31 @@ describe('ViteMakeAliasesPlugin', () => {
     const result = ViteMakeAliasesPlugin({ root }).config(config) as UserConfig;
 
     expect(result).to.deep.equal(config);
+  });
+
+  it('should normalize object aliases before appending tsconfig aliases', () => {
+    sandbox.stub(fs, 'existsSync').returns(true);
+    sandbox
+      .stub(fs, 'readFileSync')
+      .returns(JSON.stringify({ compilerOptions: { paths: { '@src/*': ['./src/*'] } } }));
+
+    const config = {
+      resolve: {
+        alias: {
+          '@base': '/project-root/base',
+        },
+      },
+      root,
+    } as UserConfig;
+
+    // @ts-ignore
+    const result = ViteMakeAliasesPlugin({ tsconfig: '/path/to/tsconfig.json', root: '' }).config(
+      config,
+    ) as UserConfig;
+
+    expect(result.resolve?.alias).toEqual([
+      { find: '@base', replacement: '/project-root/base' },
+      { find: '@src', replacement: `${root}/src` },
+    ]);
   });
 });

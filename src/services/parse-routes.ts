@@ -106,7 +106,7 @@ class ParseRoutes {
         sourceType: 'module',
         plugins: ['typescript', 'jsx'],
       });
-    } catch (e) {
+    } catch {
       return null;
     }
   }

@@ -1,6 +1,5 @@
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
-import { expect } from 'chai';
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import viteAliases from '@helpers/vite-aliases';
 
 describe('viteAliases', () => {

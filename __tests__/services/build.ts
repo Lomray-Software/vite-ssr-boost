@@ -2,9 +2,8 @@
 import fs from 'fs';
 import childProcess from 'node:child_process';
 import process from 'node:process';
-import { expect } from 'chai';
 import sinon from 'sinon';
-import { afterEach, beforeEach, describe, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BuildService from '@services/build';
 import ServerConfig from '@services/server-config';
 import SsrManifest from '@services/ssr-manifest';
@@ -69,6 +68,6 @@ describe('build', () => {
     await service.build();
 
     // should call build manifest for server side package
-    expect(buildRoutesManifestStub).to.be.calledOnce;
+    expect(buildRoutesManifestStub.calledOnce).toBe(true);
   });
 });

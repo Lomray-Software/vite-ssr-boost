@@ -1,11 +1,10 @@
 import { render, cleanup } from '@testing-library/react';
-import { expect } from 'chai';
 import type { ReactNode } from 'react';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import type { DataRouter } from 'react-router';
 import sinon from 'sinon';
-import { afterEach, beforeEach, describe, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TApp } from '@browser/entry';
 import entry from '@browser/entry';
 import * as COMMON_CONSTANTS from '@constants/common';
@@ -45,8 +44,8 @@ describe('browserEntry', () => {
     const [argRoot, AppRoot] = hydrateStub.firstCall.args;
     const { getByTestId } = render(<div children={AppRoot} />);
 
-    expect(getByTestId('home-page')).to.not.undefined;
-    expect(getByTestId('app-wrapper')).to.not.undefined;
+    expect(getByTestId('home-page')).toBeDefined();
+    expect(getByTestId('app-wrapper')).toBeDefined();
     expect(argRoot).to.equal(pageRoot);
     expect(root).to.equal(returnEntry);
   });
@@ -65,8 +64,8 @@ describe('browserEntry', () => {
     const [AppRoot] = renderStub.firstCall.args as [ReactNode];
     const { getByTestId } = render(<div children={AppRoot} />);
 
-    expect(getByTestId('home-page')).to.not.undefined;
-    expect(createRootStub).to.calledOnceWith(pageRoot);
+    expect(getByTestId('home-page')).toBeDefined();
+    expect(createRootStub.calledOnceWith(pageRoot)).toBe(true);
     expect(root).to.equal(returnEntry);
   });
 
@@ -85,8 +84,8 @@ describe('browserEntry', () => {
     const [, AppRoot] = hydrateStub.firstCall.args;
     const { getByTestId } = render(<div children={AppRoot} />);
 
-    expect(getByTestId('app-wrapper-init-arg')).to.not.undefined;
-    expect(isSSRMode).to.true;
+    expect(getByTestId('app-wrapper-init-arg')).toBeDefined();
+    expect(isSSRMode).toBe(true);
     expect(router.routes[0].path).to.equal('/');
   });
 
@@ -107,7 +106,7 @@ describe('browserEntry', () => {
 
     await entry(App, localRoutes);
 
-    expect(localRoutes[0].lazy).to.be.undefined;
-    expect(localRoutes[0]).to.have.property('default').and.a('function');
+    expect(localRoutes[0].lazy).toBeUndefined();
+    expect(typeof (localRoutes[0] as Record<string, unknown>).default).toBe('function');
   });
 });

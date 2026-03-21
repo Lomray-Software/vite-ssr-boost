@@ -113,7 +113,7 @@ async function render(
   };
 
   const router = createStaticRouter(handler.dataRoutes, context.routerContext);
-  const write = res.write.bind(res) as ExpressResponse['write'];
+  const write = res.write.bind(res) as (...args: unknown[]) => boolean;
   const Logger = config.getLogger();
   let abortTimer: NodeJS.Timeout | undefined = undefined;
 
@@ -127,12 +127,10 @@ async function render(
     const modifiedHtml = onResponse?.({ context, html });
 
     if (modifiedHtml) {
-      // @ts-ignore
-      return write(isString ? modifiedHtml : Buffer.from(modifiedHtml), ...args) as boolean;
+      return write(isString ? modifiedHtml : Buffer.from(modifiedHtml), ...args);
     }
 
-    // @ts-ignore
-    return write(data, ...args) as boolean;
+    return write(data, ...args);
   };
 
   const { serverContext, routerContext, appProps } = context;

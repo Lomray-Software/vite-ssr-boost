@@ -1,5 +1,4 @@
-import { expect } from 'chai';
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import StreamError from '@constants/stream-error';
 import obtainStreamError from '@helpers/obtain-stream-error';
 
@@ -31,7 +30,6 @@ describe('obtainStreamError', () => {
   });
 
   it('should return Unknown error for an error without a message', () => {
-    // eslint-disable-next-line unicorn/error-message
     const err = new Error();
     const result = obtainStreamError(err);
 

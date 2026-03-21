@@ -1,6 +1,5 @@
-import { expect } from 'chai';
 import sinon from 'sinon';
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import printServerUrls from '@helpers/print-server-urls';
 
 describe('printServerUrls', () => {
@@ -14,9 +13,9 @@ describe('printServerUrls', () => {
     printServerUrls(urls, infoSpy);
 
     expect(infoSpy.callCount).to.equal(5);
-    expect(infoSpy.getCall(0).args[0]).to.include(urls.local[0]);
-    expect(infoSpy.getCall(1).args[0]).to.include(urls.local[1]);
-    expect(infoSpy.getCall(2).args[0]).to.include(urls.network[0]);
-    expect(infoSpy.getCall(3).args[0]).to.include(urls.network[1]);
+    expect(infoSpy.getCall(0).args[0]).toContain(urls.local[0]);
+    expect(infoSpy.getCall(1).args[0]).toContain(urls.local[1]);
+    expect(infoSpy.getCall(2).args[0]).toContain(urls.network[0]);
+    expect(infoSpy.getCall(3).args[0]).toContain(urls.network[1]);
   });
 });

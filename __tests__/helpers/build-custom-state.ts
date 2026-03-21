@@ -1,5 +1,4 @@
-import { expect } from 'chai';
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import buildCustomState from '@helpers/build-custom-state';
 
 describe('buildCustomState', () => {
@@ -37,9 +36,9 @@ describe('buildCustomState', () => {
 
     const result = buildCustomState(initState as unknown as Record<string, Record<string, any>>);
 
-    expect(result).to.not.include('<script async>window.key1 =');
-    expect(result).to.not.include('<script async>window.key2 =');
-    expect(result).to.not.include('<script async>window.key3 =');
+    expect(result).not.toContain('<script async>window.key1 =');
+    expect(result).not.toContain('<script async>window.key2 =');
+    expect(result).not.toContain('<script async>window.key3 =');
   });
 
   it('should handle invalid initState keys or states', () => {

@@ -1,9 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect } from 'chai';
 import sinon from 'sinon';
 import type { ResolvedConfig } from 'vite';
-import { afterEach, describe, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createDevMarker, getMarkerFile } from '@helpers/dev-marker';
 
 const root = '/project-root';
@@ -24,14 +23,15 @@ describe('createDevMarker', () => {
 
     createDevMarker(false, resolvedConfig);
 
-    expect(existsSyncStub.calledWith(path.resolve(root, `${buildConf.outDir}/server`))).to.be.true;
+    expect(existsSyncStub.calledWith(path.resolve(root, `${buildConf.outDir}/server`))).toBe(true);
     expect(
       mkdirSyncStub.calledWith(path.resolve(root, `${buildConf.outDir}/server`), {
         recursive: true,
       }),
-    ).to.be.true;
-    expect(writeFileSyncStub.calledWith(path.resolve(root, `${buildConf.outDir}/server/.dev`))).to
-      .be.true;
+    ).toBe(true);
+    expect(
+      writeFileSyncStub.calledWith(path.resolve(root, `${buildConf.outDir}/server/.dev`)),
+    ).toBe(true);
 
     existsSyncStub.restore();
     mkdirSyncStub.restore();
@@ -46,9 +46,10 @@ describe('createDevMarker', () => {
 
     createDevMarker(isProd, resolvedConfig);
 
-    expect(existsSyncStub.calledWith(path.resolve(root, `${buildConf.outDir}/server/.dev`))).to.be
-      .true;
-    expect(rmSyncStub.calledWith(path.resolve(root, `${buildConf.outDir}/server/.dev`))).to.be.true;
+    expect(existsSyncStub.calledWith(path.resolve(root, `${buildConf.outDir}/server/.dev`))).toBe(
+      true,
+    );
+    expect(rmSyncStub.calledWith(path.resolve(root, `${buildConf.outDir}/server/.dev`))).toBe(true);
 
     existsSyncStub.restore();
     rmSyncStub.restore();

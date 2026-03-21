@@ -61,7 +61,7 @@ describe('ScrollToTop Component', () => {
     });
 
     expect(container.textContent).to.equal('Page 2');
-    expect(mockScroll).to.calledOnceWith(0, 0);
+    expect(mockScroll.calledOnceWith(0, 0)).toBe(true);
   });
 
   it('does not scroll to top if shouldReloadReset is false and pathname does not change', () => {
@@ -89,7 +89,7 @@ describe('ScrollToTop Component', () => {
       fireEvent.click(screen.getByTestId('go-page-1'));
     });
 
-    expect(container.textContent).to.contain('Go to page 2');
-    expect(mockScroll).to.not.called;
+    expect(container.textContent).toContain('Go to page 2');
+    expect(mockScroll.called).toBe(false);
   });
 });

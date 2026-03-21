@@ -1,7 +1,6 @@
-import { expect } from 'chai';
 import type { Response as ExpressResponse } from 'express';
 import sinon from 'sinon';
-import { describe, it, afterEach } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import handleResponse from '@helpers/handle-response';
 
 describe('handleResponse', () => {
@@ -23,7 +22,7 @@ describe('handleResponse', () => {
     );
 
     expect(result).to.equal(defaultStatus);
-    expect(res.redirect.notCalled).to.be.true;
+    expect(res.redirect.notCalled).toBe(true);
   });
 
   it('should redirect and return undefined if status is between 300 and 399', () => {
@@ -37,8 +36,8 @@ describe('handleResponse', () => {
       defaultStatus,
     );
 
-    expect(result).to.be.undefined;
-    expect(res.redirect.calledOnceWithExactly(302, '/redirect-path')).to.be.true;
+    expect(result).toBeUndefined();
+    expect(res.redirect.calledOnceWithExactly(302, '/redirect-path')).toBe(true);
   });
 
   it('should return response status if it is not a redirect status', () => {
@@ -53,7 +52,7 @@ describe('handleResponse', () => {
     );
 
     expect(result).to.equal(500);
-    expect(res.redirect.notCalled).to.be.true;
+    expect(res.redirect.notCalled).toBe(true);
   });
 
   it('should return default status if response status is undefined', () => {
@@ -68,7 +67,7 @@ describe('handleResponse', () => {
     );
 
     expect(result).to.equal(defaultStatus);
-    expect(res.redirect.notCalled).to.be.true;
+    expect(res.redirect.notCalled).toBe(true);
   });
 
   it('should return default status if response is null', () => {
@@ -83,6 +82,6 @@ describe('handleResponse', () => {
     );
 
     expect(result).to.equal(defaultStatus);
-    expect(res.redirect.notCalled).to.be.true;
+    expect(res.redirect.notCalled).toBe(true);
   });
 });
