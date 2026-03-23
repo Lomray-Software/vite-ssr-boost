@@ -11,3 +11,5 @@ build
 lib
 cache
 .env.*
+docs/.vitepress/dist
+docs/.vitepress/cache

@@ -26,6 +26,9 @@
   "scripts": {
     "build": "rollup -c",
     "build:watch": "rollup -c -w",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
     "release": "npm run build && cd lib && npm publish",
     "lint:check": "eslint . --max-warnings=0",
     "lint:format": "eslint . --fix",
@@ -71,6 +74,7 @@
     "semantic-release": "^25.0.3",
     "sinon": "^21.0.3",
     "typescript": "^5.3.3",
+    "vitepress": "^1.6.4",
     "vitest": "^4.1.0"
   },
   "peerDependencies": {
