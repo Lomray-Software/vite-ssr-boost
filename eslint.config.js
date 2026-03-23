@@ -11,6 +11,7 @@ export default [
     ignores: [
       ...baseConfig['filesIgnores'].ignores,
       'coverage/**',
+      'docs/**',
       'lib/**',
       'node_modules/**',
       '*.js',

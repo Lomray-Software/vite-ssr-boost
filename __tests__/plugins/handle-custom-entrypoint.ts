@@ -23,7 +23,8 @@ const getTransformHook = (plugin: ReturnType<typeof ViteHandleCustomEntrypointPl
 const getTransformIndexHtmlHook = (plugin: ReturnType<typeof ViteHandleCustomEntrypointPlugin>) =>
   (typeof plugin.transformIndexHtml === 'function'
     ? plugin.transformIndexHtml
-    : plugin.transformIndexHtml?.handler) as any;
+    : // @ts-expect-error just needed
+      plugin.transformIndexHtml?.handler) as any;
 const getCloseBundleHook = (plugin: ReturnType<typeof ViteHandleCustomEntrypointPlugin>) =>
   (typeof plugin.closeBundle === 'function'
     ? plugin.closeBundle
