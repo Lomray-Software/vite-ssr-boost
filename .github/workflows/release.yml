@@ -50,6 +50,19 @@ jobs:
       - name: Prove core works without optional adapters
         run: npm run test:core:no-optional
 
+      - uses: actions/checkout@v4
+        with:
+          path: acceptance/vite-template
+          ref: prod
+          repository: Lomray-Software/vite-template
+
+      - name: Install template dependencies
+        working-directory: acceptance/vite-template
+        run: npm ci --ignore-scripts
+
+      - name: Test template in development and production
+        run: node scripts/test-template.mjs acceptance/vite-template
+
       - name: Release
         run: npx semantic-release
         env:

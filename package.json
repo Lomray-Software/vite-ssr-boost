@@ -35,6 +35,7 @@
     "ts:check": "tsc --project ./tsconfig.json --skipLibCheck --noemit",
     "test": "vitest run",
     "test:core:no-optional": "node scripts/test-core-no-optional.mjs",
+    "test:template": "npm run build && node scripts/test-template.mjs",
     "test:coverage": "vitest run --coverage",
     "prepare": "husky"
   },
