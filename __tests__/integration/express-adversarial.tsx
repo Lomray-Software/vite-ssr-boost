@@ -10,6 +10,7 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from 'exp
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import entry from '@node/entry';
 import createServer from '@node/server';
+import splitLinkHeader from '@node/split-link-header';
 
 type TScenario =
   | 'backpressure'
@@ -395,10 +396,9 @@ describe('Express adversarial contract', () => {
     const earlyHints = response.information.find(({ statusCode }) => statusCode === 103);
 
     expect(earlyHints).toBeDefined();
-    expect(getHeaderValues(earlyHints!.rawHeaders, 'link')).toEqual([
-      '</fixture.css>; rel=preload; as=style',
-      '</fixture.js>; rel=preload; as=script',
-    ]);
+    expect(
+      getHeaderValues(earlyHints!.rawHeaders, 'link').flatMap((value) => splitLinkHeader(value)),
+    ).toEqual(['</fixture.css>; rel=preload; as=style', '</fixture.js>; rel=preload; as=script']);
     expect(response.statusCode).toBe(200);
   });
 

@@ -1,11 +1,9 @@
 import fs from 'node:fs';
-import type { Socket } from 'node:net';
 import path from 'node:path';
 import chalk from 'chalk';
-import type { RouterState } from 'react-router';
+import type { RouterState, StaticHandlerContext } from 'react-router';
 import type { Alias, ModuleNode, RenderBuiltAssetUrl } from 'vite';
 import type { IAsyncRoute } from '@helpers/import-route';
-import type { IRequestContext } from '@node/render';
 import type { TRoutesTree } from '@services/parse-routes';
 import ParseRoutes from '@services/parse-routes';
 import PathNormalize from '@services/path-normalize';
@@ -46,7 +44,12 @@ interface IAsset {
 
 type TAssets = { [id: string]: IAsset };
 
-const CRLF = '\r\n';
+interface IInjectAssetsContext {
+  html: {
+    header: string;
+  };
+  routerContext?: StaticHandlerContext;
+}
 
 /**
  * Working with SSR Manifest file
@@ -467,25 +470,24 @@ class SsrManifest {
     }
   }
 
-  /**
-   * Write 103 Early Hits header
-   */
-  public writeEarlyHits(assets: IAsset[], socket: Socket): void {
-    socket.write(`HTTP/1.1 103 Early Hints${CRLF}`);
+  public getEarlyHints(assets: IAsset[]): Headers {
+    const headers = new Headers();
+
     assets.forEach(({ type, url }) => {
       if (!type || !['style', 'script'].includes(type)) {
         return;
       }
 
-      socket.write(`Link: <${url}>; rel=preload; as=${type}${CRLF}`);
+      headers.append('Link', `<${url}>; rel=preload; as=${type}`);
     });
-    socket.write(CRLF);
+
+    return headers;
   }
 
   /**
    * Inject route assets to head html
    */
-  public injectAssets({ routerContext, html, res, hasEarlyHints = false }: IRequestContext): void {
+  public injectAssets({ routerContext, html }: IInjectAssetsContext): Headers {
     const assets = this.getAssets(routerContext?.matches);
     const htmlAssets = assets
       .map(({ type, url, isPreload, content = '' }) => {
@@ -510,9 +512,7 @@ class SsrManifest {
 
     html.header = html.header.replace('</head>', `${htmlAssets.join('\n')}</head>`);
 
-    if (hasEarlyHints && htmlAssets.length && res.socket) {
-      this.writeEarlyHits(assets, res.socket);
-    }
+    return this.getEarlyHints(assets);
   }
 }
 

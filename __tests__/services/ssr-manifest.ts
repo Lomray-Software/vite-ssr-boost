@@ -204,7 +204,6 @@ describe('SsrManifest', () => {
     const manifest = SsrManifest.get(createConfig(true), {
       buildDir: 'dist',
     }) as unknown as TSsrManifestPrivate;
-    const socket = { write: vi.fn() };
     const html = { header: '<head></head>', footer: '</body>' };
     vi.spyOn(manifest, 'getAssets').mockReturnValue([
       { type: 'style', url: '/a.css', weight: 1, isNested: false, isPreload: false } as any,
@@ -219,22 +218,14 @@ describe('SsrManifest', () => {
     expect(manifest.getAssetType('a.woff2')).toBe('font');
     expect(manifest.getAssetType('a.unknown')).toBeNull();
 
-    manifest.writeEarlyHits(
-      [
-        { type: 'style', url: '/a.css' } as any,
-        { type: 'script', url: '/a.js' } as any,
-        { type: 'image', url: '/a.png' } as any,
-      ],
-      socket,
-    );
-    manifest.injectAssets({
+    const earlyHints = manifest.injectAssets({
       routerContext: { matches: [] } as any,
       html,
-      res: { socket: socket as any } as any,
-      hasEarlyHints: true,
     });
 
-    expect(socket.write).toHaveBeenCalled();
+    expect(earlyHints.get('link')).toContain('</a.css>');
+    expect(earlyHints.get('link')).toContain('</app.js>');
+    expect(earlyHints.get('link')).not.toContain('</img.png>');
     expect(html.header).toContain('<style data-vite-dev-id="/a.css"></style>');
     expect(html.header).toContain(
       '<script async type="module" crossorigin src="/app.js"></script>',

@@ -1,6 +1,6 @@
 import { performance } from 'node:perf_hooks';
-import type { Express } from 'express';
 import printServerInfo from '@helpers/print-server-info';
+import type { ICreateServerOut } from '@node/server';
 import createServer from '@node/server';
 import ServerConfig from '@services/server-config';
 
@@ -15,7 +15,7 @@ interface IRunServerlessParams {
 async function runServerless({
   version,
   modulePreload = false,
-}: IRunServerlessParams): Promise<Express> {
+}: IRunServerlessParams): Promise<ICreateServerOut['app']> {
   if (!global.viteBoostStartTime) {
     global.viteBoostStartTime = performance.now();
   }
