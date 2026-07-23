@@ -35,6 +35,7 @@ export default {
     'node:process',
     'node:child_process',
     'node:fs',
+    'node:stream',
     'node:url',
     'node:http',
     'node:https',

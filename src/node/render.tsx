@@ -1,18 +1,16 @@
 import chalk from 'chalk';
 import type { Request, Response as ExpressResponse } from 'express';
 import React from 'react';
-import { renderToPipeableStream } from 'react-dom/server';
 import type { StaticHandlerContext, StaticHandler } from 'react-router';
-import { createStaticRouter, StaticRouterProvider } from 'react-router';
 import StreamError from '@constants/stream-error';
 import type { IServerContext } from '@context/server';
-import { ServerProvider } from '@context/server';
-import handleResponse from '@helpers/handle-response';
+import coreRender from '@core/render';
+import type { ISsrRequestContext } from '@core/render';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
-import obtainStreamError from '@helpers/obtain-stream-error';
 import createFetchRequest from '@node/create-fetch-request';
 import type { TApp } from '@node/entry';
-import writeResponse from '@node/write-response';
+import renderToStream from '@node/render-to-stream';
+import writeFetchResponse from '@node/write-fetch-response';
 import type ServerConfig from '@services/server-config';
 import SsrManifest from '@services/ssr-manifest';
 
@@ -85,108 +83,38 @@ async function render(
     abortDelay = 15000,
   }: IRenderOptions,
 ): Promise<void> {
-  const { req, res } = context;
-  const fetchRequest = createFetchRequest(req);
-
-  context.routerContext = (await handler.query(fetchRequest, {
-    requestContext: context,
-  })) as StaticHandlerContext;
-
-  /**
-   * Handle response from page loader, router context can be Response
-   */
-  const statusCode = handleResponse(res, context.routerContext);
-
-  if (!statusCode) {
-    return;
-  }
-
-  SsrManifest.get(config).injectAssets(context);
-
-  const { isStream = true } = (await onRouterReady?.({ context })) ?? {};
-
-  context.isStream = isStream;
-  context.serverContext = {
-    response: null,
-    isServer: true,
-    basename: context.routerContext?.basename,
-  };
-
-  const router = createStaticRouter(handler.dataRoutes, context.routerContext);
-  const write = res.write.bind(res) as (...args: unknown[]) => boolean;
+  const { appProps, html: shellHtml, req, res } = context;
   const Logger = config.getLogger();
-  let abortTimer: NodeJS.Timeout | undefined = undefined;
-
-  /**
-   * Listen response and stream to add possibility modify html on fly
-   * E.g. listen stream and append some data
-   */
-  res.write = (data: string | Uint8Array, ...args): boolean => {
-    const isString = typeof data === 'string';
-    const html = isString ? data : Buffer.from(data).toString();
-    const modifiedHtml = onResponse?.({ context, html });
-
-    if (modifiedHtml) {
-      return write(isString ? modifiedHtml : Buffer.from(modifiedHtml), ...args);
-    }
-
-    return write(data, ...args);
+  const coreContext: ISsrRequestContext = {
+    appProps,
+    html: shellHtml,
+    request: createFetchRequest(req),
   };
+  const syncContext = (updated: ISsrRequestContext): IRequestContext => {
+    context.didError = updated.didError;
+    context.html = updated.html;
+    context.isStream = updated.isStream;
+    context.routerContext = updated.routerContext;
+    context.serverContext = updated.serverContext;
 
-  const { serverContext, routerContext, appProps } = context;
-
-  const { pipe, abort } = renderToPipeableStream(
-    <ServerProvider context={serverContext}>
-      <App server={{ ...appProps, req }}>
-        <StaticRouterProvider router={router} context={routerContext} hydrate={false} />
-      </App>
-    </ServerProvider>,
+    return context;
+  };
+  const response = await coreRender(
     {
-      onShellReady(): void {
-        if (!isStream) {
-          return;
-        }
-
-        writeResponse(context, {
-          pipe,
-          statusCode,
-          onShellReady,
-          getState,
-        });
-      },
-      onAllReady(): void {
-        clearTimeout(abortTimer);
-
-        if (isStream) {
-          return;
-        }
-
-        writeResponse(context, {
-          pipe,
-          statusCode,
-          onShellReady,
-          getState,
-        });
-      },
-      onShellError(e: Error): void {
-        const htmlError =
-          onShellError?.({ context, error: e }) ||
-          `<!doctype html><p>Something went wrong: ${e.message}</p>`;
-
-        res.status(500);
-        res.setHeader('content-type', 'text/html');
-        res.send(htmlError);
-      },
-      onError(err): void {
-        clearTimeout(abortTimer);
-
-        const error = obtainStreamError(err);
+      createApp: (children, updated) => <App server={{ ...updated.appProps, req }}>{children}</App>,
+      handler,
+      renderToStream,
+    },
+    coreContext,
+    {
+      abortDelay,
+      getState: getState
+        ? ({ context: updated }) => getState({ context: syncContext(updated) })
+        : undefined,
+      onError: ({ context: updated, error }) => {
         const { code, message } = error;
-        const { didError } = context;
 
-        context.didError = didError ?? code;
-
-        onError?.({ context, error });
+        onError?.({ context: syncContext(updated), error });
         Logger.info(chalk.red(`Stream error. Code: ${code}`));
 
         if (
@@ -199,22 +127,40 @@ async function render(
           return;
         }
 
-        Logger.error(err as string);
+        const { original } = error;
+
+        Logger.error(original as string);
       },
+      onResponse: onResponse
+        ? ({ context: updated, html }) => onResponse({ context: syncContext(updated), html })
+        : undefined,
+      onRouterReady: onRouterReady
+        ? ({ context: updated }) => onRouterReady({ context: syncContext(updated) })
+        : undefined,
+      onShellError: onShellError
+        ? ({ context: updated, error }) => onShellError({ context: syncContext(updated), error })
+        : undefined,
+      onShellReady: onShellReady
+        ? ({ context: updated }) => onShellReady({ context: syncContext(updated) })
+        : undefined,
+      prepare: ({ context: updated }) => {
+        SsrManifest.get(config).injectAssets(syncContext(updated));
+      },
+      routerRequestContext: context,
     },
   );
 
-  // Abandon and switch to client rendering if enough time passes.
-  abortTimer = setTimeout(() => {
-    context.didError = StreamError.RenderTimeout;
-    abort();
-  }, abortDelay);
+  syncContext(coreContext);
 
-  // Detect cancel request
-  req.on('close', () => {
-    context.didError = StreamError.RenderCancel;
-    abort();
-  });
+  const location = response.headers.get('Location');
+
+  if (location && response.status >= 300 && response.status < 400) {
+    res.redirect(response.status, location);
+
+    return;
+  }
+
+  await writeFetchResponse(res, response);
 }
 
 export default render;

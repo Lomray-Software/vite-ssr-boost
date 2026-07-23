@@ -475,7 +475,8 @@ describe('Express adversarial contract', () => {
 
     expect(fixture.backpressureCount).toBeGreaterThan(0);
     expect(fixture.drainCount).toBe(fixture.backpressureCount);
-    expect(response.body.toString().endsWith('<span data-final-chunk>final</span>')).toBe(true);
+    expect(response.body.toString()).toContain('<span data-final-chunk>final</span>');
+    expect(response.body.toString()).toContain('data-fixture-footer');
   });
 
   it('rejects header mutation after the first flush without truncating the document', async () => {
