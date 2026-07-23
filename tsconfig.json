@@ -43,6 +43,7 @@
       "@components/*": ["./src/components/*"],
       "@constants/*": ["./src/constants/*"],
       "@context/*": ["./src/context/*"],
+      "@core/*": ["./src/core/*"],
       "@helpers/*": ["./src/helpers/*"],
       "@interfaces/*": ["./src/interfaces/*"],
       "@node/*": ["./src/node/*"],
