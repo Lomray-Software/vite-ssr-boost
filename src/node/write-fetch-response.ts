@@ -1,7 +1,7 @@
-import type { Response as ExpressResponse } from 'express';
+import type { ServerResponse } from 'node:http';
 import { getHeaderEntries, getSetCookieHeaders } from '@core/headers';
 
-const waitForDrain = (res: ExpressResponse): Promise<void> =>
+const waitForDrain = (res: ServerResponse): Promise<void> =>
   new Promise((resolve, reject) => {
     const cleanup = (): void => {
       res.off('close', onClose);
@@ -26,8 +26,8 @@ const waitForDrain = (res: ExpressResponse): Promise<void> =>
     res.once('error', onError);
   });
 
-const writeFetchResponse = async (res: ExpressResponse, response: Response): Promise<void> => {
-  res.status(response.status);
+const writeFetchResponse = async (res: ServerResponse, response: Response): Promise<void> => {
+  res.statusCode = response.status;
 
   getHeaderEntries(response.headers).forEach(([name, value]) => res.setHeader(name, value));
   getSetCookieHeaders(response.headers).forEach((cookie) => res.appendHeader('Set-Cookie', cookie));

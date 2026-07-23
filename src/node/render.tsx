@@ -89,6 +89,9 @@ async function render(
     appProps,
     html: shellHtml,
     request: createFetchRequest(req),
+    response: {
+      headers: new Headers(),
+    },
   };
   const syncContext = (updated: ISsrRequestContext): IRequestContext => {
     context.didError = updated.didError;

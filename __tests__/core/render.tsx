@@ -2,12 +2,7 @@
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import render from '@core/render';
-import type {
-  IRenderStream,
-  IRenderStreamOptions,
-  ISsrRequestContext,
-  TRenderToStream,
-} from '@core/render';
+import type { IRenderStream, ISsrRequestContext, TRenderToStream } from '@core/render';
 
 const createRouter = (queryResult?: Response) => {
   const route = {
@@ -47,16 +42,30 @@ const createRouter = (queryResult?: Response) => {
 };
 
 const createRenderer = () => {
-  let callbacks!: IRenderStreamOptions;
   let controller!: ReadableStreamDefaultController<Uint8Array>;
+  let onError!: (error: unknown) => void;
+  let rejectAll!: (error: Error) => void;
+  let rejectShell!: (error: Error) => void;
+  let resolveAll!: () => void;
+  let resolveShell!: () => void;
   const abort = vi.fn();
+  const allReady = new Promise<void>((resolve, reject) => {
+    rejectAll = reject;
+    resolveAll = resolve;
+  });
+  const shellReady = new Promise<void>((resolve, reject) => {
+    rejectShell = reject;
+    resolveShell = resolve;
+  });
   const stream = new ReadableStream<Uint8Array>({
     start: (streamController) => {
       controller = streamController;
     },
   });
   const output: IRenderStream = {
+    allReady,
     abort,
+    shellReady,
     start: vi.fn(() => {
       controller.enqueue(new TextEncoder().encode('BODY'));
       controller.close();
@@ -64,15 +73,21 @@ const createRenderer = () => {
     stream,
   };
   const renderToStream: TRenderToStream = vi.fn((_, options) => {
-    callbacks = options;
+    onError = options.onError;
 
     return output;
   });
 
   return {
     abort,
-    getCallbacks: () => callbacks,
+    allReady: resolveAll,
+    onError: (error: unknown) => onError(error),
     output,
+    shellError: (error: Error) => {
+      rejectAll(error);
+      rejectShell(error);
+    },
+    shellReady: resolveShell,
     renderToStream,
   };
 };
@@ -84,6 +99,9 @@ const createContext = (request = new Request('http://localhost/')): ISsrRequestC
     header: 'HEADER-',
   },
   request,
+  response: {
+    headers: new Headers(),
+  },
 });
 
 const createApp = (children: ReactNode): ReactNode => children;
@@ -106,11 +124,11 @@ describe('core render', () => {
     );
 
     await vi.waitFor(() => expect(renderer.renderToStream).toHaveBeenCalledOnce());
-    renderer.getCallbacks().onShellReady();
+    renderer.shellReady();
 
     const response = await pending;
 
-    renderer.getCallbacks().onAllReady();
+    renderer.allReady();
 
     const html = await response.text();
 
@@ -138,10 +156,10 @@ describe('core render', () => {
     );
 
     await vi.waitFor(() => expect(renderer.renderToStream).toHaveBeenCalledOnce());
-    renderer.getCallbacks().onShellReady();
+    renderer.shellReady();
     expect(renderer.output.start).not.toHaveBeenCalled();
 
-    renderer.getCallbacks().onAllReady();
+    renderer.allReady();
 
     await expect(pending).resolves.toBeInstanceOf(Response);
     expect(renderer.output.start).toHaveBeenCalledOnce();
@@ -183,7 +201,7 @@ describe('core render', () => {
     );
 
     await vi.waitFor(() => expect(renderer.renderToStream).toHaveBeenCalledOnce());
-    renderer.getCallbacks().onShellError(new Error('broken'));
+    renderer.shellError(new Error('broken'));
 
     const response = await pending;
 
@@ -210,7 +228,7 @@ describe('core render', () => {
 
     expect(renderer.abort).toHaveBeenCalledWith('client closed');
 
-    renderer.getCallbacks().onShellError(new Error('aborted'));
+    renderer.shellError(new Error('aborted'));
     await pending;
   });
 });

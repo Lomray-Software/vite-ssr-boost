@@ -13,30 +13,40 @@ import buildRouterState from '@helpers/build-router-state';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import obtainStreamError from '@helpers/obtain-stream-error';
 
+const HTML_CONTENT_TYPE = 'text/html';
+const CONTENT_TYPE = 'Content-Type';
+
 export interface ISsrRequestContext<TAppProps = Record<string, any>> {
   appProps: NonNullable<TAppProps>;
   didError?: StreamError;
   html: { footer: string; header: string };
   isStream?: boolean;
   request: Request;
+  response: {
+    headers: Headers;
+    status?: number;
+  };
   routerContext?: StaticHandlerContext;
   serverContext?: IServerContext;
 }
 
 export interface IRenderStreamOptions {
-  onAllReady: () => void;
   onError: (error: unknown) => void;
-  onShellError: (error: Error) => void;
-  onShellReady: () => void;
+  signal: AbortSignal;
 }
 
 export interface IRenderStream {
+  allReady: Promise<void>;
   abort: (reason?: unknown) => void;
+  shellReady: Promise<void>;
   start: () => void;
   stream: ReadableStream<Uint8Array>;
 }
 
-export type TRenderToStream = (node: ReactNode, options: IRenderStreamOptions) => IRenderStream;
+export type TRenderToStream = (
+  node: ReactNode,
+  options: IRenderStreamOptions,
+) => IRenderStream | Promise<IRenderStream>;
 
 export interface ICoreRenderParams<TAppProps = Record<string, any>> {
   createApp: (children: ReactNode, context: ISsrRequestContext<TAppProps>) => ReactNode;
@@ -124,109 +134,88 @@ const render = async <TAppProps,>(
       )}
     </ServerProvider>
   );
+  // Assigned after the renderer is created; its onError hook can run during creation.
+  // eslint-disable-next-line prefer-const
+  let abortTimer: ReturnType<typeof setTimeout> | undefined;
+  const output = await renderToStream(node, {
+    onError: (error) => {
+      clearTimeout(abortTimer);
 
-  return new Promise<Response>((resolve) => {
-    // Assigned after callbacks are created; renderers invoke them asynchronously.
-    // eslint-disable-next-line prefer-const
-    let abortTimer: ReturnType<typeof setTimeout> | undefined;
-    let hasResolved = false;
-    // eslint-disable-next-line prefer-const
-    let output: IRenderStream;
+      const streamError = obtainStreamError(error);
+      const { code } = streamError;
 
-    const resolveShell = (): void => {
-      if (hasResolved) {
-        return;
-      }
+      context.didError ??= code;
+      onError?.({ context, error: streamError });
+    },
+    signal: context.request.signal,
+  });
+  const abort = (reason?: unknown): void => {
+    context.didError ??= StreamError.RenderCancel;
+    output.abort(reason);
+  };
 
-      const serverResponse = context.serverContext?.response;
-
-      if (serverResponse && isRedirect(serverResponse)) {
-        hasResolved = true;
-        output.abort();
-        resolve(serverResponse);
-
-        return;
-      }
-
-      const shell = onShellReady?.({ context }) ?? {};
-      const routerState = buildRouterState(context.routerContext!);
-      const customState = buildCustomState(getState?.({ context }));
-      const header = shell.header || context.html.header;
-      const footer = routerState + customState + (shell.footer || context.html.footer);
-      const body = composeHtml(header, output.stream, footer);
-      const transformed = transformHtml(body, (html) => onResponse?.({ context, html }));
-      const headers = new Headers({ 'Content-Type': 'text/html' });
-
-      hasResolved = true;
-      output.start();
-      resolve(
-        new Response(transformed, {
-          headers,
-          status: serverResponse?.status ?? 200,
-        }),
-      );
-    };
-
-    output = renderToStream(node, {
-      onAllReady: () => {
-        clearTimeout(abortTimer);
-
-        if (!isStream) {
-          resolveShell();
-        }
-      },
-      onError: (error) => {
-        clearTimeout(abortTimer);
-
-        const streamError = obtainStreamError(error);
-        const { code } = streamError;
-
-        context.didError ??= code;
-        onError?.({ context, error: streamError });
-      },
-      onShellError: (error) => {
-        if (hasResolved) {
-          return;
-        }
-
-        clearTimeout(abortTimer);
-        hasResolved = true;
-
-        const html =
-          onShellError?.({ context, error }) ||
-          `<!doctype html><p>Something went wrong: ${error.message}</p>`;
-
-        resolve(
-          new Response(html, {
-            headers: { 'Content-Type': 'text/html' },
-            status: 500,
-          }),
-        );
-      },
-      onShellReady: () => {
-        if (isStream) {
-          resolveShell();
-        }
-      },
+  if (context.request.signal.aborted) {
+    abort(context.request.signal.reason);
+  } else {
+    context.request.signal.addEventListener('abort', () => abort(context.request.signal.reason), {
+      once: true,
     });
+  }
 
-    const abort = (reason?: unknown): void => {
-      context.didError ??= StreamError.RenderCancel;
-      output.abort(reason);
-    };
+  abortTimer = setTimeout(() => {
+    context.didError = StreamError.RenderTimeout;
+    output.abort();
+  }, abortDelay);
+  void output.allReady.then(
+    () => clearTimeout(abortTimer),
+    () => clearTimeout(abortTimer),
+  );
 
-    if (context.request.signal.aborted) {
-      abort(context.request.signal.reason);
-    } else {
-      context.request.signal.addEventListener('abort', () => abort(context.request.signal.reason), {
-        once: true,
-      });
-    }
+  try {
+    await (isStream ? output.shellReady : output.allReady);
+  } catch (error) {
+    clearTimeout(abortTimer);
 
-    abortTimer = setTimeout(() => {
-      context.didError = StreamError.RenderTimeout;
-      output.abort();
-    }, abortDelay);
+    const shellError = error as Error;
+    const html =
+      onShellError?.({ context, error: shellError }) ||
+      `<!doctype html><p>Something went wrong: ${shellError.message}</p>`;
+    const headers = new Headers(context.response.headers);
+
+    headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
+
+    return new Response(html, {
+      headers,
+      status: 500,
+    });
+  }
+
+  const serverResponse = context.serverContext.response;
+
+  if (serverResponse && isRedirect(serverResponse)) {
+    output.abort();
+
+    return serverResponse;
+  }
+
+  const shell = onShellReady?.({ context }) ?? {};
+  const routerState = buildRouterState(context.routerContext);
+  const customState = buildCustomState(getState?.({ context }));
+  const header = shell.header || context.html.header;
+  const footer = routerState + customState + (shell.footer || context.html.footer);
+  const body = composeHtml(header, output.stream, footer);
+  const transformed = transformHtml(body, (html) => onResponse?.({ context, html }));
+  const headers = new Headers(context.response.headers);
+
+  if (!headers.has(CONTENT_TYPE)) {
+    headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
+  }
+
+  output.start();
+
+  return new Response(transformed, {
+    headers,
+    status: serverResponse?.status ?? context.response.status ?? 200,
   });
 };
 
