@@ -34,16 +34,19 @@
     "lint:format": "eslint . --fix",
     "ts:check": "tsc --project ./tsconfig.json --skipLibCheck --noemit",
     "test": "vitest run",
+    "test:core:no-optional": "node scripts/test-core-no-optional.mjs",
     "test:coverage": "vitest run --coverage",
     "prepare": "husky"
   },
   "dependencies": {
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
-    "compression": "^1.8.1",
-    "express": "^5.2.1",
     "hoist-non-react-statics": "^3.3.2",
     "json5": "^2.2.3"
+  },
+  "optionalDependencies": {
+    "compression": "^1.8.1",
+    "express": "^5.2.1"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.0",

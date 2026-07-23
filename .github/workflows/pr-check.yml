@@ -50,6 +50,9 @@ jobs:
           npm pkg delete scripts.prepare
           npm run build
 
+      - name: Prove core works without optional adapters
+        run: npm run test:core:no-optional
+
   sonarcube:
     runs-on: ubuntu-latest
     needs: [check]

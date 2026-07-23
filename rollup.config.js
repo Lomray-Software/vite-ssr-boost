@@ -24,6 +24,7 @@ export default {
     'fs',
     'path',
     'url',
+    'compression',
     'express',
     'react',
     'readline',

@@ -47,6 +47,9 @@ jobs:
           npm pkg delete scripts.prepare
           npm run build
 
+      - name: Prove core works without optional adapters
+        run: npm run test:core:no-optional
+
       - name: Release
         run: npx semantic-release
         env:
