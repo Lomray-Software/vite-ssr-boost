@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -107,15 +107,22 @@ const waitUntilReady = async (origin, child) => {
 
 const inspectStream = (origin, pathname, headers = {}) =>
   new Promise((resolveStream, reject) => {
+    const started = performance.now();
     const request = http.get(new URL(pathname, origin), { headers }, (response) => {
       const chunks = [];
+      let firstChunkMs;
 
-      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('data', (chunk) => {
+        firstChunkMs ??= performance.now() - started;
+        chunks.push(chunk);
+      });
       response.on('end', () => {
         resolveStream({
           chunks: chunks.length,
+          firstChunkMs,
           html: Buffer.concat(chunks).toString('utf8'),
           status: response.statusCode,
+          totalMs: performance.now() - started,
         });
       });
     });
@@ -130,6 +137,7 @@ const verify = async (origin, mode) => {
     ['/not-lazy', 200],
     ['/redirect-demo', 301],
     ['/missing', 404],
+    ['/vite.svg', 200],
   ];
 
   for (const [pathname, expectedStatus] of cases) {
@@ -142,6 +150,7 @@ const verify = async (origin, mode) => {
 
   assert.equal(streamed.status, 200, `${mode} streamed status`);
   assert.ok(streamed.chunks > 1, `${mode} did not stream multiple chunks`);
+  assert.ok(streamed.firstChunkMs < streamed.totalMs, `${mode} shell was not streamed early`);
   assert.match(streamed.html, /window\.__staticRouterHydrationData/);
   assert.match(streamed.html, /<\/html>/);
 
@@ -151,9 +160,48 @@ const verify = async (origin, mode) => {
   assert.match(buffered.html, /window\.__staticRouterHydrationData/);
   assert.match(buffered.html, /<\/html>/);
 
+  const home = await inspectStream(origin, '/');
+
   console.info(
-    `${mode}: routes passed; streamed=${streamed.chunks} chunks; buffered=${buffered.chunks} chunks`,
+    `${mode}: routes passed; streamed=${streamed.chunks} chunks (${Math.round(
+      streamed.firstChunkMs,
+    )}ms/${Math.round(streamed.totalMs)}ms); buffered=${buffered.chunks} chunks`,
   );
+
+  return home.firstChunkMs;
+};
+
+const verifyHmr = async (origin) => {
+  const filename = join(directory, 'src', 'pages', 'home', 'index.tsx');
+  const original = await readFile(filename, 'utf8');
+  const current = 'SPA, SSR, Mobx, Consistent Suspense, Meta tags';
+  const marker = 'SSR dev reload accepted';
+
+  assert.ok(original.includes(current), 'Template HMR marker source changed.');
+
+  try {
+    await writeFile(filename, original.replace(current, marker));
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const html = await fetch(origin, {
+        headers: { 'Cache-Control': 'no-cache' },
+      }).then((response) => response.text());
+
+      if (html.includes(marker)) {
+        console.info('development: SSR module reload passed');
+
+        return;
+      }
+
+      await new Promise((resolveTimeout) => {
+        setTimeout(resolveTimeout, 100);
+      });
+    }
+
+    throw new Error('Development SSR module reload timed out.');
+  } finally {
+    await writeFile(filename, original);
+  }
 };
 
 try {
@@ -167,6 +215,23 @@ try {
   }
 
   await cp(join(source, 'node_modules'), join(directory, 'node_modules'), { recursive: true });
+
+  await run(['build']);
+
+  const baselinePort = await getPort();
+  const baseline = start(['start', '--port', String(baselinePort)]);
+  let baselineTtfb;
+
+  try {
+    const origin = `http://127.0.0.1:${baselinePort}`;
+
+    await waitUntilReady(origin, baseline);
+    baselineTtfb = (await inspectStream(origin, '/')).firstChunkMs;
+    console.info(`baseline production TTFB: ${Math.round(baselineTtfb)}ms`);
+  } finally {
+    await stop(baseline);
+  }
+
   await rm(join(directory, 'node_modules', '@lomray', 'vite-ssr-boost'), {
     force: true,
     recursive: true,
@@ -186,6 +251,7 @@ try {
 
     await waitUntilReady(origin, dev);
     await verify(origin, 'development');
+    await verifyHmr(origin);
   } finally {
     await stop(dev);
   }
@@ -199,7 +265,18 @@ try {
     const origin = `http://127.0.0.1:${prodPort}`;
 
     await waitUntilReady(origin, prod);
-    await verify(origin, 'production');
+    const candidateTtfb = await verify(origin, 'production');
+    const allowedTtfb = baselineTtfb + Math.max(100, baselineTtfb);
+
+    assert.ok(
+      candidateTtfb <= allowedTtfb,
+      `Production TTFB regressed: ${Math.round(baselineTtfb)}ms -> ${Math.round(
+        candidateTtfb,
+      )}ms (allowed ${Math.round(allowedTtfb)}ms).`,
+    );
+    console.info(
+      `production TTFB: ${Math.round(baselineTtfb)}ms -> ${Math.round(candidateTtfb)}ms`,
+    );
   } finally {
     await stop(prod);
   }
