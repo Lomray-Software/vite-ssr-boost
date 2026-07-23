@@ -1,14 +1,13 @@
 import type { IncomingMessage } from 'node:http';
 
 interface ICreateRequestOptions {
+  body?: BodyInit | null;
   origin?: string;
   signal?: AbortSignal;
 }
 
-const createRequest = (
-  req: IncomingMessage,
-  { origin, signal }: ICreateRequestOptions = {},
-): Request => {
+const createRequest = (req: IncomingMessage, options: ICreateRequestOptions = {}): Request => {
+  const { body, origin, signal } = options;
   const headers = new Headers();
 
   for (const [name, values] of Object.entries(req.headers)) {
@@ -28,7 +27,7 @@ const createRequest = (
   };
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    init.body = req as unknown as BodyInit;
+    init.body = 'body' in options ? body : (req as unknown as BodyInit);
     init.duplex = 'half';
   }
 

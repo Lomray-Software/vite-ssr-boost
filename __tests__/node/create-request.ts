@@ -44,4 +44,11 @@ describe('createRequest', () => {
     expect(request.url).toBe('https://public.example/path?query=1');
     expect(request.signal.aborted).toBe(true);
   });
+
+  it('uses an explicit parsed body supplied by an adapter', async () => {
+    const incoming = createIncomingMessage('ignored');
+    const request = createRequest(incoming as never, { body: 'parsed' });
+
+    await expect(request.text()).resolves.toBe('parsed');
+  });
 });

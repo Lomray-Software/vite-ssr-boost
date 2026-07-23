@@ -31,7 +31,7 @@ describe('Node adapter', () => {
       hints.append('Link', '</app.js>; rel=preload; as=script');
       headers.append('Set-Cookie', 'one=1; Path=/');
       headers.append('Set-Cookie', 'two=2; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/');
-      await context?.earlyHints?.(hints);
+      await context?.onEarlyHints?.(hints);
 
       return new Response(`url=${request.url};body=${await request.text()}`, {
         headers,

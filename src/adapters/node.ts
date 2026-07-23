@@ -13,7 +13,7 @@ const handleRequest = async (
   res: ServerResponse,
 ): Promise<void> => {
   const response = await handler(request, {
-    earlyHints: (headers) => writeEarlyHints(res, headers),
+    onEarlyHints: (headers) => writeEarlyHints(res, headers),
   });
 
   await writeFetchResponse(res, response);

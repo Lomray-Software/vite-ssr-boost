@@ -4,7 +4,7 @@ const emitEarlyHints = async (
   context: ISsrExecutionContext | undefined,
   headers: Headers,
 ): Promise<void> => {
-  await context?.earlyHints?.(headers);
+  await context?.onEarlyHints?.(headers);
 };
 
 export default emitEarlyHints;
