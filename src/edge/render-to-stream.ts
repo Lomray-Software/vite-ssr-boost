@@ -3,7 +3,19 @@ import type { TRenderToStream } from '@core/render';
 
 const renderToStream: TRenderToStream = async (node, { onError, signal }) => {
   const controller = new AbortController();
-  const abort = (): void => controller.abort(signal.reason);
+  let rejectPending!: (reason: Error) => void;
+  const pendingAbort = new Promise<never>((_, reject) => {
+    rejectPending = reject;
+  });
+  const abort = (): void => {
+    const { reason: signalReason } = signal as { reason: unknown };
+
+    controller.abort(signalReason);
+
+    const { reason } = controller.signal as { reason: unknown };
+
+    rejectPending(reason instanceof Error ? reason : new Error(String(reason)));
+  };
 
   if (signal.aborted) {
     abort();
@@ -14,10 +26,13 @@ const renderToStream: TRenderToStream = async (node, { onError, signal }) => {
   let stream: Awaited<ReturnType<typeof renderToReadableStream>>;
 
   try {
-    stream = await renderToReadableStream(node, {
-      onError,
-      signal: controller.signal,
-    });
+    stream = await Promise.race([
+      renderToReadableStream(node, {
+        onError,
+        signal: controller.signal,
+      }),
+      pendingAbort,
+    ]);
   } catch (error) {
     const shellError = Promise.reject(error);
 

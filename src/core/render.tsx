@@ -134,21 +134,10 @@ const render = async <TAppProps,>(
       )}
     </ServerProvider>
   );
-  // Assigned after the renderer is created; its onError hook can run during creation.
-  // eslint-disable-next-line prefer-const
-  let abortTimer: ReturnType<typeof setTimeout> | undefined;
-  const output = await renderToStream(node, {
-    onError: (error) => {
-      clearTimeout(abortTimer);
-
-      const streamError = obtainStreamError(error);
-      const { code } = streamError;
-
-      context.didError ??= code;
-      onError?.({ context, error: streamError });
-    },
-    signal: context.request.signal,
-  });
+  const renderController = new AbortController();
+  let abortReason: unknown;
+  // Assigned after abort is defined so an async renderer can be cancelled while it initializes.
+  let output: IRenderStream | undefined;
   let hasAborted = false;
   const abort = (reason?: unknown): void => {
     if (hasAborted) {
@@ -156,10 +145,17 @@ const render = async <TAppProps,>(
     }
 
     hasAborted = true;
+    abortReason = reason;
     clearTimeout(abortTimer);
     context.didError ??= StreamError.RenderCancel;
-    output.abort(reason);
+    renderController.abort(reason);
+    output?.abort(reason);
   };
+
+  const abortTimer = setTimeout(() => {
+    context.didError = StreamError.RenderTimeout;
+    abort();
+  }, abortDelay);
 
   if (context.request.signal.aborted) {
     abort(context.request.signal.reason);
@@ -169,21 +165,32 @@ const render = async <TAppProps,>(
     });
   }
 
-  abortTimer = setTimeout(() => {
-    context.didError = StreamError.RenderTimeout;
-    abort();
-  }, abortDelay);
-  void output.allReady.then(
-    () => clearTimeout(abortTimer),
-    () => clearTimeout(abortTimer),
-  );
-
   try {
+    output = await renderToStream(node, {
+      onError: (error) => {
+        const streamError = obtainStreamError(error);
+        const { code } = streamError;
+
+        context.didError ??= code;
+        onError?.({ context, error: streamError });
+      },
+      signal: renderController.signal,
+    });
+
+    if (hasAborted) {
+      output.abort(abortReason);
+    }
+
+    void output.allReady.then(
+      () => clearTimeout(abortTimer),
+      () => clearTimeout(abortTimer),
+    );
+
     await (isStream ? output.shellReady : output.allReady);
   } catch (error) {
     clearTimeout(abortTimer);
 
-    const shellError = error as Error;
+    const shellError = error instanceof Error ? error : new Error(String(error));
     const html =
       onShellError?.({ context, error: shellError }) ||
       `<!doctype html><p>Something went wrong: ${shellError.message}</p>`;

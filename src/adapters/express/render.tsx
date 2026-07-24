@@ -153,46 +153,44 @@ async function render(
         onShellError: onShellError
           ? ({ context: updated, error }) => onShellError({ context: syncContext(updated), error })
           : undefined,
-        onShellReady: onShellReady
-          ? ({ context: updated }) => {
-              const legacyContext = syncContext(updated);
+        onShellReady: ({ context: updated }) => {
+          const legacyContext = syncContext(updated);
 
-              if (!res.headersSent && !res.writableEnded) {
-                res.status(updated.response.status ?? 200);
-                getHeaderEntries(updated.response.headers).forEach(([name, value]) =>
-                  res.setHeader(name, value),
-                );
+          if (!res.headersSent && !res.writableEnded) {
+            res.status(updated.response.status ?? 200);
+            getHeaderEntries(updated.response.headers).forEach(([name, value]) =>
+              res.setHeader(name, value),
+            );
 
-                const cookies = getSetCookieHeaders(updated.response.headers);
+            const cookies = getSetCookieHeaders(updated.response.headers);
 
-                if (cookies.length) {
-                  res.setHeader('Set-Cookie', cookies);
-                }
-              }
-
-              const shell = onShellReady({ context: legacyContext });
-              const responseHeaders = new Headers(updated.response.headers);
-
-              responseHeaders.delete('Set-Cookie');
-
-              Object.entries(res.getHeaders()).forEach(([name, value]) => {
-                if (name.toLowerCase() === 'set-cookie') {
-                  return;
-                }
-
-                if (Array.isArray(value)) {
-                  value.forEach((item) => responseHeaders.append(name, String(item)));
-                } else if (value !== undefined) {
-                  responseHeaders.set(name, String(value));
-                }
-              });
-
-              updated.response.headers = responseHeaders;
-              updated.response.status = res.statusCode;
-
-              return shell;
+            if (cookies.length) {
+              res.setHeader('Set-Cookie', cookies);
             }
-          : undefined,
+          }
+
+          const shell = onShellReady?.({ context: legacyContext });
+          const responseHeaders = new Headers(updated.response.headers);
+
+          responseHeaders.delete('Set-Cookie');
+
+          Object.entries(res.getHeaders()).forEach(([name, value]) => {
+            if (name.toLowerCase() === 'set-cookie') {
+              return;
+            }
+
+            if (Array.isArray(value)) {
+              value.forEach((item) => responseHeaders.append(name, String(item)));
+            } else if (value !== undefined) {
+              responseHeaders.set(name, String(value));
+            }
+          });
+
+          updated.response.headers = responseHeaders;
+          updated.response.status = res.statusCode;
+
+          return shell ?? {};
+        },
         prepare: async ({ context: updated, executionContext }) => {
           const legacyContext = syncContext(updated);
           const hints = SsrManifest.get(config).injectAssets(legacyContext);

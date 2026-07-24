@@ -145,4 +145,35 @@ describe('legacy Express render adapter', () => {
     expect(res.redirect).toHaveBeenCalledWith(302, '/redirect');
     expect(writeFetchResponseMock).not.toHaveBeenCalled();
   });
+
+  it('syncs the live Express response before getState without a user shell hook', async () => {
+    const { config, context, res } = createContext();
+    const getState = vi.fn(({ context: legacyContext }) => {
+      expect(legacyContext.res.statusCode).toBe(404);
+      expect(legacyContext.res.getHeaders()['x-core']).toBe('yes');
+
+      return {};
+    });
+    const response = new Response('rendered');
+
+    coreRenderMock.mockImplementation(async (_, coreContext, options) => {
+      coreContext.response.status = 404;
+      coreContext.response.headers.set('X-Core', 'yes');
+      options.onShellReady({ context: coreContext });
+      options.getState({ context: coreContext });
+
+      return response;
+    });
+
+    await render(
+      { App: App as never, handler: { handler: true } as never },
+      config as never,
+      context as never,
+      { getState },
+    );
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(getState).toHaveBeenCalledOnce();
+    expect(writeFetchResponseMock).toHaveBeenCalledWith(res, response);
+  });
 });

@@ -210,6 +210,25 @@ describe('core render', () => {
     expect(renderer.output.start).not.toHaveBeenCalled();
   });
 
+  it('returns 500 when the renderer fails before returning a stream', async () => {
+    const response = await render(
+      {
+        createApp,
+        handler: createRouter() as never,
+        renderToStream: async () => {
+          throw new Error('renderer failed');
+        },
+      },
+      createContext(),
+      {
+        onShellError: ({ error }) => `<p>${error.message}</p>`,
+      },
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.text()).resolves.toBe('<p>renderer failed</p>');
+  });
+
   it('uses the React Router status when no hook overrides it', async () => {
     const renderer = createRenderer();
     const pending = render(
@@ -297,5 +316,59 @@ describe('core render', () => {
 
     renderer.shellError(new Error('aborted'));
     await pending;
+  });
+
+  it('applies abortDelay while an async renderer is waiting for the shell', async () => {
+    const abort = vi.fn();
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    const renderToStream: TRenderToStream = vi.fn(
+      (_, { onError, signal }) =>
+        new Promise<IRenderStream>((resolve) => {
+          resolveStarted();
+          onError(new Error('recoverable'));
+          signal.addEventListener(
+            'abort',
+            () => {
+              const error = new Error('render timed out');
+              const failed = Promise.reject(error);
+
+              void failed.catch(() => undefined);
+              resolve({
+                abort,
+                allReady: failed,
+                shellReady: failed,
+                start: vi.fn(),
+                stream: new ReadableStream<Uint8Array>(),
+              });
+            },
+            { once: true },
+          );
+        }),
+    );
+    const context = createContext();
+    const pending = render(
+      {
+        createApp,
+        handler: createRouter() as never,
+        renderToStream,
+      },
+      context,
+      {
+        abortDelay: 10,
+        onShellError: ({ error }) => `<p>${error.message}</p>`,
+      },
+    );
+
+    await started;
+
+    const response = await pending;
+
+    expect(response.status).toBe(500);
+    await expect(response.text()).resolves.toBe('<p>render timed out</p>');
+    expect(context.didError).toBe('timeout');
+    expect(abort).toHaveBeenCalledOnce();
   });
 });

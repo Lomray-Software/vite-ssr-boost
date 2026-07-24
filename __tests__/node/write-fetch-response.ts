@@ -51,4 +51,33 @@ describe('writeFetchResponse', () => {
     expect(res.end).toHaveBeenCalledOnce();
     expect(res.destroy).not.toHaveBeenCalled();
   });
+
+  it('cancels the Web stream when the Node transport fails', async () => {
+    const cancel = vi.fn();
+    const error = new Error('transport failed');
+    const body = new ReadableStream<Uint8Array>({
+      cancel,
+      pull: (controller) => controller.enqueue(new Uint8Array([1])),
+    });
+    const res = Object.assign(new EventEmitter(), {
+      appendHeader: vi.fn(),
+      destroy: vi.fn(function destroy(this: { destroyed: boolean }) {
+        this.destroyed = true;
+      }),
+      destroyed: false,
+      end: vi.fn(),
+      headersSent: false,
+      setHeader: vi.fn(),
+      statusCode: 0,
+      writableEnded: false,
+      write: vi.fn(() => {
+        throw error;
+      }),
+    });
+
+    await writeFetchResponse(res as never, new Response(body));
+
+    expect(cancel).toHaveBeenCalledWith(error);
+    expect(res.destroy).toHaveBeenCalledWith(error);
+  });
 });

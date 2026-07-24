@@ -80,6 +80,8 @@ const writeFetchResponse = async (res: ServerResponse, response: Response): Prom
       res.end();
     }
   } catch (error) {
+    await reader.cancel(error).catch(() => undefined);
+
     if (!res.destroyed) {
       res.destroy(error as Error);
     }
