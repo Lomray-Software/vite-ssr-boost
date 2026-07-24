@@ -50,13 +50,16 @@ jobs:
           npm pkg delete scripts.prepare
           npm run build
 
+      - name: Boot the built edge package in workerd
+        run: npm run test:edge:packed
+
       - name: Prove core works without optional adapters
         run: npm run test:core:no-optional
 
       - uses: actions/checkout@v4
         with:
           path: acceptance/vite-template
-          ref: prod
+          ref: fbbd65524ceb95764bebc39da67af7d9c5737f80
           repository: Lomray-Software/vite-template
 
       - name: Install template dependencies
@@ -65,6 +68,9 @@ jobs:
 
       - name: Test template in development and production
         run: node scripts/test-template.mjs acceptance/vite-template
+
+      - name: Build documentation
+        run: npm run docs:build
 
   sonarcube:
     runs-on: ubuntu-latest

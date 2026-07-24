@@ -27,8 +27,25 @@ const App = ({ children }: PropsWithChildren) => children;
 
 describe('legacy Express render adapter', () => {
   const createContext = () => {
-    const res = {
+    const responseHeaders: Record<string, string | string[]> = {};
+    const res: Record<string, any> = {
+      getHeaders: vi.fn(() => responseHeaders),
+      headersSent: false,
+      off: vi.fn(),
+      once: vi.fn(),
       redirect: vi.fn(),
+      setHeader: vi.fn((name: string, value: string | string[]) => {
+        responseHeaders[name.toLowerCase()] = value;
+
+        return res;
+      }),
+      status: vi.fn((status: number) => {
+        res.statusCode = status;
+
+        return res;
+      }),
+      statusCode: 200,
+      writableEnded: false,
     };
     const logger = {
       error: vi.fn(),
@@ -40,7 +57,7 @@ describe('legacy Express render adapter', () => {
     const context: Record<string, any> = {
       appProps: { value: 'app' },
       html: { footer: '</html>', header: '<html>' },
-      req: { request: true },
+      req: { off: vi.fn(), once: vi.fn(), request: true },
       res,
     };
 
@@ -93,7 +110,9 @@ describe('legacy Express render adapter', () => {
       },
     );
 
-    expect(createFetchRequestMock).toHaveBeenCalledWith(context.req);
+    expect(createFetchRequestMock).toHaveBeenCalledWith(context.req, {
+      signal: expect.any(AbortSignal),
+    });
     expect(injectAssetsMock).toHaveBeenCalledWith(context);
     expect(onRouterReady).toHaveBeenCalledWith({ context });
     expect(onShellReady).toHaveBeenCalledWith({ context });

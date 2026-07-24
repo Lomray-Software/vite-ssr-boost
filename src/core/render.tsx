@@ -149,7 +149,14 @@ const render = async <TAppProps,>(
     },
     signal: context.request.signal,
   });
+  let hasAborted = false;
   const abort = (reason?: unknown): void => {
+    if (hasAborted) {
+      return;
+    }
+
+    hasAborted = true;
+    clearTimeout(abortTimer);
     context.didError ??= StreamError.RenderCancel;
     output.abort(reason);
   };
@@ -164,7 +171,7 @@ const render = async <TAppProps,>(
 
   abortTimer = setTimeout(() => {
     context.didError = StreamError.RenderTimeout;
-    output.abort();
+    abort();
   }, abortDelay);
   void output.allReady.then(
     () => clearTimeout(abortTimer),
@@ -198,24 +205,37 @@ const render = async <TAppProps,>(
     return serverResponse;
   }
 
+  context.response.status =
+    serverResponse?.status ?? context.response.status ?? context.routerContext.statusCode ?? 200;
+
+  if (!context.response.headers.has(CONTENT_TYPE)) {
+    context.response.headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
+  }
+
   const shell = onShellReady?.({ context }) ?? {};
   const routerState = buildRouterState(context.routerContext);
   const customState = buildCustomState(getState?.({ context }));
   const header = shell.header || context.html.header;
   const footer = routerState + customState + (shell.footer || context.html.footer);
-  const body = composeHtml(header, output.stream, footer);
-  const transformed = transformHtml(body, (html) => onResponse?.({ context, html }));
   const headers = new Headers(context.response.headers);
 
-  if (!headers.has(CONTENT_TYPE)) {
-    headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
+  if (context.request.method === 'HEAD' || [204, 205, 304].includes(context.response.status)) {
+    abort();
+
+    return new Response(null, {
+      headers,
+      status: context.response.status,
+    });
   }
+
+  const body = composeHtml(header, output.stream, footer, abort);
+  const transformed = transformHtml(body, (html) => onResponse?.({ context, html }));
 
   output.start();
 
   return new Response(transformed, {
     headers,
-    status: serverResponse?.status ?? context.response.status ?? 200,
+    status: context.response.status,
   });
 };
 

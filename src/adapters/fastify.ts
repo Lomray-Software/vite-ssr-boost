@@ -1,6 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import serializeBody from '@adapters/body';
+import compressResponse from '@adapters/compression';
+import type { TCompression } from '@adapters/compression';
 import type { TSsrHandler } from '@core/types';
 import createRequest from '@node/create-request';
+import createRequestSignal from '@node/request-signal';
 import writeEarlyHints from '@node/write-early-hints';
 import writeFetchResponse from '@node/write-fetch-response';
 
@@ -16,47 +20,39 @@ interface IFastifyReply {
 
 type TFastifyHandler = (request: IFastifyRequest, reply: IFastifyReply) => Promise<void>;
 
-const serializeBody = (body: unknown): BodyInit | null => {
-  if (body === undefined) {
-    return null;
-  }
+export interface IFastifyAdapterOptions {
+  compression?: TCompression;
+  getBody?: (request: IFastifyRequest) => BodyInit | null | undefined;
+}
 
-  if (typeof body === 'string' || ArrayBuffer.isView(body) || body instanceof ArrayBuffer) {
-    return body as BodyInit;
-  }
-
-  return JSON.stringify(body);
-};
-
-const adapterFastify = (handler: TSsrHandler): TFastifyHandler => {
-  return async ({ body, raw: req }, reply) => {
-    const controller = new AbortController();
-    const abort = (): void => controller.abort();
-    const onClose = (): void => {
-      if (!reply.raw.writableEnded) {
-        abort();
-      }
-    };
-
-    req.once('aborted', abort);
-    reply.raw.once('close', onClose);
+const adapterFastify = (
+  handler: TSsrHandler,
+  options: IFastifyAdapterOptions = {},
+): TFastifyHandler => {
+  return async (request, reply) => {
+    const { body, raw: req } = request;
+    const requestSignal = createRequestSignal(req, reply.raw);
 
     try {
-      const response = await handler(
-        createRequest(req, {
-          body: serializeBody(body),
-          signal: controller.signal,
-        }),
-        {
+      const requestBody = options.getBody
+        ? (options.getBody(request) ?? null)
+        : serializeBody(body, String(req.headers['content-type'] ?? ''));
+      const fetchRequest = createRequest(req, {
+        body: requestBody,
+        signal: requestSignal.signal,
+      });
+      const response = compressResponse(
+        fetchRequest,
+        await handler(fetchRequest, {
           onEarlyHints: (headers) => writeEarlyHints(reply.raw, headers),
-        },
+        }),
+        options.compression,
       );
 
       reply.hijack();
       await writeFetchResponse(reply.raw, response);
     } finally {
-      req.off('aborted', abort);
-      reply.raw.off('close', onClose);
+      requestSignal.dispose();
     }
   };
 };

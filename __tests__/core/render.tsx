@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import render from '@core/render';
 import type { IRenderStream, ISsrRequestContext, TRenderToStream } from '@core/render';
 
-const createRouter = (queryResult?: Response) => {
+const createRouter = (queryResult?: Response, statusCode = 200) => {
   const route = {
     Component: () => null,
     id: 'root',
@@ -32,7 +32,7 @@ const createRouter = (queryResult?: Response) => {
         route,
       },
     ],
-    statusCode: 200,
+    statusCode,
   };
 
   return {
@@ -207,6 +207,73 @@ describe('core render', () => {
 
     expect(response.status).toBe(500);
     await expect(response.text()).resolves.toBe('<p>broken</p>');
+    expect(renderer.output.start).not.toHaveBeenCalled();
+  });
+
+  it('uses the React Router status when no hook overrides it', async () => {
+    const renderer = createRenderer();
+    const pending = render(
+      {
+        createApp,
+        handler: createRouter(undefined, 404) as never,
+        renderToStream: renderer.renderToStream,
+      },
+      createContext(),
+      {},
+    );
+
+    await vi.waitFor(() => expect(renderer.renderToStream).toHaveBeenCalledOnce());
+    renderer.shellReady();
+
+    const response = await pending;
+
+    renderer.allReady();
+    expect(response.status).toBe(404);
+  });
+
+  it.each([204, 205, 304])('returns no body for status %s', async (status) => {
+    const renderer = createRenderer();
+    const pending = render(
+      {
+        createApp,
+        handler: createRouter(undefined, status) as never,
+        renderToStream: renderer.renderToStream,
+      },
+      createContext(),
+      {},
+    );
+
+    await vi.waitFor(() => expect(renderer.renderToStream).toHaveBeenCalledOnce());
+    renderer.shellReady();
+
+    const response = await pending;
+
+    expect(response.status).toBe(status);
+    expect(response.body).toBeNull();
+    expect(renderer.abort).toHaveBeenCalledOnce();
+    expect(renderer.output.start).not.toHaveBeenCalled();
+  });
+
+  it('returns no body for HEAD', async () => {
+    const renderer = createRenderer();
+    const pending = render(
+      {
+        createApp,
+        handler: createRouter() as never,
+        renderToStream: renderer.renderToStream,
+      },
+      createContext(new Request('http://localhost/', { method: 'HEAD' })),
+      {},
+    );
+
+    await vi.waitFor(() => expect(renderer.renderToStream).toHaveBeenCalledOnce());
+    renderer.shellReady();
+
+    const response = await pending;
+
+    expect(response.status).toBe(200);
+    expect(response.body).toBeNull();
+    expect(renderer.abort).toHaveBeenCalledOnce();
     expect(renderer.output.start).not.toHaveBeenCalled();
   });
 

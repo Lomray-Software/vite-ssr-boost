@@ -27,10 +27,20 @@ const waitForDrain = (res: ServerResponse): Promise<void> =>
   });
 
 const writeFetchResponse = async (res: ServerResponse, response: Response): Promise<void> => {
-  res.statusCode = response.status;
+  if (res.destroyed || res.writableEnded) {
+    await response.body?.cancel();
 
-  getHeaderEntries(response.headers).forEach(([name, value]) => res.setHeader(name, value));
-  getSetCookieHeaders(response.headers).forEach((cookie) => res.appendHeader('Set-Cookie', cookie));
+    return;
+  }
+
+  if (!res.headersSent) {
+    res.statusCode = response.status;
+
+    getHeaderEntries(response.headers).forEach(([name, value]) => res.setHeader(name, value));
+    getSetCookieHeaders(response.headers).forEach((cookie) =>
+      res.appendHeader('Set-Cookie', cookie),
+    );
+  }
 
   if (!response.body) {
     res.end();
@@ -55,14 +65,24 @@ const writeFetchResponse = async (res: ServerResponse, response: Response): Prom
         break;
       }
 
+      if (res.destroyed || res.writableEnded) {
+        await reader.cancel();
+
+        return;
+      }
+
       if (!res.write(chunk.value)) {
         await waitForDrain(res);
       }
     }
 
-    res.end();
+    if (!res.destroyed && !res.writableEnded) {
+      res.end();
+    }
   } catch (error) {
-    res.destroy(error as Error);
+    if (!res.destroyed) {
+      res.destroy(error as Error);
+    }
   } finally {
     res.off('close', onClose);
   }

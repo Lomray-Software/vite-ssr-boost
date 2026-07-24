@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -19,19 +19,21 @@ const runNpm = (args) =>
   });
 
 try {
-  const archive = execFileSync(
+  execFileSync(
     process.execPath,
     [npmCli, 'pack', './lib', '--ignore-scripts', '--pack-destination', directory, '--silent'],
     {
       cwd: projectRoot,
-      encoding: 'utf8',
+      stdio: 'ignore',
     },
-  ).trim();
+  );
+  const archives = (await readdir(directory)).filter((filename) => filename.endsWith('.tgz'));
 
-  if (!archive.endsWith('.tgz')) {
+  if (archives.length !== 1) {
     throw new Error('npm pack did not produce an archive.');
   }
 
+  const [archive] = archives;
   const dependencies = {
     '@lomray/vite-ssr-boost': `file:./${archive}`,
   };
@@ -90,6 +92,47 @@ try {
   }
 
   const packageRoot = join(directory, 'node_modules', '@lomray', 'vite-ssr-boost');
+  const packageJson = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'));
+
+  for (const dependency of ['compression', 'express']) {
+    if (packageJson.dependencies?.[dependency]) {
+      throw new Error(`${dependency} is still a required runtime dependency.`);
+    }
+  }
+
+  if (!((await stat(join(packageRoot, 'cli.js'))).mode & 0o111)) {
+    throw new Error('The packed CLI is not executable after installation.');
+  }
+
+  const assertRuntimeClean = async (relativeDirectory) => {
+    const directoryPath = join(packageRoot, relativeDirectory);
+
+    for (const entry of await readdir(directoryPath, { withFileTypes: true })) {
+      const relativePath = join(relativeDirectory, entry.name);
+
+      if (entry.isDirectory()) {
+        await assertRuntimeClean(relativePath);
+      } else if (entry.name.endsWith('.js')) {
+        const code = await readFile(join(packageRoot, relativePath), 'utf8');
+
+        if (/(?:from|import\()\s*["'](?:compression|express)["']/.test(code)) {
+          throw new Error(`${relativePath} imports an optional adapter dependency.`);
+        }
+
+        if (
+          /(?:from|import\()\s*["'](?:node:|fs["']|http["']|https["']|path["']|url["'])/.test(
+            code,
+          )
+        ) {
+          throw new Error(`${relativePath} imports a Node runtime module.`);
+        }
+      }
+    }
+  };
+
+  await assertRuntimeClean('core');
+  await assertRuntimeClean('edge');
+
   const proof = `
     const { default: createHandler } = await import(${JSON.stringify(
       pathToFileURL(join(packageRoot, 'core', 'handler.js')).href,
@@ -97,10 +140,17 @@ try {
     const { default: adapterEdge } = await import(${JSON.stringify(
       pathToFileURL(join(packageRoot, 'adapters', 'edge.js')).href,
     )});
+    const { default: adapterNode } = await import(${JSON.stringify(
+      pathToFileURL(join(packageRoot, 'adapters', 'node.js')).href,
+    )});
     const response = await adapterEdge(async () => new Response('core-ok'))(
       new Request('https://edge.example/')
     );
-    if (typeof createHandler !== 'function' || await response.text() !== 'core-ok') {
+    if (
+      typeof createHandler !== 'function' ||
+      typeof adapterNode !== 'function' ||
+      await response.text() !== 'core-ok'
+    ) {
       throw new Error('Core/edge runtime proof failed.');
     }
   `;

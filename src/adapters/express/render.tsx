@@ -5,12 +5,14 @@ import type { StaticHandlerContext, StaticHandler } from 'react-router';
 import StreamError from '@constants/stream-error';
 import type { IServerContext } from '@context/server';
 import emitEarlyHints from '@core/early-hints';
+import { getHeaderEntries, getSetCookieHeaders } from '@core/headers';
 import coreRender from '@core/render';
 import type { ISsrRequestContext } from '@core/render';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import createFetchRequest from '@node/create-fetch-request';
 import type { TApp } from '@node/entry';
 import renderToStream from '@node/render-to-stream';
+import createRequestSignal from '@node/request-signal';
 import writeEarlyHints from '@node/write-early-hints';
 import writeFetchResponse from '@node/write-fetch-response';
 import type ServerConfig from '@services/server-config';
@@ -87,10 +89,11 @@ async function render(
 ): Promise<void> {
   const { appProps, html: shellHtml, req, res } = context;
   const Logger = config.getLogger();
+  const requestSignal = createRequestSignal(req, res);
   const coreContext: ISsrRequestContext = {
     appProps,
     html: shellHtml,
-    request: createFetchRequest(req),
+    request: createFetchRequest(req, { signal: requestSignal.signal }),
     response: {
       headers: new Headers(),
     },
@@ -104,76 +107,121 @@ async function render(
 
     return context;
   };
-  const response = await coreRender(
-    {
-      createApp: (children, updated) => <App server={{ ...updated.appProps, req }}>{children}</App>,
-      handler,
-      renderToStream,
-    },
-    coreContext,
-    {
-      abortDelay,
-      getState: getState
-        ? ({ context: updated }) => getState({ context: syncContext(updated) })
-        : undefined,
-      onError: ({ context: updated, error }) => {
-        const { code, message } = error;
-
-        onError?.({ context: syncContext(updated), error });
-        Logger.info(chalk.red(`Stream error. Code: ${code}`));
-
-        if (
-          [StreamError.RenderAborted, StreamError.RenderTimeout, StreamError.RenderCancel].includes(
-            code,
-          )
-        ) {
-          Logger.info(chalk.dim(message));
-
-          return;
-        }
-
-        const { original } = error;
-
-        Logger.error(original as string);
+  try {
+    const response = await coreRender(
+      {
+        createApp: (children, updated) => (
+          <App server={{ ...updated.appProps, req }}>{children}</App>
+        ),
+        handler,
+        renderToStream,
       },
-      onResponse: onResponse
-        ? ({ context: updated, html }) => onResponse({ context: syncContext(updated), html })
-        : undefined,
-      onRouterReady: onRouterReady
-        ? ({ context: updated }) => onRouterReady({ context: syncContext(updated) })
-        : undefined,
-      onShellError: onShellError
-        ? ({ context: updated, error }) => onShellError({ context: syncContext(updated), error })
-        : undefined,
-      onShellReady: onShellReady
-        ? ({ context: updated }) => onShellReady({ context: syncContext(updated) })
-        : undefined,
-      prepare: async ({ context: updated, executionContext }) => {
-        const legacyContext = syncContext(updated);
-        const hints = SsrManifest.get(config).injectAssets(legacyContext);
+      coreContext,
+      {
+        abortDelay,
+        getState: getState
+          ? ({ context: updated }) => getState({ context: syncContext(updated) })
+          : undefined,
+        onError: ({ context: updated, error }) => {
+          const { code, message } = error;
 
-        if (legacyContext.hasEarlyHints) {
-          await emitEarlyHints(executionContext, hints);
-        }
+          onError?.({ context: syncContext(updated), error });
+          Logger.info(chalk.red(`Stream error. Code: ${code}`));
+
+          if (
+            [
+              StreamError.RenderAborted,
+              StreamError.RenderTimeout,
+              StreamError.RenderCancel,
+            ].includes(code)
+          ) {
+            Logger.info(chalk.dim(message));
+
+            return;
+          }
+
+          const { original } = error;
+
+          Logger.error(original as string);
+        },
+        onResponse: onResponse
+          ? ({ context: updated, html }) => onResponse({ context: syncContext(updated), html })
+          : undefined,
+        onRouterReady: onRouterReady
+          ? ({ context: updated }) => onRouterReady({ context: syncContext(updated) })
+          : undefined,
+        onShellError: onShellError
+          ? ({ context: updated, error }) => onShellError({ context: syncContext(updated), error })
+          : undefined,
+        onShellReady: onShellReady
+          ? ({ context: updated }) => {
+              const legacyContext = syncContext(updated);
+
+              if (!res.headersSent && !res.writableEnded) {
+                res.status(updated.response.status ?? 200);
+                getHeaderEntries(updated.response.headers).forEach(([name, value]) =>
+                  res.setHeader(name, value),
+                );
+
+                const cookies = getSetCookieHeaders(updated.response.headers);
+
+                if (cookies.length) {
+                  res.setHeader('Set-Cookie', cookies);
+                }
+              }
+
+              const shell = onShellReady({ context: legacyContext });
+              const responseHeaders = new Headers(updated.response.headers);
+
+              responseHeaders.delete('Set-Cookie');
+
+              Object.entries(res.getHeaders()).forEach(([name, value]) => {
+                if (name.toLowerCase() === 'set-cookie') {
+                  return;
+                }
+
+                if (Array.isArray(value)) {
+                  value.forEach((item) => responseHeaders.append(name, String(item)));
+                } else if (value !== undefined) {
+                  responseHeaders.set(name, String(value));
+                }
+              });
+
+              updated.response.headers = responseHeaders;
+              updated.response.status = res.statusCode;
+
+              return shell;
+            }
+          : undefined,
+        prepare: async ({ context: updated, executionContext }) => {
+          const legacyContext = syncContext(updated);
+          const hints = SsrManifest.get(config).injectAssets(legacyContext);
+
+          if (legacyContext.hasEarlyHints) {
+            await emitEarlyHints(executionContext, hints);
+          }
+        },
+        routerRequestContext: context,
       },
-      routerRequestContext: context,
-    },
-    {
-      onEarlyHints: (headers) => writeEarlyHints(res, headers),
-    },
-  );
+      {
+        onEarlyHints: (headers) => writeEarlyHints(res, headers),
+      },
+    );
 
-  syncContext(coreContext);
+    syncContext(coreContext);
 
-  const location = response.headers.get('Location');
+    const location = response.headers.get('Location');
 
-  if (location && response.status >= 300 && response.status < 400) {
-    res.redirect(response.status, location);
+    if (location && response.status >= 300 && response.status < 400) {
+      res.redirect(response.status, location);
 
-    return;
+      return;
+    }
+
+    await writeFetchResponse(res, response);
+  } finally {
+    requestSignal.dispose();
   }
-
-  await writeFetchResponse(res, response);
 }
 
 export default render;

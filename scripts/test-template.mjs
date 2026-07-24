@@ -131,6 +131,21 @@ const inspectStream = (origin, pathname, headers = {}) =>
     request.on('error', reject);
   });
 
+const measureTtfb = async (origin) => {
+  await inspectStream(origin, '/');
+  await inspectStream(origin, '/');
+
+  const samples = [];
+
+  for (let sample = 0; sample < 7; sample += 1) {
+    samples.push((await inspectStream(origin, '/')).firstChunkMs);
+  }
+
+  samples.sort((left, right) => left - right);
+
+  return samples[Math.floor(samples.length / 2)];
+};
+
 const verify = async (origin, mode) => {
   const cases = [
     ['/', 200],
@@ -160,15 +175,11 @@ const verify = async (origin, mode) => {
   assert.match(buffered.html, /window\.__staticRouterHydrationData/);
   assert.match(buffered.html, /<\/html>/);
 
-  const home = await inspectStream(origin, '/');
-
   console.info(
     `${mode}: routes passed; streamed=${streamed.chunks} chunks (${Math.round(
       streamed.firstChunkMs,
     )}ms/${Math.round(streamed.totalMs)}ms); buffered=${buffered.chunks} chunks`,
   );
-
-  return home.firstChunkMs;
 };
 
 const verifyHmr = async (origin) => {
@@ -226,8 +237,8 @@ try {
     const origin = `http://127.0.0.1:${baselinePort}`;
 
     await waitUntilReady(origin, baseline);
-    baselineTtfb = (await inspectStream(origin, '/')).firstChunkMs;
-    console.info(`baseline production TTFB: ${Math.round(baselineTtfb)}ms`);
+    baselineTtfb = await measureTtfb(origin);
+    console.info(`baseline production median TTFB: ${Math.round(baselineTtfb)}ms`);
   } finally {
     await stop(baseline);
   }
@@ -265,8 +276,10 @@ try {
     const origin = `http://127.0.0.1:${prodPort}`;
 
     await waitUntilReady(origin, prod);
-    const candidateTtfb = await verify(origin, 'production');
-    const allowedTtfb = baselineTtfb + Math.max(100, baselineTtfb);
+    await verify(origin, 'production');
+
+    const candidateTtfb = await measureTtfb(origin);
+    const allowedTtfb = baselineTtfb + Math.max(35, baselineTtfb * 0.5);
 
     assert.ok(
       candidateTtfb <= allowedTtfb,
@@ -275,7 +288,9 @@ try {
       )}ms (allowed ${Math.round(allowedTtfb)}ms).`,
     );
     console.info(
-      `production TTFB: ${Math.round(baselineTtfb)}ms -> ${Math.round(candidateTtfb)}ms`,
+      `production median TTFB: ${Math.round(baselineTtfb)}ms -> ${Math.round(
+        candidateTtfb,
+      )}ms`,
     );
   } finally {
     await stop(prod);

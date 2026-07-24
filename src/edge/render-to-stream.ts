@@ -11,10 +11,26 @@ const renderToStream: TRenderToStream = async (node, { onError, signal }) => {
     signal.addEventListener('abort', abort, { once: true });
   }
 
-  const stream = await renderToReadableStream(node, {
-    onError,
-    signal: controller.signal,
-  });
+  let stream: Awaited<ReturnType<typeof renderToReadableStream>>;
+
+  try {
+    stream = await renderToReadableStream(node, {
+      onError,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const shellError = Promise.reject(error);
+
+    void shellError.catch(() => undefined);
+
+    return {
+      allReady: shellError,
+      abort: (reason) => controller.abort(reason),
+      shellReady: shellError,
+      start: () => undefined,
+      stream: new ReadableStream<Uint8Array>(),
+    };
+  }
 
   const removeAbortListener = (): void => signal.removeEventListener('abort', abort);
 

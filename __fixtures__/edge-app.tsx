@@ -30,7 +30,28 @@ const handler = createHandler(
     },
   },
 );
+const fetchHandler = adapterEdge(handler, { compression: true });
 
 export default {
-  fetch: adapterEdge(handler),
+  fetch: async (request: Request) => {
+    const response = await fetchHandler(request);
+
+    if (new URL(request.url).searchParams.has('inspect-compression')) {
+      const encoding = response.headers.get('Content-Encoding') as 'deflate' | 'gzip' | null;
+      const html = encoding
+        ? await new Response(
+            response.body!.pipeThrough(new DecompressionStream(encoding)),
+          ).text()
+        : await response.text();
+
+      return Response.json({
+        cookies: response.headers.getSetCookie(),
+        encoding,
+        html,
+        vary: response.headers.get('Vary'),
+      });
+    }
+
+    return response;
+  },
 };

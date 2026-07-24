@@ -1,6 +1,7 @@
 // @vitest-environment node
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { gunzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import adapterNode from '@adapters/node';
 
@@ -11,33 +12,36 @@ describe('Node adapter', () => {
   const aborted = vi.fn();
 
   beforeAll(async () => {
-    const handler = adapterNode(async (request, context) => {
-      if (new URL(request.url).pathname === '/abort') {
-        request.signal.addEventListener('abort', aborted, { once: true });
+    const handler = adapterNode(
+      async (request, context) => {
+        if (new URL(request.url).pathname === '/abort') {
+          request.signal.addEventListener('abort', aborted, { once: true });
 
-        return new Response(
-          new ReadableStream({
-            start(controller) {
-              controller.enqueue(new TextEncoder().encode('shell'));
-            },
-          }),
-        );
-      }
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode('shell'));
+              },
+            }),
+          );
+        }
 
-      const hints = new Headers();
-      const headers = new Headers();
+        const hints = new Headers();
+        const headers = new Headers();
 
-      hints.append('Link', '</app.css>; rel=preload; as=style');
-      hints.append('Link', '</app.js>; rel=preload; as=script');
-      headers.append('Set-Cookie', 'one=1; Path=/');
-      headers.append('Set-Cookie', 'two=2; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/');
-      await context?.onEarlyHints?.(hints);
+        hints.append('Link', '</app.css>; rel=preload; as=style');
+        hints.append('Link', '</app.js>; rel=preload; as=script');
+        headers.append('Set-Cookie', 'one=1; Path=/');
+        headers.append('Set-Cookie', 'two=2; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/');
+        await context?.onEarlyHints?.(hints);
 
-      return new Response(`url=${request.url};body=${await request.text()}`, {
-        headers,
-        status: 202,
-      });
-    });
+        return new Response(`url=${request.url};body=${await request.text()}`, {
+          headers,
+          status: 202,
+        });
+      },
+      { compression: true },
+    );
 
     server = http
       .createServer((req, res) => {
@@ -140,5 +144,35 @@ describe('Node adapter', () => {
       req.end();
     });
     await vi.waitFor(() => expect(aborted).toHaveBeenCalledOnce());
+  });
+
+  it('compresses on the Node transport only when negotiated', async () => {
+    const result = await new Promise<{ body: Buffer; encoding?: string }>((resolve, reject) => {
+      http
+        .get(
+          {
+            headers: { 'Accept-Encoding': 'gzip' },
+            host: '127.0.0.1',
+            path: '/compressed',
+            port,
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+
+            res.on('data', (chunk: Buffer) => chunks.push(chunk));
+            res.on('end', () =>
+              resolve({
+                body: Buffer.concat(chunks),
+                encoding: res.headers['content-encoding'],
+              }),
+            );
+            res.on('error', reject);
+          },
+        )
+        .on('error', reject);
+    });
+
+    expect(result.encoding).toBe('gzip');
+    expect(gunzipSync(result.body).toString()).toContain('/compressed');
   });
 });

@@ -4,6 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
+import { gunzipSync } from 'node:zlib';
 import type { PropsWithChildren } from 'react';
 import React from 'react';
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
@@ -15,13 +16,17 @@ import splitLinkHeader from '@node/split-link-header';
 type TScenario =
   | 'backpressure'
   | 'cookies'
+  | 'compression'
   | 'disconnect'
   | 'early-hints'
   | 'fatal'
   | 'headers-sent'
+  | 'live-hooks'
   | 'normal'
   | 'recoverable'
+  | 'request-takeover'
   | 'shell-error'
+  | 'shell-write'
   | 'split-utf8'
   | 'timeout';
 
@@ -55,9 +60,14 @@ const fixture = vi.hoisted(() => ({
   fatalSocketClosed: false,
   headerMutationCode: undefined as string | undefined,
   lastRequestSignal: undefined as AbortSignal | undefined,
+  liveRequest: undefined as ExpressRequest | undefined,
+  liveRequestIdentity: false,
+  liveResponse: undefined as ExpressResponse | undefined,
+  liveResponseIdentity: false,
+  recoverableHeadersSent: false,
   prepareServer: {
     getMiddlewaresConfig: vi.fn(() => ({
-      compression: false,
+      compression: { threshold: 0 },
       expressStatic: false,
     })),
     loadEntrypoint: vi.fn(),
@@ -97,6 +107,7 @@ const pipeScenario = (
   callbacks: IRenderCallbacks,
 ): void => {
   switch (scenario) {
+    case 'compression':
     case 'split-utf8': {
       const emoji = Buffer.from('🙂');
 
@@ -149,7 +160,7 @@ const pipeScenario = (
       destination.write('<main data-shell>fatal</main>');
       setTimeout(() => {
         fixture.fatalSocketClosed = true;
-        destination.destroy();
+        destination.destroy(new Error('fatal transport failure'));
       }, 10);
       break;
 
@@ -210,12 +221,13 @@ describe('Express adversarial contract', () => {
   let port: number;
   let server: http.Server;
 
-  const request = (pathname: string): Promise<IWireResponse> =>
+  const request = (pathname: string, headers?: http.OutgoingHttpHeaders): Promise<IWireResponse> =>
     new Promise((resolve, reject) => {
       const information: http.InformationEvent[] = [];
       const req = http.request(
         {
           agent: false,
+          headers,
           host: '127.0.0.1',
           path: pathname,
           port,
@@ -287,13 +299,30 @@ describe('Express adversarial contract', () => {
     fixture.prepareServer.loadEntrypoint.mockImplementation(async () => ({
       ...prepared,
       abortDelay: 2_000,
-      onError: () => {
+      onError: ({ context }: { context: { res: ExpressResponse } }) => {
         fixture.recoverableErrorCount += 1;
+
+        if (fixture.scenario === 'recoverable') {
+          fixture.recoverableHeadersSent = context.res.headersSent;
+        }
       },
       onRequest: (req: ExpressRequest, res: ExpressResponse) => {
         fixture.scenario = req.originalUrl.slice(1).split('?')[0] as TScenario;
 
-        if (fixture.scenario === 'cookies') {
+        if (fixture.scenario === 'live-hooks') {
+          fixture.liveRequest = req;
+          fixture.liveResponse = res;
+          res.setHeader('X-Live-On-Request', 'yes');
+        }
+
+        if (fixture.scenario === 'request-takeover') {
+          res.status(209).setHeader('X-Request-Takeover', 'yes');
+          res.end('request takeover');
+
+          return { shouldCancel: true };
+        }
+
+        if (['compression', 'cookies'].includes(fixture.scenario)) {
           res.append('Set-Cookie', 'session=one; Path=/; HttpOnly');
           res.append('Set-Cookie', 'expires=two; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/');
         }
@@ -304,7 +333,7 @@ describe('Express adversarial contract', () => {
         };
       },
       onResponse: ({ context, html }: { context: { res: ExpressResponse }; html: string }) => {
-        if (fixture.scenario === 'split-utf8') {
+        if (['compression', 'split-utf8'].includes(fixture.scenario)) {
           const modified = html.replace('ORIGINAL', 'MODIFIED');
 
           return modified === html ? undefined : modified;
@@ -319,6 +348,26 @@ describe('Express adversarial contract', () => {
         }
 
         return undefined;
+      },
+      onShellReady: ({ context }: { context: { req: ExpressRequest; res: ExpressResponse } }) => {
+        if (fixture.scenario === 'live-hooks') {
+          fixture.liveRequestIdentity = context.req === fixture.liveRequest;
+          fixture.liveResponseIdentity = context.res === fixture.liveResponse;
+          context.res.status(203);
+          context.res.setHeader('Content-Type', 'text/x-live-hook');
+          context.res.setHeader('X-Live-On-Shell-Ready', 'yes');
+        }
+
+        if (fixture.scenario === 'shell-write') {
+          context.res.status(206).setHeader('X-Live-Shell-Write', 'yes');
+          context.res.write('<aside data-live-shell-write>hook</aside>');
+        }
+
+        if (fixture.scenario === 'compression') {
+          context.res.status(203).setHeader('X-Legacy-Compression', 'yes');
+        }
+
+        return {};
       },
       onShellError: ({ error }: { error: Error }) =>
         `<!doctype html><p data-shell-error>${error.message}</p>`,
@@ -372,7 +421,13 @@ describe('Express adversarial contract', () => {
     fixture.fatalSocketClosed = false;
     fixture.headerMutationCode = undefined;
     fixture.lastRequestSignal = undefined;
+    fixture.liveRequest = undefined;
+    fixture.liveRequestIdentity = false;
+    fixture.liveResponse = undefined;
+    fixture.liveResponseIdentity = false;
+    fixture.recoverableHeadersSent = false;
     fixture.recoverableErrorCount = 0;
+    fixture.renderToPipeableStream.mockClear();
     fixture.scenario = 'normal';
   });
 
@@ -389,6 +444,40 @@ describe('Express adversarial contract', () => {
       'session=one; Path=/; HttpOnly',
       'expires=two; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/',
     ]);
+  });
+
+  it('passes the same live Express 5 req/res through legacy hooks', async () => {
+    const response = await request('/live-hooks');
+
+    expect(fixture.liveRequest).toBeDefined();
+    expect(fixture.liveResponse).toBeDefined();
+    expect(fixture.liveRequestIdentity).toBe(true);
+    expect(fixture.liveResponseIdentity).toBe(true);
+    expect(response.statusCode).toBe(203);
+    expect(response.headers['content-type']).toBe('text/x-live-hook');
+    expect(response.headers['x-live-on-request']).toBe('yes');
+    expect(response.headers['x-live-on-shell-ready']).toBe('yes');
+    expect(response.body.toString()).toContain('data-fixture-footer');
+  });
+
+  it('lets legacy onRequest take ownership of the live Express response', async () => {
+    const response = await request('/request-takeover');
+
+    expect(response.statusCode).toBe(209);
+    expect(response.headers['x-request-takeover']).toBe('yes');
+    expect(response.body.toString()).toBe('request takeover');
+    expect(fixture.renderToPipeableStream).not.toHaveBeenCalled();
+  });
+
+  it('continues streaming when onShellReady has already sent headers', async () => {
+    const response = await request('/shell-write');
+    const html = response.body.toString();
+
+    expect(response.statusCode).toBe(206);
+    expect(response.headers['x-live-shell-write']).toBe('yes');
+    expect(html).toContain('data-live-shell-write');
+    expect(html).toContain('data-final-chunk');
+    expect(html).toContain('data-fixture-footer');
   });
 
   it('sends 103 Early Hints on the wire before the final response', async () => {
@@ -408,6 +497,22 @@ describe('Express adversarial contract', () => {
     expect(response.body.toString()).toContain(
       '<main data-transform="MODIFIED">before-🙂-after</main>',
     );
+  });
+
+  it('preserves the legacy Express compression middleware hot path', async () => {
+    const response = await request('/compression', { 'Accept-Encoding': 'gzip' });
+    const html = gunzipSync(response.body).toString();
+
+    expect(response.statusCode).toBe(203);
+    expect(response.headers['content-encoding']).toBe('gzip');
+    expect(response.headers['x-legacy-compression']).toBe('yes');
+    expect(getHeaderValues(response.rawHeaders, 'set-cookie')).toEqual([
+      'session=one; Path=/; HttpOnly',
+      'expires=two; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/',
+    ]);
+    expect(html).toContain('<main data-transform="MODIFIED">before-🙂-after</main>');
+    expect(html).toContain('data-final-chunk');
+    expect(html).toContain('data-fixture-footer');
   });
 
   it('aborts the Fetch request and React render on client disconnect', async () => {
@@ -520,6 +625,7 @@ describe('Express adversarial contract', () => {
 
     expect(response.statusCode).toBe(200);
     expect(fixture.recoverableErrorCount).toBe(1);
+    expect(fixture.recoverableHeadersSent).toBe(true);
     expect(html).toContain('data-shell');
     expect(html).toContain('data-react-recovery');
     expect(html).toContain('data-fixture-footer');
@@ -527,35 +633,47 @@ describe('Express adversarial contract', () => {
   });
 
   it('aborts the stream and socket on a fatal transport error', async () => {
-    const result = await new Promise<'aborted' | 'completed'>((resolve, reject) => {
-      const req = http.request(
-        {
-          agent: false,
-          host: '127.0.0.1',
-          path: '/fatal',
-          port,
-        },
-        (res) => {
-          res.resume();
-          res.on('aborted', () => resolve('aborted'));
-          res.on('end', () => resolve('completed'));
-          res.on('error', () => resolve('aborted'));
-        },
-      );
+    const result = await new Promise<{ body: string; state: 'aborted' | 'completed' }>(
+      (resolve, reject) => {
+        const chunks: Buffer[] = [];
+        const req = http.request(
+          {
+            agent: false,
+            host: '127.0.0.1',
+            path: '/fatal',
+            port,
+          },
+          (res) => {
+            res.on('data', (chunk: Buffer) => chunks.push(chunk));
+            res.on('aborted', () =>
+              resolve({ body: Buffer.concat(chunks).toString(), state: 'aborted' }),
+            );
+            res.on('end', () =>
+              resolve({ body: Buffer.concat(chunks).toString(), state: 'completed' }),
+            );
+            res.on('error', () =>
+              resolve({ body: Buffer.concat(chunks).toString(), state: 'aborted' }),
+            );
+          },
+        );
 
-      req.on('error', (error) => {
-        if ((error as NodeJS.ErrnoException).code === 'ECONNRESET') {
-          resolve('aborted');
+        req.on('error', (error) => {
+          if ((error as NodeJS.ErrnoException).code === 'ECONNRESET') {
+            resolve({ body: '', state: 'aborted' });
 
-          return;
-        }
+            return;
+          }
 
-        reject(error);
-      });
-      req.end();
-    });
+          reject(error);
+        });
+        req.end();
+      },
+    );
 
     expect(fixture.fatalSocketClosed).toBe(true);
-    expect(result).toBe('aborted');
+    await vi.waitFor(() => expect(fixture.abortCount).toBe(1));
+    expect(result.state).toBe('aborted');
+    expect(result.body).not.toContain('data-fixture-footer');
+    expect(result.body).not.toContain('data-final-chunk');
   });
 });

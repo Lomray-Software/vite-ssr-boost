@@ -27,7 +27,13 @@ const createRequest = (req: IncomingMessage, options: ICreateRequestOptions = {}
   };
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    init.body = 'body' in options ? body : (req as unknown as BodyInit);
+    if ('body' in options) {
+      headers.delete('Content-Length');
+      init.body = body;
+    } else {
+      init.body = req as unknown as BodyInit;
+    }
+
     init.duplex = 'half';
   }
 

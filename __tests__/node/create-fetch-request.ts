@@ -4,7 +4,7 @@ import createFetchRequest from '@node/create-fetch-request';
 
 describe('createFetchRequest', () => {
   it('should convert express request to fetch request with headers and body', async () => {
-    const closeHandlers: Array<() => void> = [];
+    const controller = new AbortController();
     const req = {
       protocol: 'https',
       get: (name: string) => (name === 'host' ? 'example.com' : undefined),
@@ -16,12 +16,9 @@ describe('createFetchRequest', () => {
         cookie: ['a=1', 'b=2'],
       },
       body: 'payload',
-      on: (_: string, handler: () => void) => {
-        closeHandlers.push(handler);
-      },
     };
 
-    const request = createFetchRequest(req as never);
+    const request = createFetchRequest(req as never, { signal: controller.signal });
 
     expect(request.url).toBe('https://example.com/users?id=1');
     expect(request.method).toBe('POST');
@@ -29,7 +26,7 @@ describe('createFetchRequest', () => {
     expect(request.headers.get('cookie')).toBe('a=1; b=2');
     expect(await request.text()).toBe('payload');
 
-    closeHandlers[0]?.();
+    controller.abort();
     expect(request.signal.aborted).toBe(true);
   });
 
@@ -41,7 +38,6 @@ describe('createFetchRequest', () => {
       url: '/ping',
       method: 'GET',
       headers: {},
-      on: () => undefined,
     };
 
     const request = createFetchRequest(req as never);
