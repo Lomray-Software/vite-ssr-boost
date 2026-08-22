@@ -39,6 +39,10 @@ npm i @lomray/vite-ssr-boost
 
 Full documentation lives here: [lomray-software.github.io/vite-ssr-boost](https://lomray-software.github.io/vite-ssr-boost/)
 
+## Check a deployed app
+
+Already running this in production? Point our [free performance audit](https://audit.lomray.com/?utm_source=github&utm_medium=readme-vite-ssr-boost&utm_campaign=owned-surface-github) at the URL. It reports Core Web Vitals, JavaScript bundle weight and whether the HTML really arrives server-rendered. No signup.
+
 ## License
 
 Made with 💚
