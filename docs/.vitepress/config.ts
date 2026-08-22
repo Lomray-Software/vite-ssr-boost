@@ -66,7 +66,8 @@ export default defineConfig({
       { icon: 'github', link: 'https://github.com/Lomray-Software/vite-ssr-boost' },
     ],
     footer: {
-      message: 'Released under the MIT License.',
+      message:
+        'Released under the MIT License. &middot; <a href="https://audit.lomray.com/?utm_source=github-pages&amp;utm_medium=docs-vite-ssr-boost&amp;utm_campaign=owned-surface-github" target="_blank" rel="noopener">Free performance audit for your deployed app</a>',
       copyright: 'Copyright © Lomray Software',
     },
   },
