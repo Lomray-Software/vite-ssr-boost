@@ -59,3 +59,6 @@ npm run test
 ```
 
 Create PR into `staging` branch.
+
+Use Conventional Commits for commits and PR titles: `fix:` releases a patch, `feat:` a minor,
+and `feat!:` or a `BREAKING CHANGE:` footer a major. Keep the breaking marker when squash-merging.
