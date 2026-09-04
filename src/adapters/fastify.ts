@@ -1,22 +1,22 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import serializeBody from '@adapters/body';
 import type { TCompression } from '@adapters/compression';
 import type { TSsrHandler } from '@core/types';
 import compressResponse from '@node/compress-response';
 import createRequest from '@node/create-request';
+import type { TIncomingMessage, TServerResponse } from '@node/http';
 import createRequestSignal from '@node/request-signal';
 import writeEarlyHints from '@node/write-early-hints';
 import writeFetchResponse from '@node/write-fetch-response';
 
 interface IFastifyRequest {
   body?: unknown;
-  raw: IncomingMessage;
+  raw: TIncomingMessage;
 }
 
 interface IFastifyReply {
   getHeaders?: () => Record<string, string | number | string[] | undefined>;
   hijack: () => void;
-  raw: ServerResponse;
+  raw: TServerResponse;
 }
 
 type TFastifyHandler = (request: IFastifyRequest, reply: IFastifyReply) => Promise<void>;

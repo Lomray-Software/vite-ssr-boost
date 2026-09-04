@@ -175,6 +175,18 @@ const render = async <TAppProps,>(
     output = await renderToStream(node, {
       onError: (error) => {
         const streamError = obtainStreamError(error);
+
+        if (
+          hasAborted &&
+          (streamError.code === StreamError.RenderAborted ||
+            error === renderController.signal.reason)
+        ) {
+          streamError.code =
+            context.didError === StreamError.RenderTimeout
+              ? StreamError.RenderTimeout
+              : StreamError.RenderCancel;
+        }
+
         const { code } = streamError;
 
         context.didError ??= code;

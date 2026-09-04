@@ -1,11 +1,11 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { TIncomingMessage, TServerResponse } from '@node/http';
 
 interface IRequestSignal {
   dispose: () => void;
   signal: AbortSignal;
 }
 
-const createRequestSignal = (req: IncomingMessage, res: ServerResponse): IRequestSignal => {
+const createRequestSignal = (req: TIncomingMessage, res: TServerResponse): IRequestSignal => {
   const controller = new AbortController();
   const abort = (): void => controller.abort();
   const onClose = (): void => {

@@ -26,18 +26,45 @@ const renderToStream: TRenderToStream = (node, options) => {
   void allReady.catch(() => undefined);
   void shellReady.catch(() => undefined);
 
+  let hasShellSettled = false;
+  let hasAborted = false;
   const rendered = renderToPipeableStream(node, {
     onAllReady: resolveAll,
     onError: options.onError,
     onShellError: (error) => {
       const shellError = error instanceof Error ? error : new Error(String(error));
 
+      hasShellSettled = true;
       rejectAll(shellError);
       rejectShell(shellError);
     },
-    onShellReady: resolveShell,
+    onShellReady: () => {
+      hasShellSettled = true;
+      resolveShell();
+    },
   });
-  const onAbort = (): void => rendered.abort(options.signal.reason);
+  const abort = (reason?: unknown): void => {
+    if (hasAborted) {
+      return;
+    }
+
+    hasAborted = true;
+
+    // React 18 may omit shell callbacks when the root task is aborted.
+    if (!hasShellSettled) {
+      hasShellSettled = true;
+      const error =
+        reason instanceof Error
+          ? reason
+          : new Error(typeof reason === 'string' ? reason : 'Render aborted');
+
+      rejectShell(error);
+      rejectAll(error);
+    }
+
+    rendered.abort(reason);
+  };
+  const onAbort = (): void => abort(options.signal.reason);
   const cleanup = (): void => options.signal.removeEventListener('abort', onAbort);
 
   if (options.signal.aborted) {
@@ -51,7 +78,7 @@ const renderToStream: TRenderToStream = (node, options) => {
 
   return {
     allReady,
-    abort: rendered.abort,
+    abort,
     shellReady,
     start: () => {
       if (!hasStarted) {

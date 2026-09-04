@@ -1,4 +1,4 @@
-import type { IncomingMessage } from 'node:http';
+import type { TIncomingMessage } from '@node/http';
 
 interface ICreateRequestOptions {
   body?: BodyInit | null;
@@ -7,11 +7,15 @@ interface ICreateRequestOptions {
   url?: string;
 }
 
-const createRequest = (req: IncomingMessage, options: ICreateRequestOptions = {}): Request => {
+const createRequest = (req: TIncomingMessage, options: ICreateRequestOptions = {}): Request => {
   const { body, origin, signal } = options;
   const headers = new Headers();
 
   for (const [name, values] of Object.entries(req.headers)) {
+    if (name.startsWith(':')) {
+      continue;
+    }
+
     if (Array.isArray(values)) {
       values.forEach((value) => headers.append(name, value));
     } else if (values !== undefined) {
@@ -21,7 +25,9 @@ const createRequest = (req: IncomingMessage, options: ICreateRequestOptions = {}
 
   const protocol =
     req.socket && 'encrypted' in req.socket && req.socket.encrypted ? 'https' : 'http';
-  const requestOrigin = new URL(origin ?? `${protocol}://${headers.get('host')}`).origin;
+  const authority = req.headers[':authority'];
+  const host = headers.get('host') ?? (typeof authority === 'string' ? authority : null);
+  const requestOrigin = new URL(origin ?? `${protocol}://${host}`).origin;
   const target = options.url ?? req.url ?? '/';
   // An origin-form target beginning with // is a path, not a replacement hostname.
   const url = new URL(target.startsWith('/') ? requestOrigin + target : target, requestOrigin);

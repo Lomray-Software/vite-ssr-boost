@@ -18,7 +18,7 @@ owns the HTTP server, bundling and asset delivery; an adapter does not replace t
 
 ## Existing Express applications
 
-No migration is required. Existing imports and hooks keep working:
+Existing imports and hooks keep working:
 
 ```ts
 import entryServer from '@lomray/vite-ssr-boost/node/entry';
@@ -32,8 +32,18 @@ the Express adapter. Legacy `onRequest` and render hooks receive the same live E
 do not emulate Express objects. `onResponse` keeps the same signature and still transforms streamed
 HTML. The core decodes split UTF-8 chunks safely before invoking it.
 
-The default shell-error page now returns a generic HTTP 500 without exposing the exception message.
-Use `onError` for diagnostics or `onShellError` for your own error page.
+### Migration notes
+
+- The default shell-error page returns a generic HTTP 500 without exception messages. Use `onError`
+  for diagnostics or `onShellError` for a custom page.
+- Request/render hook failures reach Express error middleware through `next(error)`, rather than
+  falling through to a 404. Register error middleware after the SSR handler.
+- Unless explicitly overridden, rendered responses use React Router's status, including 404 for
+  unmatched routes. Previously these could be sent as 200.
+- Render timeouts and client/intentional cancellation report `onError` codes `timeout` and `cancel`.
+  The legacy logger keeps these at info level. Unexpected errors still retain their original error.
+- Parsed JSON and URL-encoded bodies work automatically. An unsupported custom or multipart parser
+  now fails explicitly instead of sending `[object Object]`; use `getBody` as shown below.
 
 Express and compression are optional dependencies installed by default. If your install command
 uses `--omit=optional`, install them explicitly:
@@ -84,6 +94,9 @@ import adapterNode from '@lomray/vite-ssr-boost/adapters/node';
 http.createServer(adapterNode(handler)).listen(3000);
 ```
 
+The Node and Fastify adapters also accept HTTP/2 compatibility requests/responses, including
+`:authority`, separate cookies and Early Hints.
+
 Express:
 
 ```ts
@@ -125,6 +138,10 @@ For Bun use `Bun.serve({ fetch: adapterEdge(handler) })`; for Deno use
 handling. The CLI's `build-vercel` and `--serverless` output remains a Node/Express deployment;
 it does not generate a Cloudflare Worker or Vercel Edge bundle.
 
+Keep the target runtime's package resolution conditions enabled. For a custom Cloudflare bundle,
+include `workerd` and `worker` conditions so React 19 selects its Worker renderer; the browser-only
+renderer requires APIs such as `MessageChannel` that workerd does not provide.
+
 ## Request bodies
 
 The Node adapter streams the original request body. Express and Fastify also preserve parsed JSON
@@ -138,6 +155,25 @@ app.use(adapterExpress(handler, {
 ```
 
 This keeps parser-specific objects out of the core and makes conversion failures explicit.
+
+The managed/legacy server accepts `getBody` from `init` too. For middleware that already consumed
+a multipart body, rebuild the fields/files your router action needs as `FormData`:
+
+```ts
+entryServer(App, routes, {
+  init: () => ({
+    getBody: (req) => {
+      const form = new FormData();
+      form.append('name', req.body.name);
+      return form;
+    },
+  }),
+});
+```
+
+Fetch generates the new multipart boundary. Include uploaded files as `Blob` entries when needed;
+`req.files` and other parser-specific data are not copied automatically. Returning `null` explicitly
+supplies an empty body. The callback is only used for methods that can carry a request body.
 
 ## Early Hints
 

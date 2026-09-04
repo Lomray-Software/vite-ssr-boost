@@ -639,7 +639,7 @@ describe('Express adversarial contract', () => {
     expect(fixture.abortCount).toBe(1);
     expect(response.statusCode).toBe(500);
     expect(response.body.toString()).toContain('data-shell-error');
-    expect(response.body.toString()).toContain('render timed out');
+    expect(response.body.toString()).toContain('This operation was aborted');
   });
 
   it('returns 500 when the shell fails before the first flush', async () => {

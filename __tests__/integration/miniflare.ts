@@ -12,7 +12,7 @@ describe('Miniflare edge app', () => {
     let buildOutputImports = 0;
     const bundle = await build({
       bundle: true,
-      conditions: ['worker', 'browser'],
+      conditions: ['workerd', 'worker', 'browser'],
       define: { 'process.env.NODE_ENV': '"production"' },
       entryPoints: [fileURLToPath(new URL('../../__fixtures__/edge-app.tsx', import.meta.url))],
       format: 'esm',

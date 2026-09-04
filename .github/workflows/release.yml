@@ -9,9 +9,13 @@ env:
   ENABLE_CACHE: yes
 
 jobs:
+  react:
+    uses: ./.github/workflows/react-compatibility.yml
+
   release:
     name: Release
     runs-on: ubuntu-latest
+    needs: [react]
     concurrency:
       group: ${{ github.ref }}-release
       cancel-in-progress: true

@@ -1,5 +1,10 @@
-import { renderToReadableStream } from 'react-dom/server.browser';
+import * as ReactDOMServer from 'react-dom/server';
 import type { TRenderToStream } from '@core/render';
+
+// Let React select its workerd/Bun/Deno renderer. Node's React 18 entry lacks Web streams.
+const getRenderer = async (): Promise<typeof ReactDOMServer.renderToReadableStream> =>
+  ReactDOMServer.renderToReadableStream ??
+  (await import('react-dom/server.browser')).renderToReadableStream;
 
 const renderToStream: TRenderToStream = async (node, { onError, signal }) => {
   const controller = new AbortController();
@@ -23,14 +28,13 @@ const renderToStream: TRenderToStream = async (node, { onError, signal }) => {
     signal.addEventListener('abort', abort, { once: true });
   }
 
-  let stream: Awaited<ReturnType<typeof renderToReadableStream>>;
+  let stream: Awaited<ReturnType<typeof ReactDOMServer.renderToReadableStream>>;
 
   try {
     stream = await Promise.race([
-      renderToReadableStream(node, {
-        onError,
-        signal: controller.signal,
-      }),
+      getRenderer().then((renderToReadableStream) =>
+        renderToReadableStream(node, { onError, signal: controller.signal }),
+      ),
       pendingAbort,
     ]);
   } catch (error) {

@@ -1,13 +1,27 @@
-import type { ServerResponse } from 'node:http';
 import { getHeaderEntries, getSetCookieHeaders } from '@core/headers';
+import type { TServerResponse } from '@node/http';
 
-const writeFetchHeaders = (res: ServerResponse, response: Response): void => {
+const SET_COOKIE = 'Set-Cookie';
+
+const writeFetchHeaders = (res: TServerResponse, response: Response): void => {
   res.statusCode = response.status;
   getHeaderEntries(response.headers).forEach(([name, value]) => res.setHeader(name, value));
-  getSetCookieHeaders(response.headers).forEach((cookie) => res.appendHeader('Set-Cookie', cookie));
+  const cookies = getSetCookieHeaders(response.headers);
+
+  if (typeof res.appendHeader === 'function') {
+    cookies.forEach((cookie) => res.appendHeader(SET_COOKIE, cookie));
+  } else if (cookies.length) {
+    // The HTTP/2 compatibility response has setHeader(), but no appendHeader().
+    const existing = res.getHeader(SET_COOKIE);
+
+    res.setHeader(SET_COOKIE, [
+      ...(Array.isArray(existing) ? existing : existing ? [String(existing)] : []),
+      ...cookies,
+    ]);
+  }
 };
 
-const waitForDrain = (res: ServerResponse): Promise<void> =>
+const waitForDrain = (res: TServerResponse): Promise<void> =>
   new Promise((resolve, reject) => {
     const cleanup = (): void => {
       res.off('close', onClose);
@@ -32,7 +46,7 @@ const waitForDrain = (res: ServerResponse): Promise<void> =>
     res.once('error', onError);
   });
 
-const writeFetchResponse = async (res: ServerResponse, response: Response): Promise<void> => {
+const writeFetchResponse = async (res: TServerResponse, response: Response): Promise<void> => {
   if (res.destroyed || res.writableEnded) {
     await response.body?.cancel();
 
@@ -78,7 +92,7 @@ const writeFetchResponse = async (res: ServerResponse, response: Response): Prom
       }
 
       // Express compression buffers otherwise: a gzip header alone is not a usable SSR shell.
-      (res as ServerResponse & { flush?: () => void }).flush?.();
+      (res as TServerResponse & { flush?: () => void }).flush?.();
     }
 
     if (!res.destroyed && !res.writableEnded) {

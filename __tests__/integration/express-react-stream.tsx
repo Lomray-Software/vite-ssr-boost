@@ -8,6 +8,7 @@ import express from 'express';
 import compression from 'compression';
 import { redirect } from 'react-router';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import StreamError from '@constants/stream-error';
 import entry from '@node/entry';
 
 interface IResource {
@@ -17,12 +18,10 @@ interface IResource {
 interface IWireResponse {
   body: string;
   headers: http.IncomingHttpHeaders;
-  firstByteAt: number;
   statusCode: number;
 }
 
 let resource: IResource;
-let resourceSettledAt = 0;
 
 const AsyncContent = () => {
   resource.read();
@@ -39,16 +38,18 @@ const ShellErrorPage = (): never => {
 };
 const App = ({ children }: PropsWithChildren) => <main>{children}</main>;
 
-const createRejectingResource = (): IResource => {
+const createRejectingResource = (): IResource & { reject: () => void } => {
   let error: Error | undefined;
+  let rejectResource!: (reason: Error) => void;
   const promise = new Promise<never>((_, reject) => {
-    setTimeout(() => {
-      error = new Error('stream exploded');
-      reject(error);
-    }, 10);
+    rejectResource = reject;
   });
 
   return {
+    reject: () => {
+      error = new Error('stream exploded');
+      rejectResource(error);
+    },
     read: () => {
       if (error) {
         throw error;
@@ -59,17 +60,18 @@ const createRejectingResource = (): IResource => {
   };
 };
 
-const createResolvingResource = (): IResource => {
+const createResolvingResource = (): IResource & { resolve: () => void } => {
   let isReady = false;
+  let resolveResource!: () => void;
   const promise = new Promise<void>((resolve) => {
-    setTimeout(() => {
-      isReady = true;
-      resourceSettledAt = performance.now();
-      resolve();
-    }, 100);
+    resolveResource = resolve;
   });
 
   return {
+    resolve: () => {
+      isReady = true;
+      resolveResource();
+    },
     read: () => {
       if (!isReady) {
         throw promise;
@@ -80,10 +82,19 @@ const createResolvingResource = (): IResource => {
 
 describe('Express real React stream contract', () => {
   const onError = vi.fn();
+  const logger = { error: vi.fn(), info: vi.fn() };
+  const multipartAction = vi.fn(async ({ request }: { request: Request }) => {
+    expect((await request.formData()).get('name')).toBe('Alice');
+    return null;
+  });
   let port: number;
   let server: http.Server;
 
-  const request = (pathname: string, gzip = false): Promise<IWireResponse> =>
+  const request = (
+    pathname: string,
+    gzip = false,
+    onFirstHtml?: () => void,
+  ): Promise<IWireResponse> =>
     new Promise((resolve, reject) => {
       const req = http.request(
         {
@@ -95,19 +106,22 @@ describe('Express real React stream contract', () => {
         },
         (res) => {
           let body = '';
-          let firstByteAt = 0;
+          let hasHtml = false;
 
           const decoded = gzip ? res.pipe(createGunzip()) : res;
           decoded.setEncoding('utf8');
           decoded.on('data', (chunk: string) => {
-            firstByteAt ||= performance.now();
             body += chunk;
+
+            if (!hasHtml) {
+              hasHtml = true;
+              onFirstHtml?.();
+            }
           });
           decoded.on('end', () => {
             resolve({
               body,
               headers: res.headers,
-              firstByteAt,
               statusCode: res.statusCode!,
             });
           });
@@ -122,6 +136,9 @@ describe('Express real React stream contract', () => {
 
   beforeAll(async () => {
     const prepared = entry(App, [
+      { path: '/timeout', Component: RecoverablePage },
+      { path: '/disconnect', Component: RecoverablePage },
+      { path: '/multipart', action: multipartAction, Component: () => <p>multipart rendered</p> },
       {
         path: '/login',
         loader: () => {
@@ -146,10 +163,6 @@ describe('Express real React stream contract', () => {
         Component: ShellErrorPage,
       },
     ]);
-    const logger = {
-      error: vi.fn(),
-      info: vi.fn(),
-    };
     const config = {
       getLogger: () => logger,
       getParams: () => ({
@@ -161,6 +174,14 @@ describe('Express real React stream contract', () => {
     const app = express().disable('x-powered-by');
 
     app.use(compression({ threshold: 0 }));
+    app.use(express.raw({ type: 'multipart/form-data' }));
+    app.use((req, _, next) => {
+      if (req.path === '/multipart') {
+        // Model middleware such as multer: the original stream has been consumed.
+        req.body = { name: 'Alice' };
+      }
+      next();
+    });
 
     app.use((req, res) => {
       void prepared.render(
@@ -175,7 +196,16 @@ describe('Express real React stream contract', () => {
           res,
         },
         {
-          abortDelay: 2_000,
+          abortDelay: req.path === '/timeout' ? 50 : 2_000,
+          ...(req.path === '/multipart'
+            ? {
+                getBody: () => {
+                  const body = new FormData();
+                  body.append('name', req.body.name);
+                  return body;
+                },
+              }
+            : {}),
           onError,
           onShellError: ({ error }) => `<!doctype html><p data-shell-error>${error.message}</p>`,
         },
@@ -197,35 +227,35 @@ describe('Express real React stream contract', () => {
   });
 
   it('flushes the shell before deferred content resolves', async () => {
-    resource = createResolvingResource();
-    resourceSettledAt = 0;
+    const deferred = createResolvingResource();
+    resource = deferred;
 
-    const response = await request('/streaming');
+    // Complete Suspense only after the client receives HTML, independent of runner speed.
+    const response = await request('/streaming', false, deferred.resolve);
 
     expect(response.statusCode).toBe(200);
-    expect(response.firstByteAt).toBeLessThan(resourceSettledAt);
     expect(response.body).toContain('data-suspense-fallback');
     expect(response.body).toContain('data-async-content');
     expect(response.body).toContain('data-fixture-footer');
   });
 
   it('flushes usable HTML through gzip before deferred content resolves', async () => {
-    resource = createResolvingResource();
-    resourceSettledAt = 0;
+    const deferred = createResolvingResource();
+    resource = deferred;
 
-    const response = await request('/streaming', true);
+    const response = await request('/streaming', true, deferred.resolve);
 
     expect(response.headers['content-encoding']).toBe('gzip');
-    expect(response.firstByteAt).toBeLessThan(resourceSettledAt);
     expect(response.body).toContain('data-async-content');
     expect(response.body).toContain('data-fixture-footer');
   });
 
   it('completes the document with React recovery instructions after a post-flush error', async () => {
-    resource = createRejectingResource();
+    const deferred = createRejectingResource();
+    resource = deferred;
     onError.mockClear();
 
-    const response = await request('/recoverable');
+    const response = await request('/recoverable', false, deferred.reject);
 
     expect(response.statusCode).toBe(200);
     expect(onError).toHaveBeenCalledOnce();
@@ -252,5 +282,64 @@ describe('Express real React stream contract', () => {
       'session=one; Path=/; HttpOnly',
       'theme=dark; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/',
     ]);
+  });
+
+  it('logs a real React timeout at info level with the timeout hook code', async () => {
+    const pending = new Promise<never>(() => undefined);
+    resource = {
+      read: () => {
+        throw pending;
+      },
+    };
+    onError.mockClear();
+    logger.error.mockClear();
+    logger.info.mockClear();
+
+    const response = await request('/timeout');
+
+    expect(response.body).toContain('data-fixture-footer');
+    expect(onError).toHaveBeenCalled();
+    expect(
+      onError.mock.calls.every(([{ error }]) => error.code === StreamError.RenderTimeout),
+    ).toBe(true);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalled();
+  });
+
+  it('logs a real client disconnect at info level with the cancellation hook code', async () => {
+    const pending = new Promise<never>(() => undefined);
+    resource = {
+      read: () => {
+        throw pending;
+      },
+    };
+    onError.mockClear();
+    logger.error.mockClear();
+    logger.info.mockClear();
+    const controller = new AbortController();
+    const response = await fetch(`http://127.0.0.1:${port}/disconnect`, {
+      signal: controller.signal,
+    });
+    const reader = response.body!.getReader();
+    await reader.read();
+    controller.abort();
+    await reader.cancel().catch(() => undefined);
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(onError.mock.calls.every(([{ error }]) => error.code === StreamError.RenderCancel)).toBe(
+      true,
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalled();
+  });
+
+  it('accepts getBody for multipart parsed before legacy SSR', async () => {
+    const body = new FormData();
+    body.append('name', 'Alice');
+    const response = await fetch(`http://127.0.0.1:${port}/multipart`, { body, method: 'POST' });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('multipart rendered');
+    expect(multipartAction).toHaveBeenCalledOnce();
   });
 });

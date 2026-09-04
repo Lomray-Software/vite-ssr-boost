@@ -1,14 +1,14 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { TCompression } from '@adapters/compression';
 import type { TSsrHandler } from '@core/types';
 import compressResponse from '@node/compress-response';
 import createRequest from '@node/create-request';
+import type { TIncomingMessage, TServerResponse } from '@node/http';
 import createRequestSignal from '@node/request-signal';
 import writeEarlyHints from '@node/write-early-hints';
 import writeFetchResponse from '@node/write-fetch-response';
 
 type TNext = (error?: unknown) => void;
-type TNodeHandler = (req: IncomingMessage, res: ServerResponse, next?: TNext) => Promise<void>;
+type TNodeHandler = (req: TIncomingMessage, res: TServerResponse, next?: TNext) => Promise<void>;
 
 export interface INodeAdapterOptions {
   compression?: TCompression;
@@ -17,7 +17,7 @@ export interface INodeAdapterOptions {
 const handleRequest = async (
   handler: TSsrHandler,
   request: Request,
-  res: ServerResponse,
+  res: TServerResponse,
   { compression = false }: INodeAdapterOptions = {},
 ): Promise<void> => {
   const response = compressResponse(

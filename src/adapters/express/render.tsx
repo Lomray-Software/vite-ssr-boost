@@ -43,6 +43,7 @@ export interface IRenderParams<TAppProps = Record<string, any>> {
 
 export interface IRenderOptions<TAppProps = Record<string, any>> {
   abortDelay?: number;
+  getBody?: (request: Request) => BodyInit | null | undefined;
   onRouterReady?: (params: {
     context: IRequestContext<TAppProps>;
   }) => Promise<IRouterReadyOut> | IRouterReadyOut;
@@ -83,6 +84,7 @@ async function render(
     onResponse,
     onShellError,
     onError,
+    getBody,
     getState,
     abortDelay = 15000,
   }: IRenderOptions,
@@ -90,24 +92,29 @@ async function render(
   const { appProps, html: shellHtml, req, res } = context;
   const Logger = config.getLogger();
   const requestSignal = createRequestSignal(req, res);
-  const coreContext: ISsrRequestContext = {
-    appProps,
-    html: shellHtml,
-    request: createFetchRequest(req, { signal: requestSignal.signal }),
-    response: {
-      headers: new Headers(),
-    },
-  };
-  const syncContext = (updated: ISsrRequestContext): IRequestContext => {
-    context.didError = updated.didError;
-    context.html = updated.html;
-    context.isStream = updated.isStream;
-    context.routerContext = updated.routerContext;
-    context.serverContext = updated.serverContext;
-
-    return context;
-  };
   try {
+    const coreContext: ISsrRequestContext = {
+      appProps,
+      html: shellHtml,
+      request: createFetchRequest(req, {
+        signal: requestSignal.signal,
+        ...(getBody && req.method !== 'GET' && req.method !== 'HEAD'
+          ? { body: getBody(req) ?? null }
+          : {}),
+      }),
+      response: {
+        headers: new Headers(),
+      },
+    };
+    const syncContext = (updated: ISsrRequestContext): IRequestContext => {
+      context.didError = updated.didError;
+      context.html = updated.html;
+      context.isStream = updated.isStream;
+      context.routerContext = updated.routerContext;
+      context.serverContext = updated.serverContext;
+
+      return context;
+    };
     const response = await coreRender(
       {
         createApp: (children, updated) => (

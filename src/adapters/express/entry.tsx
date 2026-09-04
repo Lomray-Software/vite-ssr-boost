@@ -32,6 +32,7 @@ export interface IEntrypointOptions<TAppProps = Record<string, any>> {
   onResponse?: IRenderOptions<TAppProps>['onResponse'];
   onError?: IRenderOptions<TAppProps>['onError'];
   getState?: IRenderOptions<TAppProps>['getState'];
+  getBody?: IRenderOptions<TAppProps>['getBody'];
 }
 
 export interface IPrepareRenderOut<TAppProps = Record<string, any>> {

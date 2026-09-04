@@ -21,6 +21,7 @@ interface IPrepareServerEntrypointLoadOut<TAppProps = Record<string, any>> {
   onResponse?: IEntrypointOptions<TAppProps>['onResponse'];
   onError?: IEntrypointOptions<TAppProps>['onError'];
   getState?: IEntrypointOptions<TAppProps>['getState'];
+  getBody?: IEntrypointOptions<TAppProps>['getBody'];
 }
 
 /**

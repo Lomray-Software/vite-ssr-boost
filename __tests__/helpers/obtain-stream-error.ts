@@ -3,6 +3,16 @@ import StreamError from '@constants/stream-error';
 import obtainStreamError from '@helpers/obtain-stream-error';
 
 describe('obtainStreamError', () => {
+  it('recognizes AbortError without depending on its message', () => {
+    const err = new DOMException('This operation was aborted', 'AbortError');
+
+    expect(obtainStreamError(err)).toEqual({
+      code: StreamError.RenderAborted,
+      message: err.message,
+      original: err,
+    });
+  });
+
   it('should return RenderAborted error for a specific error message', () => {
     const errorMessage = 'The render was aborted by the server without a reason.';
     const err = new Error(errorMessage);

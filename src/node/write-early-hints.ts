@@ -1,8 +1,8 @@
-import type { ServerResponse } from 'node:http';
 import { getHeaderEntries } from '@core/headers';
+import type { TServerResponse } from '@node/http';
 import splitLinkHeader from '@node/split-link-header';
 
-const writeEarlyHints = (res: ServerResponse, headers: Headers): void => {
+const writeEarlyHints = (res: TServerResponse, headers: Headers): void => {
   if (res.headersSent || typeof res.writeEarlyHints !== 'function') {
     return;
   }
