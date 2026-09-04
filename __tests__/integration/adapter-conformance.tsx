@@ -193,7 +193,8 @@ const factories: IRuntimeFactory[] = [
     name: 'Fastify',
     renderer: nodeRenderToStream,
     start: async (handler) => {
-      const app = Fastify();
+      // Fetch may open a replacement keep-alive socket after the cancellation test.
+      const app = Fastify({ forceCloseConnections: true });
 
       app.all('/*', adapterFastify(handler));
 
