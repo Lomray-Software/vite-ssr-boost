@@ -25,6 +25,8 @@ type TScenario =
   | 'normal'
   | 'recoverable'
   | 'request-takeover'
+  | 'request-error'
+  | 'state-error'
   | 'shell-error'
   | 'shell-write'
   | 'split-utf8'
@@ -309,6 +311,10 @@ describe('Express adversarial contract', () => {
       onRequest: (req: ExpressRequest, res: ExpressResponse) => {
         fixture.scenario = req.originalUrl.slice(1).split('?')[0] as TScenario;
 
+        if (fixture.scenario === 'request-error') {
+          throw new Error('request hook failed');
+        }
+
         if (fixture.scenario === 'live-hooks') {
           fixture.liveRequest = req;
           fixture.liveResponse = res;
@@ -331,6 +337,11 @@ describe('Express adversarial contract', () => {
           appProps: {},
           hasEarlyHints: fixture.scenario === 'early-hints',
         };
+      },
+      getState: () => {
+        if (fixture.scenario === 'state-error') {
+          throw new Error('state serialization failed');
+        }
       },
       onResponse: ({ context, html }: { context: { res: ExpressResponse }; html: string }) => {
         if (['compression', 'split-utf8'].includes(fixture.scenario)) {
@@ -404,6 +415,13 @@ describe('Express adversarial contract', () => {
     };
     const created = await createServer(config as never);
 
+    created.app.use(
+      (_: Error, __: ExpressRequest, res: ExpressResponse, _next: (error?: unknown) => void) => {
+        res.status(500).setHeader('X-Error-Handler', 'yes');
+        res.end('Internal Server Error');
+      },
+    );
+
     server = created.run({ isPrintInfo: false }) as http.Server;
 
     if (!server.listening) {
@@ -445,6 +463,18 @@ describe('Express adversarial contract', () => {
       'expires=two; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/',
     ]);
   });
+
+  it.each(['request-error', 'state-error'])(
+    'forwards %s to error middleware instead of returning 404',
+    async (scenario) => {
+      const response = await request(`/${scenario}`);
+
+      expect(response.statusCode).toBe(500);
+      expect(response.headers['x-error-handler']).toBe('yes');
+      expect(response.body.toString()).toBe('Internal Server Error');
+      if (scenario === 'state-error') expect(fixture.abortCount).toBe(1);
+    },
+  );
 
   it('passes the same live Express 5 req/res through legacy hooks', async () => {
     const response = await request('/live-hooks');

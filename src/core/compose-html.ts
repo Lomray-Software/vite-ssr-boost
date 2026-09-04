@@ -3,16 +3,26 @@ const composeHtml = (
   body: ReadableStream<Uint8Array>,
   footer: string,
   abort?: (reason?: unknown) => void,
+  onComplete?: () => void,
 ): ReadableStream<Uint8Array> => {
   const encoder = new TextEncoder();
   const reader = body.getReader();
   let phase: 'body' | 'footer' | 'header' = 'header';
 
   return new ReadableStream<Uint8Array>({
-    cancel: (reason) => {
+    cancel: async (reason) => {
       abort?.(reason);
 
-      return reader.cancel(reason);
+      if (phase === 'footer') {
+        return;
+      }
+
+      try {
+        await reader.cancel(reason);
+      } finally {
+        reader.releaseLock();
+        onComplete?.();
+      }
     },
     async pull(controller) {
       if (phase === 'header') {
@@ -32,6 +42,8 @@ const composeHtml = (
           chunk = await reader.read();
         } catch (error) {
           abort?.(error);
+          reader.releaseLock();
+          onComplete?.();
           controller.error(error);
 
           return;
@@ -44,6 +56,8 @@ const composeHtml = (
         }
 
         phase = 'footer';
+        reader.releaseLock();
+        onComplete?.();
       }
 
       if (footer) {

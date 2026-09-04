@@ -14,11 +14,15 @@ const { coreRenderMock, createFetchRequestMock, injectAssetsMock, writeFetchResp
 
 vi.mock('@core/render', () => ({ default: coreRenderMock }));
 vi.mock('@node/create-fetch-request', () => ({ default: createFetchRequestMock }));
-vi.mock('@node/write-fetch-response', () => ({ default: writeFetchResponseMock }));
+vi.mock('@node/write-fetch-response', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@node/write-fetch-response')>()),
+  default: writeFetchResponseMock,
+}));
 vi.mock('@services/ssr-manifest', () => ({
   default: {
     get: vi.fn(() => ({
       injectAssets: injectAssetsMock,
+      prepareDevAssets: vi.fn(),
     })),
   },
 }));

@@ -229,6 +229,47 @@ describe('core render', () => {
     await expect(response.text()).resolves.toBe('<p>renderer failed</p>');
   });
 
+  it('does not expose exception messages as executable HTML', async () => {
+    const response = await render(
+      {
+        createApp,
+        handler: createRouter() as never,
+        renderToStream: () => {
+          throw new Error('<script>alert("private error")</script>');
+        },
+      },
+      createContext(),
+      {},
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain('private error');
+  });
+
+  it.each(['onShellReady', 'getState'] as const)(
+    'aborts React when %s throws after the shell is ready',
+    async (hook) => {
+      const renderer = createRenderer();
+      const error = new Error('hook failed');
+      const pending = render(
+        { createApp, handler: createRouter() as never, renderToStream: renderer.renderToStream },
+        createContext(),
+        {
+          [hook]: () => {
+            throw error;
+          },
+        },
+      );
+      const rejected = expect(pending).rejects.toBe(error);
+
+      await vi.waitFor(() => expect(renderer.renderToStream).toHaveBeenCalledOnce());
+      renderer.shellReady();
+      await rejected;
+      expect(renderer.abort).toHaveBeenCalledWith(error);
+      expect(renderer.output.start).not.toHaveBeenCalled();
+    },
+  );
+
   it('uses the React Router status when no hook overrides it', async () => {
     const renderer = createRenderer();
     const pending = render(

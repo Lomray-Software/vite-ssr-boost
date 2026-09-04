@@ -37,6 +37,7 @@ export default {
     'node:child_process',
     'node:fs',
     'node:stream',
+    'node:zlib',
     'node:url',
     'node:http',
     'node:https',

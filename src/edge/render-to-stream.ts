@@ -34,6 +34,7 @@ const renderToStream: TRenderToStream = async (node, { onError, signal }) => {
       pendingAbort,
     ]);
   } catch (error) {
+    signal.removeEventListener('abort', abort);
     const shellError = Promise.reject(error);
 
     void shellError.catch(() => undefined);

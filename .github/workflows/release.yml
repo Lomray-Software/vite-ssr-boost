@@ -53,6 +53,13 @@ jobs:
       - name: Prove core works without optional adapters
         run: npm run test:core:no-optional
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+
+      - name: Boot the built Fetch handler on Bun
+        run: npm run test:bun
+
       - uses: actions/checkout@v4
         with:
           path: acceptance/vite-template

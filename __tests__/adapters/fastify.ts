@@ -75,4 +75,31 @@ describe('Fastify adapter', () => {
       await custom.close();
     }
   });
+
+  it('preserves headers and cookies set by Fastify hooks', async () => {
+    const custom = Fastify();
+
+    custom.addHook('onRequest', async (_, reply) => {
+      reply.header('X-From-Hook', 'yes');
+      reply.header('Set-Cookie', 'hook=1; Path=/');
+    });
+    custom.get(
+      '/',
+      adapterFastify(
+        async () =>
+          new Response('ok', {
+            headers: { 'Set-Cookie': 'handler=2; Path=/' },
+          }),
+      ),
+    );
+
+    try {
+      const response = await custom.inject('/');
+
+      expect(response.headers['x-from-hook']).toBe('yes');
+      expect(response.headers['set-cookie']).toEqual(['hook=1; Path=/', 'handler=2; Path=/']);
+    } finally {
+      await custom.close();
+    }
+  });
 });

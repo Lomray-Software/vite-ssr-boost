@@ -6,6 +6,7 @@ import StreamError from '@constants/stream-error';
 import { ServerProvider } from '@context/server';
 import type { IServerContext } from '@context/server';
 import composeHtml from '@core/compose-html';
+import headResponse from '@core/head-response';
 import transformHtml from '@core/transform-html';
 import type { ISsrExecutionContext } from '@core/types';
 import buildCustomState from '@helpers/build-custom-state';
@@ -86,7 +87,9 @@ export interface ICoreRenderOptions<TAppProps = Record<string, any>> {
 }
 
 const isRedirect = (response?: Response | null): boolean =>
-  Boolean(response && response.status >= 300 && response.status < 400);
+  Boolean(
+    response && response.status >= 300 && response.status < 400 && response.headers.has('Location'),
+  );
 
 const render = async <TAppProps,>(
   { createApp, handler, renderToStream }: ICoreRenderParams<TAppProps>,
@@ -109,7 +112,7 @@ const render = async <TAppProps,>(
   });
 
   if (queried instanceof Response) {
-    return queried;
+    return headResponse(context.request, queried);
   }
 
   context.routerContext = queried;
@@ -139,6 +142,11 @@ const render = async <TAppProps,>(
   // Assigned after abort is defined so an async renderer can be cancelled while it initializes.
   let output: IRenderStream | undefined;
   let hasAborted = false;
+  const onRequestAbort = (): void => abort(context.request.signal.reason);
+  const cleanup = (): void => {
+    clearTimeout(abortTimer);
+    context.request.signal.removeEventListener('abort', onRequestAbort);
+  };
   const abort = (reason?: unknown): void => {
     if (hasAborted) {
       return;
@@ -146,7 +154,7 @@ const render = async <TAppProps,>(
 
     hasAborted = true;
     abortReason = reason;
-    clearTimeout(abortTimer);
+    cleanup();
     context.didError ??= StreamError.RenderCancel;
     renderController.abort(reason);
     output?.abort(reason);
@@ -160,9 +168,7 @@ const render = async <TAppProps,>(
   if (context.request.signal.aborted) {
     abort(context.request.signal.reason);
   } else {
-    context.request.signal.addEventListener('abort', () => abort(context.request.signal.reason), {
-      once: true,
-    });
+    context.request.signal.addEventListener('abort', onRequestAbort, { once: true });
   }
 
   try {
@@ -188,62 +194,78 @@ const render = async <TAppProps,>(
 
     await (isStream ? output.shellReady : output.allReady);
   } catch (error) {
-    clearTimeout(abortTimer);
+    abort(error);
+    await output?.stream.cancel(error).catch(() => undefined);
 
     const shellError = error instanceof Error ? error : new Error(String(error));
     const html =
       onShellError?.({ context, error: shellError }) ||
-      `<!doctype html><p>Something went wrong: ${shellError.message}</p>`;
+      '<!doctype html><p>Internal Server Error</p>';
     const headers = new Headers(context.response.headers);
 
     headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
 
-    return new Response(html, {
+    return new Response(context.request.method === 'HEAD' ? null : html, {
       headers,
       status: 500,
     });
   }
 
-  const serverResponse = context.serverContext.response;
+  try {
+    const serverResponse = context.serverContext.response;
 
-  if (serverResponse && isRedirect(serverResponse)) {
-    output.abort();
+    if (serverResponse && isRedirect(serverResponse)) {
+      abort();
+      await output.stream.cancel().catch(() => undefined);
 
-    return serverResponse;
-  }
+      return headResponse(context.request, serverResponse);
+    }
 
-  context.response.status =
-    serverResponse?.status ?? context.response.status ?? context.routerContext.statusCode ?? 200;
+    context.response.status =
+      serverResponse?.status ?? context.response.status ?? context.routerContext.statusCode ?? 200;
 
-  if (!context.response.headers.has(CONTENT_TYPE)) {
-    context.response.headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
-  }
+    if (!context.response.headers.has(CONTENT_TYPE)) {
+      context.response.headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
+    }
 
-  const shell = onShellReady?.({ context }) ?? {};
-  const routerState = buildRouterState(context.routerContext);
-  const customState = buildCustomState(getState?.({ context }));
-  const header = shell.header || context.html.header;
-  const footer = routerState + customState + (shell.footer || context.html.footer);
-  const headers = new Headers(context.response.headers);
+    const shell = onShellReady?.({ context }) ?? {};
+    const routerState = buildRouterState(context.routerContext);
+    const customState = buildCustomState(getState?.({ context }));
+    const header = shell.header || context.html.header;
+    const footer = routerState + customState + (shell.footer || context.html.footer);
+    const headers = new Headers(context.response.headers);
 
-  if (context.request.method === 'HEAD' || [204, 205, 304].includes(context.response.status)) {
-    abort();
+    if (context.request.method === 'HEAD' || [204, 205, 304].includes(context.response.status)) {
+      abort();
+      await output.stream.cancel().catch(() => undefined);
 
-    return new Response(null, {
+      return new Response(null, {
+        headers,
+        status: context.response.status,
+      });
+    }
+
+    const body = composeHtml(header, output.stream, footer, abort, cleanup);
+    const transformed = transformHtml(
+      body,
+      onResponse ? (html) => onResponse({ context, html }) : undefined,
+    );
+
+    output.start();
+
+    return new Response(transformed, {
       headers,
       status: context.response.status,
     });
+  } catch (error) {
+    abort(error);
+
+    if (!output.stream.locked) {
+      await output.stream.cancel(error).catch(() => undefined);
+    }
+
+    throw error;
   }
-
-  const body = composeHtml(header, output.stream, footer, abort);
-  const transformed = transformHtml(body, (html) => onResponse?.({ context, html }));
-
-  output.start();
-
-  return new Response(transformed, {
-    headers,
-    status: context.response.status,
-  });
 };
 
 export default render;

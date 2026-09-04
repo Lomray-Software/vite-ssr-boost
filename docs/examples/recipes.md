@@ -1,5 +1,21 @@
 # Recipes
 
+## Packages that import CSS during SSR
+
+If Node reports `Unknown file extension ".css"` from a dependency, let Vite bundle that package:
+
+```ts
+export default defineConfig({
+  ssr: { noExternal: ['the-package-that-imports-css'] },
+});
+```
+
+## Keep server and browser state in sync
+
+Create locale, authentication and store state per request. Serialize the initial values with
+`getState`, then read them with `getServerState` before calling `entryClient`. Rendering a different
+language or initial value in the browser causes hydration mismatches; log failures with `onError`.
+
 ## Change `basename`
 
 Client:

@@ -21,6 +21,10 @@ const createRequestSignal = (req: IncomingMessage, res: ServerResponse): IReques
   req.once('aborted', abort);
   res.once('close', onClose);
 
+  if (req.aborted || res.destroyed) {
+    abort();
+  }
+
   return { dispose, signal: controller.signal };
 };
 

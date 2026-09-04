@@ -91,4 +91,20 @@ describe('Miniflare edge app', () => {
     expect(inspected.html).toContain('<main>Edge runtime</main>');
     expect(inspected.html).toContain('</div></body></html>');
   });
+
+  it.each([
+    ['/render', 202],
+    ['/shell-error', 500],
+  ] as const)(
+    'returns a bodyless HEAD response for %s inside workerd',
+    async (pathname, status) => {
+      const response = await miniflare.dispatchFetch(`https://edge.example${pathname}`, {
+        method: 'HEAD',
+      });
+
+      expect(response.status).toBe(status);
+      expect(await response.text()).toBe('');
+      expect(response.headers.getSetCookie()).toHaveLength(2);
+    },
+  );
 });

@@ -51,4 +51,23 @@ describe('createRequest', () => {
 
     await expect(request.text()).resolves.toBe('parsed');
   });
+
+  it('keeps double-slash paths on the original host', () => {
+    const incoming = createIncomingMessage();
+    incoming.url = '//other.example/path';
+
+    expect(createRequest(incoming as never).url).toBe('http://example.com//other.example/path');
+  });
+
+  it('regenerates the boundary when getBody supplies FormData', async () => {
+    const incoming = createIncomingMessage('original body');
+    incoming.headers['content-type'] = 'multipart/form-data; boundary=old-boundary';
+    incoming.headers['content-length'] = '13';
+    const body = new FormData();
+    body.append('name', 'Alice');
+    const request = createRequest(incoming as never, { body });
+
+    expect(request.headers.get('content-length')).toBeNull();
+    expect((await request.formData()).get('name')).toBe('Alice');
+  });
 });

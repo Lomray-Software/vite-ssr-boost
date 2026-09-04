@@ -10,8 +10,11 @@ function buildCustomState(initState?: Record<string, Record<string, any>> | void
     }
 
     const json = htmlEscape(JSON.stringify(JSON.stringify(state)));
+    const property = /^[A-Za-z_$][\w$]*$/.test(key)
+      ? `.${key}`
+      : `[${htmlEscape(JSON.stringify(key))}]`;
 
-    return `<script async>window.${key} = JSON.parse(${json});</script>`;
+    return `<script async>window${property} = JSON.parse(${json});</script>`;
   });
 
   return stateScripts.join('').trim();

@@ -14,7 +14,7 @@ import type { TApp } from '@node/entry';
 import renderToStream from '@node/render-to-stream';
 import createRequestSignal from '@node/request-signal';
 import writeEarlyHints from '@node/write-early-hints';
-import writeFetchResponse from '@node/write-fetch-response';
+import writeFetchResponse, { writeFetchHeaders } from '@node/write-fetch-response';
 import type ServerConfig from '@services/server-config';
 import SsrManifest from '@services/ssr-manifest';
 
@@ -193,7 +193,11 @@ async function render(
         },
         prepare: async ({ context: updated, executionContext }) => {
           const legacyContext = syncContext(updated);
-          const hints = SsrManifest.get(config).injectAssets(legacyContext);
+          const manifest = SsrManifest.get(config);
+
+          await manifest.prepareDevAssets(updated.routerContext?.matches);
+
+          const hints = manifest.injectAssets(legacyContext);
 
           if (legacyContext.hasEarlyHints) {
             await emitEarlyHints(executionContext, hints);
@@ -210,7 +214,16 @@ async function render(
 
     const location = response.headers.get('Location');
 
-    if (location && response.status >= 300 && response.status < 400) {
+    if (
+      location &&
+      response.status >= 300 &&
+      response.status < 400 &&
+      !res.headersSent &&
+      !res.writableEnded &&
+      !res.destroyed
+    ) {
+      writeFetchHeaders(res, response);
+      await response.body?.cancel();
       res.redirect(response.status, location);
 
       return;

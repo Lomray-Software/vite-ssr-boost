@@ -1,5 +1,6 @@
 import compressResponse from '@adapters/compression';
 import type { TCompression } from '@adapters/compression';
+import headResponse from '@core/head-response';
 import type { TSsrHandler } from '@core/types';
 
 export interface IEdgeAdapterOptions {
@@ -15,10 +16,8 @@ const adapterEdge = <TPlatformArgs extends unknown[] = unknown[]>(
   handler: TSsrHandler,
   { compression = false }: IEdgeAdapterOptions = {},
 ): TEdgeHandler<TPlatformArgs> => {
-  return async (request, ...platformArgs) => {
-    void platformArgs;
-
-    return compressResponse(request, await handler(request), compression);
+  return async (...[request]: Parameters<TEdgeHandler<TPlatformArgs>>) => {
+    return headResponse(request, compressResponse(request, await handler(request), compression));
   };
 };
 

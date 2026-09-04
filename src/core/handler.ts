@@ -1,3 +1,4 @@
+import headResponse from '@core/head-response';
 import render from '@core/render';
 import type { ICoreRenderOptions, ICoreRenderParams, ISsrRequestContext } from '@core/render';
 import type { ISsrExecutionContext, TSsrHandler } from '@core/types';
@@ -29,7 +30,7 @@ const createHandler = <TAppProps = Record<string, any>>(
     const requestInit = await onRequest?.({ executionContext, request });
 
     if (requestInit instanceof Response) {
-      return requestInit;
+      return headResponse(request, requestInit);
     }
 
     const context: ISsrRequestContext<TAppProps> = {

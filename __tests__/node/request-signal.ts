@@ -4,6 +4,14 @@ import { describe, expect, it } from 'vitest';
 import createRequestSignal from '@node/request-signal';
 
 describe('request signal', () => {
+  it('recognizes disconnects that happened before rendering started', () => {
+    const req = Object.assign(new EventEmitter(), { aborted: true });
+    const res = Object.assign(new EventEmitter(), { destroyed: true });
+    const requestSignal = createRequestSignal(req as never, res as never);
+
+    expect(requestSignal.signal.aborted).toBe(true);
+    requestSignal.dispose();
+  });
   it('aborts on client disconnect and removes transport listeners', () => {
     const req = new EventEmitter();
     const res = Object.assign(new EventEmitter(), { writableEnded: false });

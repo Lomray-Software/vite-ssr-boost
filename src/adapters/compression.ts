@@ -6,6 +6,10 @@ export interface ICompressionOptions {
 
 export type TCompression = boolean | ICompressionOptions;
 
+type TCreateCompressionStream = (
+  format: TCompressionFormat,
+) => ReadableWritablePair<Uint8Array, Uint8Array>;
+
 const getQuality = (header: string, format: TCompressionFormat): number => {
   const values = new Map<string, number>();
 
@@ -36,6 +40,7 @@ const compressResponse = (
   request: Request,
   response: Response,
   compression: TCompression = false,
+  createStream: TCreateCompressionStream = (format) => new CompressionStream(format),
 ): Response => {
   if (
     !compression ||
@@ -73,7 +78,7 @@ const compressResponse = (
   headers.delete('Content-Length');
   headers.set('Content-Encoding', format);
 
-  return new Response(response.body.pipeThrough(new CompressionStream(format)), {
+  return new Response(response.body.pipeThrough(createStream(format)), {
     headers,
     status: response.status,
     statusText: response.statusText,

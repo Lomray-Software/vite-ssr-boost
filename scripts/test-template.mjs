@@ -6,10 +6,12 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
+import { createGunzip } from 'node:zlib';
 
 const projectRoot = process.cwd();
 const source = resolve(process.argv[2] ?? join(projectRoot, '..', 'vite-template'));
 const directory = await mkdtemp(join(tmpdir(), 'vite-ssr-boost-template-'));
+const keepTemplate = process.env.SSR_BOOST_KEEP_TEMPLATE === '1';
 const cli = join(directory, 'node_modules', '@lomray', 'vite-ssr-boost', 'cli.js');
 const runtimePath = [
   join(directory, 'node_modules', '.bin'),
@@ -92,7 +94,8 @@ const waitUntilReady = async (origin, child) => {
     }
 
     try {
-      await fetch(origin);
+      const response = await fetch(origin, { signal: AbortSignal.timeout(5_000) });
+      await response.arrayBuffer();
 
       return;
     } catch {
@@ -111,20 +114,26 @@ const inspectStream = (origin, pathname, headers = {}) =>
     const request = http.get(new URL(pathname, origin), { headers }, (response) => {
       const chunks = [];
       let firstChunkMs;
+      // Count HTML bytes, not the empty gzip header that can hide buffering regressions.
+      const decoded =
+        response.headers['content-encoding'] === 'gzip' ? response.pipe(createGunzip()) : response;
 
-      response.on('data', (chunk) => {
+      decoded.on('data', (chunk) => {
         firstChunkMs ??= performance.now() - started;
         chunks.push(chunk);
       });
-      response.on('end', () => {
+      decoded.on('end', () => {
         resolveStream({
           chunks: chunks.length,
           firstChunkMs,
           html: Buffer.concat(chunks).toString('utf8'),
           status: response.statusCode,
+          encoding: response.headers['content-encoding'],
           totalMs: performance.now() - started,
         });
       });
+      response.on('error', reject);
+      decoded.on('error', reject);
     });
 
     request.setTimeout(20_000, () => request.destroy(new Error('SSR stream timed out.')));
@@ -146,7 +155,7 @@ const measureTtfb = async (origin) => {
   return samples[Math.floor(samples.length / 2)];
 };
 
-const verify = async (origin, mode) => {
+const verify = async (origin, mode, base = '') => {
   const cases = [
     ['/', 200],
     ['/not-lazy', 200],
@@ -156,29 +165,105 @@ const verify = async (origin, mode) => {
   ];
 
   for (const [pathname, expectedStatus] of cases) {
-    const response = await fetch(new URL(pathname, origin), { redirect: 'manual' });
+    const response = await fetch(new URL(`${base}${pathname}`, origin), { redirect: 'manual' });
 
     assert.equal(response.status, expectedStatus, `${mode} ${pathname}`);
+    await response.arrayBuffer();
   }
 
-  const streamed = await inspectStream(origin, '/details');
+  const head = await fetch(`${origin}${base}/details`, { method: 'HEAD' });
+  assert.equal(head.status, 200, `${mode} HEAD`);
+  assert.equal(await head.text(), '', `${mode} HEAD has a body`);
+
+  const eager = await fetch(`${origin}${base}/not-lazy`).then((response) => response.text());
+  assert.match(eager, /Styled text/);
+  assert.match(eager, /<style\b|rel="stylesheet"/, `${mode} eager route has no styles`);
+
+  const assetUrls = [...eager.matchAll(/(?:src|href)="([^"]+\.(?:js|css|tsx?))"/g)].map(
+    ([, url]) => new URL(url, origin),
+  );
+  assert.ok(assetUrls.length, `${mode} has no client assets`);
+  for (const url of assetUrls) {
+    const response = await fetch(url);
+    assert.equal(response.status, 200, `${mode} asset ${url.pathname}`);
+    assert.match(response.headers.get('content-type'), /javascript|text\/css/);
+    await response.arrayBuffer();
+  }
+
+  const streamed = await inspectStream(origin, `${base}/details`);
 
   assert.equal(streamed.status, 200, `${mode} streamed status`);
   assert.ok(streamed.chunks > 1, `${mode} did not stream multiple chunks`);
-  assert.ok(streamed.firstChunkMs < streamed.totalMs, `${mode} shell was not streamed early`);
+  assert.ok(streamed.firstChunkMs < streamed.totalMs - 100, `${mode} shell was not streamed early`);
   assert.match(streamed.html, /window\.__staticRouterHydrationData/);
   assert.match(streamed.html, /<\/html>/);
 
-  const buffered = await inspectStream(origin, '/details', { Cookie: 'isCrawler=1' });
+  const buffered = await inspectStream(origin, `${base}/details`, { Cookie: 'isCrawler=1' });
 
   assert.equal(buffered.status, 200, `${mode} buffered status`);
   assert.match(buffered.html, /window\.__staticRouterHydrationData/);
   assert.match(buffered.html, /<\/html>/);
+  assert.ok(
+    buffered.firstChunkMs >= streamed.totalMs * 0.5,
+    `${mode} crawler did not wait for content`,
+  );
+
+  if (mode !== 'development') {
+    const compressed = await inspectStream(origin, `${base}/details`, {
+      'Accept-Encoding': 'gzip',
+    });
+    assert.equal(compressed.encoding, 'gzip');
+    assert.ok(
+      compressed.firstChunkMs < compressed.totalMs - 100,
+      `${mode} gzip buffered the HTML shell`,
+    );
+    assert.match(compressed.html, /<\/html>/);
+    console.info(
+      `${mode}: gzip HTML shell ${Math.round(compressed.firstChunkMs)}ms / complete ${Math.round(compressed.totalMs)}ms`,
+    );
+  }
 
   console.info(
     `${mode}: routes passed; streamed=${streamed.chunks} chunks (${Math.round(
       streamed.firstChunkMs,
     )}ms/${Math.round(streamed.totalMs)}ms); buffered=${buffered.chunks} chunks`,
+  );
+};
+
+const verifySpa = async (origin) => {
+  for (const pathname of ['/', '/details', '/missing']) {
+    const response = await fetch(`${origin}${pathname}`);
+    const html = await response.text();
+    assert.equal(response.status, 200, `SPA ${pathname}`);
+    assert.match(html, /id="root"/);
+    assert.doesNotMatch(html, /window\.__staticRouterHydrationData|Welcome to demo app/);
+    const entry = html.match(/<script[^>]+src="([^"]+)"/);
+    assert.ok(entry, `SPA ${pathname} has no client entry`);
+    const script = await fetch(new URL(entry[1], origin));
+    assert.equal(script.status, 200);
+    assert.match(script.headers.get('content-type'), /javascript/);
+    await script.arrayBuffer();
+  }
+  console.info('SPA: root, deep links, fallback and client assets passed');
+};
+
+const configureBasename = async () => {
+  const edit = async (relative, from, to) => {
+    const filename = join(directory, relative);
+    const sourceText = await readFile(filename, 'utf8');
+    assert.ok(sourceText.includes(from), `Cannot configure basename in ${relative}`);
+    await writeFile(filename, sourceText.replace(from, to));
+  };
+  await edit('vite.config.ts', "root: 'src',", "root: 'src', base: '/acceptance/',");
+  await edit(
+    'src/client.ts',
+    'init: async () => {',
+    "routerOptions: { basename: '/acceptance' }, init: async () => {",
+  );
+  await edit(
+    'src/server.ts',
+    'abortDelay: 20000,',
+    "abortDelay: 20000, routerOptions: { basename: '/acceptance' }, middlewares: { expressStatic: { basename: '/acceptance' } },",
   );
 };
 
@@ -288,15 +373,50 @@ try {
       )}ms (allowed ${Math.round(allowedTtfb)}ms).`,
     );
     console.info(
-      `production median TTFB: ${Math.round(baselineTtfb)}ms -> ${Math.round(
-        candidateTtfb,
-      )}ms`,
+      `production median TTFB: ${Math.round(baselineTtfb)}ms -> ${Math.round(candidateTtfb)}ms`,
     );
   } finally {
     await stop(prod);
   }
+
+  if (keepTemplate) {
+    await cp(join(directory, 'build'), join(directory, 'build-ssr'), { recursive: true });
+  }
+
+  await configureBasename();
+  await run(['build']);
+  const basePort = await getPort();
+  const baseServer = start(['start', '--port', String(basePort)]);
+  try {
+    const origin = `http://127.0.0.1:${basePort}`;
+    await waitUntilReady(`${origin}/acceptance/`, baseServer);
+    await verify(origin, 'production basename', '/acceptance');
+  } finally {
+    await stop(baseServer);
+  }
+
+  if (keepTemplate) {
+    await cp(join(directory, 'build'), join(directory, 'build-basename'), { recursive: true });
+  }
+
+  // Restore the original configuration before checking the standalone SPA build.
+  for (const filename of ['vite.config.ts', 'src/client.ts', 'src/server.ts']) {
+    await cp(join(source, filename), join(directory, filename));
+  }
+  await run(['build', '--focus-only', 'client']);
+  const spaPort = await getPort();
+  const spa = start(['start', '--focus-only', 'client', '--port', String(spaPort)]);
+  try {
+    const origin = `http://127.0.0.1:${spaPort}`;
+    await waitUntilReady(origin, spa);
+    await verifySpa(origin);
+  } finally {
+    await stop(spa);
+  }
 } finally {
-  if (isAbsolute(directory) && directory.startsWith(tmpdir())) {
+  if (keepTemplate) {
+    console.info(`Template retained for browser checks: ${directory}`);
+  } else if (isAbsolute(directory) && directory.startsWith(tmpdir())) {
     await rm(directory, { force: true, recursive: true });
   }
 }

@@ -13,6 +13,7 @@ import adapterExpress from '@adapters/express';
 import adapterFastify from '@adapters/fastify';
 import adapterHono from '@adapters/hono';
 import adapterNode from '@adapters/node';
+import ResponseStatus from '@components/response-status';
 import createHandler from '@core/handler';
 import type { TRenderToStream } from '@core/render';
 import type { TSsrHandler } from '@core/types';
@@ -42,6 +43,10 @@ const Recoverable = () => (
 
 const createSsrHandler = (renderToStream: TRenderToStream, onAbort: () => void): TSsrHandler => {
   const routes: RouteObject[] = [
+    ...[204, 205, 304].map((status) => ({
+      Component: () => <ResponseStatus status={status} />,
+      path: `/status-${status}`,
+    })),
     {
       Component: Broken,
       path: '/shell-error',
@@ -295,11 +300,27 @@ describe.each(factories)('$name SSR conformance', ({ renderer, start }) => {
     await expect(noContent.text()).resolves.toBe('');
   });
 
+  it.each([204, 205, 304])('preserves headers for ResponseStatus %s', async (status) => {
+    const response = await runtime.request(`/status-${status}`);
+
+    expect(response.status).toBe(status);
+    expect(response.body).toBeNull();
+    expect(response.headers.get('x-conformance')).toBe('passed');
+    expect(response.headers.getSetCookie()).toHaveLength(2);
+  });
+
   it('returns 500 for a shell error before the first flush', async () => {
     const response = await runtime.request('/shell-error');
 
     expect(response.status).toBe(500);
     await expect(response.text()).resolves.toContain('data-shell-error');
+  });
+
+  it.each(['/shell-error', '/short-circuit'])('omits HEAD bodies for %s', async (path) => {
+    const response = await runtime.request(path, { method: 'HEAD' });
+
+    expect(response.status).toBe(path === '/shell-error' ? 500 : 418);
+    expect(response.body).toBeNull();
   });
 
   it('completes the footer after a recoverable render error', async () => {

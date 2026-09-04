@@ -21,6 +21,11 @@ export interface ICreateServerOut {
  */
 async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
   const app = express().disable('x-powered-by');
+
+  if (config.isProd) {
+    app.set('env', 'production');
+  }
+
   const serverApi = new ServerApi();
 
   config.setApp(app);
@@ -125,7 +130,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
           config
             .getLogger()
             .error(`Failed to handle request: ${(e as Error)?.message}`, { error: e as Error });
-          next();
+          next(e);
         }
       })();
     });
@@ -141,7 +146,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
           config
             .getLogger()
             .error(`Failed to handle request: ${(e as Error)?.message}`, { error: e as Error });
-          next();
+          next(e);
         }
       })();
     });

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import compressResponse from '@adapters/compression';
 import type { TCompression } from '@adapters/compression';
 import type { TSsrHandler } from '@core/types';
+import compressResponse from '@node/compress-response';
 import createRequest from '@node/create-request';
 import createRequestSignal from '@node/request-signal';
 import writeEarlyHints from '@node/write-early-hints';

@@ -4,7 +4,12 @@ import type { TRenderToStream } from '@core/render';
 
 const renderToStream: TRenderToStream = (node, options) => {
   const destination = new PassThrough();
-  const stream = Readable.toWeb(destination) as ReadableStream<Uint8Array>;
+  const stream = Readable.toWeb(destination, {
+    strategy: {
+      highWaterMark: destination.readableHighWaterMark,
+      size: (chunk: Uint8Array) => chunk.byteLength,
+    },
+  }) as ReadableStream<Uint8Array>;
   let rejectAll!: (error: Error) => void;
   let rejectShell!: (error: Error) => void;
   let resolveAll!: () => void;
@@ -32,6 +37,16 @@ const renderToStream: TRenderToStream = (node, options) => {
     },
     onShellReady: resolveShell,
   });
+  const onAbort = (): void => rendered.abort(options.signal.reason);
+  const cleanup = (): void => options.signal.removeEventListener('abort', onAbort);
+
+  if (options.signal.aborted) {
+    onAbort();
+  } else {
+    options.signal.addEventListener('abort', onAbort, { once: true });
+  }
+
+  void allReady.then(cleanup, cleanup);
   let hasStarted = false;
 
   return {

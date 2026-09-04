@@ -31,7 +31,7 @@ const {
   printServerInfoMock: vi.fn(),
 }));
 
-appDisable.mockImplementation(() => ({ use: appUse }));
+appDisable.mockImplementation(() => ({ use: appUse, set: vi.fn() }));
 expressStaticMock.mockImplementation(() => 'static-middleware');
 compressionMock.mockImplementation(() => 'compression-middleware');
 createViteServer.mockResolvedValue({

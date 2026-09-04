@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import serializeBody from '@adapters/body';
-import compressResponse from '@adapters/compression';
 import type { TCompression } from '@adapters/compression';
 import type { TSsrHandler } from '@core/types';
+import compressResponse from '@node/compress-response';
 import createRequest from '@node/create-request';
 import createRequestSignal from '@node/request-signal';
 import writeEarlyHints from '@node/write-early-hints';
@@ -14,6 +14,7 @@ interface IFastifyRequest {
 }
 
 interface IFastifyReply {
+  getHeaders?: () => Record<string, string | number | string[] | undefined>;
   hijack: () => void;
   raw: ServerResponse;
 }
@@ -49,6 +50,12 @@ const adapterFastify = (
         options.compression,
       );
 
+      // Fastify keeps reply.header() values separately from the raw Node response.
+      Object.entries(reply.getHeaders?.() ?? {}).forEach(([name, value]) => {
+        if (value !== undefined) {
+          reply.raw.setHeader(name, value);
+        }
+      });
       reply.hijack();
       await writeFetchResponse(reply.raw, response);
     } finally {

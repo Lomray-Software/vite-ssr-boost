@@ -9,6 +9,12 @@ const handler = createHandler(
     createApp: (children) => children,
     handler: createStaticHandler([
       {
+        Component: () => {
+          throw new Error('private shell error');
+        },
+        path: '/shell-error',
+      },
+      {
         Component: () => <main>Edge runtime</main>,
         path: '*',
       },

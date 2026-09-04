@@ -36,6 +36,7 @@
     "test": "vitest run",
     "test:core:no-optional": "node scripts/test-core-no-optional.mjs",
     "test:edge:packed": "node scripts/test-packed-edge.mjs",
+    "test:bun": "bun scripts/test-bun.mjs",
     "test:template": "npm run build && node scripts/test-template.mjs",
     "test:coverage": "vitest run --coverage",
     "prepare": "husky"

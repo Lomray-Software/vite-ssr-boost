@@ -24,6 +24,8 @@ build/
   server/
 ```
 
+If you set `build.outDir: '../dist'`, start it with `ssr-boost start --build-dir dist`.
+
 When server output is built, the package also generates an SSR manifest for route assets.
 
 ## Preview mode

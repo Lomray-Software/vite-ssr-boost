@@ -51,7 +51,8 @@ Inside `onRouterReady` you can return:
 }
 ```
 
-Use that when a specific request should wait for full HTML instead of streaming. A common case is crawler-specific behavior or HTML mutation that depends on the full document.
+Use that when a specific request should wait for all React content, for example for a crawler.
+`onResponse` remains a chunk callback; `isStream: false` does not turn it into a full-document transform.
 
 ## When SPA is the better choice
 
