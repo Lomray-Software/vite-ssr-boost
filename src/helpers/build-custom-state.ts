@@ -1,18 +1,20 @@
 import htmlEscape from '@helpers/html-escape';
-import type { IRenderOptions } from '@node/render';
 
 /**
  * Build custom state
  */
-function buildCustomState(initState?: ReturnType<NonNullable<IRenderOptions['getState']>>): string {
+function buildCustomState(initState?: Record<string, Record<string, any>> | void): string {
   const stateScripts = Object.entries(initState ?? {}).map(([key, state]) => {
     if (!key || !state || !Object.keys(state || {}).length) {
       return '';
     }
 
     const json = htmlEscape(JSON.stringify(JSON.stringify(state)));
+    const property = /^[A-Za-z_$][\w$]*$/.test(key)
+      ? `.${key}`
+      : `[${htmlEscape(JSON.stringify(key))}]`;
 
-    return `<script async>window.${key} = JSON.parse(${json});</script>`;
+    return `<script async>window${property} = JSON.parse(${json});</script>`;
   });
 
   return stateScripts.join('').trim();

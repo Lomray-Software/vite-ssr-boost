@@ -7,7 +7,7 @@
 
 > These requirements are only needed for developing the source code.
 
-- Node.js `>= v18.19.0`.
+- Node.js `>=22`; `.nvmrc` pins the version used by CI.
 - [npm](https://www.npmjs.com/).
 
 ## Basics
@@ -37,34 +37,14 @@ npm run build:watch
 
 Check develop progress in any test repo:
 
-```ecmascript 6
-// modify rollup.config.js (don't commit)
-// other imports
-
-const dest = '../vite-template/node_modules/@lomray/vite-ssr-boost';
-
-export default {
-  input: [
-    'src/**/*.ts*',
-  ],
-  output: {
-    dir: dest,
-    // other options
-  },
-  // other options
-  plugins: [
-    // other plugins
-    // terser(),
-    copy({
-      targets: [
-        { src: 'package.json', dest: dest },
-        { src: 'README.md', dest: dest },
-        { src: 'workflow', dest: dest },
-      ]
-    })
-  ],
-};
+```shell
+# Install vite-template in a sibling directory first.
+npm run test:template
 ```
+
+The acceptance script copies the template to a temporary directory, installs the local build and
+migrates its server entry import to `adapters/express/entry`. To retain that copy for browser checks, run
+`SSR_BOOST_KEEP_TEMPLATE=1 npm run test:template`; its path is printed at the end.
 
 #### Test & Checks
 
@@ -79,3 +59,6 @@ npm run test
 ```
 
 Create PR into `staging` branch.
+
+Use Conventional Commits for commits and PR titles: `fix:` releases a patch, `feat:` a minor,
+and `feat!:` or a `BREAKING CHANGE:` footer a major. Keep the breaking marker when squash-merging.

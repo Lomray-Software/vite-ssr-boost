@@ -76,7 +76,8 @@ This is the place to switch between streaming and full-document rendering based 
 
 ## `onShellReady`
 
-Lets you prepend or append HTML around the React stream.
+Replaces the template header or footer around the React stream. Generated hydration state is
+preserved when replacing the footer.
 
 Return:
 
@@ -113,9 +114,11 @@ The package then writes it into the response payload so `helpers/get-server-stat
 
 ## Abort behavior
 
-The renderer aborts when:
+The React render aborts when:
 
 - `abortDelay` is exceeded
-- the request socket closes
+- the client disconnects before the response finishes
+- a source or destination stream fails
 
-That fallback matters because React stream rendering should not keep a dead request alive forever.
+The timer starts after loaders and `onRouterReady` finish. Use the loader's `request.signal` for
+outbound requests. Finishing the incoming request body does not cancel a response still streaming.

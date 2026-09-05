@@ -8,6 +8,19 @@ import { ServerProvider } from '@context/server';
 describe('ResponseStatus', () => {
   const status = 400;
 
+  it.each([204, 205, 304])('supports null-body status %s', (code) => {
+    const context: IServerContext = { isServer: true, response: null };
+
+    render(
+      <ServerProvider context={context}>
+        <ResponseStatus status={code} />
+      </ServerProvider>,
+    );
+
+    expect(context.response?.status).toBe(code);
+    expect(context.response?.body).toBeNull();
+  });
+
   it('should change the server response status to the provided value', () => {
     const context = { isServer: true, response: { status: 200 } } as IServerContext;
 

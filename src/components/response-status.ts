@@ -14,7 +14,7 @@ const ResponseStatus: FC<IStatusGate> = ({ status }) => {
   const context = useServerContext();
 
   if (context.isServer) {
-    context.response = new Response('', { status });
+    context.response = new Response(null, { status });
   }
 
   return null;
