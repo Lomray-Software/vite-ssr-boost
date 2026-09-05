@@ -41,6 +41,8 @@ const routes: RouteObject[] = [
 ];
 ```
 
+The routes array may be typed with `satisfies TRouteObject[]` or `as TRouteObject[]`.
+
 Not recommended for route analysis:
 
 ```tsx
