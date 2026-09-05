@@ -43,8 +43,8 @@ Check develop progress in any test repo:
 npm run test:template
 ```
 
-The acceptance script copies the template to a temporary directory, installs the locally packed library with its dependencies and
-migrates its server entry import to `adapters/express/entry`. To retain that copy for browser checks, run
+The acceptance script copies the template to a temporary directory and installs the locally packed library with its dependencies.
+To retain that copy for browser checks, run
 `SSR_BOOST_KEEP_TEMPLATE=1 npm run test:template`; its path is printed at the end.
 Set `SSR_BOOST_TEMPLATE_CURRENT=1` to also upgrade the copy to the library's current Vite, React,
 React Router and Babel versions after measuring the original baseline.

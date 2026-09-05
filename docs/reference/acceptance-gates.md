@@ -13,7 +13,7 @@ Run these before a release. The same checks run in PR and release CI.
 | `npm run test:template` | Template SSR in dev/production, cold styles, SSR module reload, streamed and crawler HTML, gzip, static JS/CSS, redirects, HEAD, 404, subpath deployment, standalone SPA and baseline TTFB comparison |
 | `npm run docs:build` | Documentation build and links |
 
-CI pins `vite-template` to `fbbd65524ceb95764bebc39da67af7d9c5737f80`. Locally, install its dependencies
+CI pins `vite-template` to `922db6703a1f5baabec9288d9fa35ff787f6454f`. Locally, install its dependencies
 in `../vite-template`, or pass its path to `node scripts/test-template.mjs`. The script works on a
 copy; it changes only that copy's configuration for the subpath test.
 
