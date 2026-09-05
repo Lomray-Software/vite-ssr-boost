@@ -6,7 +6,7 @@ hero:
   text: SSR for React Router apps in Data mode.
   tagline: Keep your Vite config, route objects and components. Add SSR without moving to Framework mode or rewriting the app.
   image:
-    src: https://raw.githubusercontent.com/Lomray-Software/vite-ssr-boost/prod/logo.png
+    src: /logo.png
     alt: Vite SSR BOOST logo
   actions:
     - theme: brand
@@ -20,13 +20,17 @@ hero:
       link: https://github.com/Lomray-Software/vite-ssr-boost
 
 features:
-  - title: Keep your app
+  - icon: 🧩
+    title: Keep your app
     details: Reuse React Router route objects and components. Add the SSR plugin and entries to your Vite project.
-  - title: SSR and SPA output
+  - icon: 🔀
+    title: SSR and SPA output
     details: Build and serve either mode with the same route tree and browser entry.
-  - title: Start with the managed CLI
+  - icon: 🛠️
+    title: Start with the managed CLI
     details: Express handles development with Vite and HMR, production static assets and route-asset injection.
-  - title: Own the transport when needed
+  - icon: 🔌
+    title: Own the transport when needed
     details: Connect the Fetch core through Node, Express, Fastify, Hono or edge adapters, and supply the server and asset delivery.
 ---
 
@@ -46,4 +50,5 @@ Add `SsrBoost()` to the Vite plugins, use `@lomray/vite-ssr-boost/browser/entry`
 - [FAQ](/reference/faq) answers questions about RSC, SPA output and runtimes.
 - [Getting Started](/guide/getting-started) covers installation and entry files.
 - [Rendering Modes](/guide/rendering-modes), [Routing](/guide/routing) and [Server Lifecycle](/guide/server-lifecycle) explain application behavior.
+- [Hydration order and streaming](/reference/hydration-and-streaming) explains when the browser can safely create its router.
 - [Deployment](/guide/deployment) covers build targets; [Recipes](/examples/recipes) shows integrations.

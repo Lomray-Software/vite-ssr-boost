@@ -23,6 +23,8 @@ The managed Express CLI is the default path for Vite development, HMR, static as
 
 Loader results are serialized with `JSON.stringify` into `window.__staticRouterHydrationData`, so a loader must return plain data for the first paint. Nested promises become `{}`; `<Await>` or `use()` cannot hydrate those loader promises. For streamed or deferred data, follow the [prod branch pattern](https://github.com/Lomray-Software/vite-template/tree/prod): component-level Suspense with a request-scoped cache, `getState`, `@lomray/consistent-suspense` and `@lomray/react-mobx-manager`.
 
+The browser entry waits for document readiness or the router state assignment, together with matched lazy route preloads, before creating the router. Custom state is written before router state in the footer; see [Hydration order and streaming](/reference/hydration-and-streaming) for the timing and the `onResponse` contract.
+
 ## Who this is for
 
 - Teams adding SSR to a Vite app with React Router route objects.
