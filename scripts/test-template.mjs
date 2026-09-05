@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -12,6 +12,7 @@ const projectRoot = process.cwd();
 const source = resolve(process.argv[2] ?? join(projectRoot, '..', 'vite-template'));
 const directory = await mkdtemp(join(tmpdir(), 'vite-ssr-boost-template-'));
 const keepTemplate = process.env.SSR_BOOST_KEEP_TEMPLATE === '1';
+const useCurrentDependencies = process.env.SSR_BOOST_TEMPLATE_CURRENT === '1';
 const cli = join(directory, 'node_modules', '@lomray', 'vite-ssr-boost', 'cli.js');
 const runtimePath = [
   join(directory, 'node_modules', '.bin'),
@@ -266,6 +267,39 @@ const migrateServerEntry = async () => {
   await writeFile(filename, migrated);
 };
 
+// Install the publishable package with its dependencies after measuring the original baseline.
+const installCandidate = async () => {
+  execFileSync('npm', [
+    'pack', join(projectRoot, 'lib'), '--ignore-scripts', '--pack-destination', directory,
+  ], { cwd: projectRoot, stdio: 'ignore', env: { ...process.env, HUSKY: '0' } });
+  const archives = (await readdir(directory)).filter((filename) => filename.endsWith('.tgz'));
+
+  assert.equal(archives.length, 1, 'npm pack must produce exactly one archive.');
+
+  const packages = [join(directory, archives[0])];
+  const dependencyRoot = useCurrentDependencies ? projectRoot : directory;
+
+  for (const name of [
+    'vite', 'react', 'react-dom', 'react-router',
+    '@babel/generator', '@babel/parser', '@babel/traverse', '@babel/types',
+  ]) {
+    const metadata = JSON.parse(await readFile(join(dependencyRoot, 'node_modules', name, 'package.json'), 'utf8'));
+
+    packages.push(`${name}@${metadata.version}`);
+  }
+
+  if (useCurrentDependencies) {
+    packages.push('vite-plugin-devtools-json@1.1.0');
+  }
+
+  execFileSync('npm', ['install', '--no-save', '--ignore-scripts', '--no-audit', '--no-fund', ...packages], {
+    cwd: directory,
+    env: { ...process.env, PATH: runtimePath },
+    stdio: 'inherit',
+  });
+  console.info(`Template runtime dependencies: ${packages.slice(1).join(', ')}`);
+};
+
 const configureBasename = async () => {
   const edit = async (relative, from, to) => {
     const filename = join(directory, relative);
@@ -347,13 +381,7 @@ try {
     await stop(baseline);
   }
 
-  await rm(join(directory, 'node_modules', '@lomray', 'vite-ssr-boost'), {
-    force: true,
-    recursive: true,
-  });
-  await cp(join(projectRoot, 'lib'), join(directory, 'node_modules', '@lomray', 'vite-ssr-boost'), {
-    recursive: true,
-  });
+  await installCandidate();
   await migrateServerEntry();
 
   const devPort = await getPort();
