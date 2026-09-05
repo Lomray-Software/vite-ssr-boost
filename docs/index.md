@@ -61,7 +61,7 @@ You wire three things:
 
 1. the Vite plugin in `vite.config.ts`
 2. the browser entry with `@lomray/vite-ssr-boost/browser/entry`
-3. the server entry with `@lomray/vite-ssr-boost/node/entry`
+3. the server entry with `@lomray/vite-ssr-boost/adapters/express/entry`
 
 After that the CLI can run the app in development, build it for production, preview it locally, or package it for specific deployment targets.
 

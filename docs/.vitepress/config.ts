@@ -36,6 +36,7 @@ export default defineConfig({
           { text: 'Rendering Modes', link: '/guide/rendering-modes' },
           { text: 'Routing', link: '/guide/routing' },
           { text: 'Server Lifecycle', link: '/guide/server-lifecycle' },
+          { text: 'Runtime Adapters', link: '/guide/runtime-adapters' },
           { text: 'Deployment', link: '/guide/deployment' },
         ],
       },
@@ -58,6 +59,7 @@ export default defineConfig({
         items: [
           { text: 'AI Usage', link: '/ai-usage' },
           { text: 'Talking Points', link: '/reference/talking-points' },
+          { text: 'Acceptance Gates', link: '/reference/acceptance-gates' },
           { text: 'Useful Links', link: '/reference/useful-links' },
         ],
       },

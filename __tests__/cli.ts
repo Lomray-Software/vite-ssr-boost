@@ -35,7 +35,7 @@ const {
 vi.mock('@services/build', () => ({
   default: BuildMock,
 }));
-vi.mock('@node/server', () => ({
+vi.mock('@adapters/express/server', () => ({
   default: createServerMock,
 }));
 vi.mock('vite', async (importOriginal) => {

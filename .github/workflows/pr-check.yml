@@ -10,6 +10,9 @@ env:
   ENABLE_CACHE: yes
 
 jobs:
+  react:
+    uses: ./.github/workflows/react-compatibility.yml
+
   check:
     name: Check PR
     runs-on: ubuntu-latest
@@ -50,9 +53,38 @@ jobs:
           npm pkg delete scripts.prepare
           npm run build
 
+      - name: Boot the built edge package in workerd
+        run: npm run test:edge:packed
+
+      - name: Prove core works without optional adapters
+        run: npm run test:core:no-optional
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+
+      - name: Boot the built Fetch handler on Bun
+        run: npm run test:bun
+
+      - uses: actions/checkout@v4
+        with:
+          path: acceptance/vite-template
+          ref: fbbd65524ceb95764bebc39da67af7d9c5737f80
+          repository: Lomray-Software/vite-template
+
+      - name: Install template dependencies
+        working-directory: acceptance/vite-template
+        run: npm ci --ignore-scripts
+
+      - name: Test template in development and production
+        run: node scripts/test-template.mjs acceptance/vite-template
+
+      - name: Build documentation
+        run: npm run docs:build
+
   sonarcube:
     runs-on: ubuntu-latest
-    needs: [check]
+    needs: [check, react]
     concurrency:
       group: ${{ github.ref }}-sonarcube
       cancel-in-progress: true
