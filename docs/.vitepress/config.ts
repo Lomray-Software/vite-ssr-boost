@@ -48,6 +48,7 @@ export default defineConfig({
           { text: 'Plugin', link: '/api/plugin' },
           { text: 'Browser Entry', link: '/api/browser-entry' },
           { text: 'Server Entry', link: '/api/server-entry' },
+          { text: 'Node Production', link: '/api/node-production' },
           { text: 'Components And Helpers', link: '/api/components-and-helpers' },
           { text: 'CLI', link: '/api/cli' },
         ],
