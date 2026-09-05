@@ -169,7 +169,8 @@ const prepareHtmlResponse = <TAppProps,>(
   const routerState = buildRouterState(context.routerContext!);
   const customState = buildCustomState(getState?.({ context }));
   const header = shell.header || context.html.header;
-  const footer = routerState + customState + (shell.footer || context.html.footer);
+  // Router state unblocks the browser entry, so custom state must already be available.
+  const footer = customState + routerState + (shell.footer || context.html.footer);
   const headers = new Headers(context.response.headers);
 
   return { header, footer, headers, status: context.response.status };
