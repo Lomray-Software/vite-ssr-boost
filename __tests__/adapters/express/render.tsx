@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import StreamError from '@constants/stream-error';
 import render from '@adapters/express/render';
 import type { IRenderOptions, IRequestContext } from '@adapters/express/render';
+import Diagnostics from '@services/diagnostics';
 
 const { coreRenderMock, createFetchRequestMock, injectAssetsMock, writeFetchResponseMock } =
   vi.hoisted(() => ({
@@ -63,8 +64,10 @@ describe('legacy Express render adapter', () => {
     const logger = {
       error: vi.fn(),
       info: vi.fn(),
+      warn: vi.fn(),
     };
     const config = {
+      isProd: false,
       getLogger: () => logger,
     };
     const context: Record<string, any> = {
@@ -92,7 +95,31 @@ describe('legacy Express render adapter', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
+
+  it.each([
+    [false, 'production', undefined, true],
+    [true, 'development', undefined, false],
+    [false, 'development', '0', false],
+    [true, 'production', '1', true],
+  ] as const)(
+    'uses managed mode isProd=%s over NODE_ENV=%s with override=%s',
+    async (isProd, environment, override, enabled) => {
+      vi.stubEnv('NODE_ENV', environment);
+      vi.stubEnv('SSR_BOOST_DIAGNOSTICS', override);
+      const { config, context, logger } = createContext();
+      config.isProd = isProd;
+      context.req.originalUrl = `/managed-${isProd}-${environment}-${override ?? 'default'}`;
+      coreRenderMock.mockImplementation(async (_, updated) => {
+        expect(updated.diagnostics instanceof Diagnostics).toBe(enabled);
+        updated.diagnostics?.inspectOnResponse(new Set());
+        return new Response('rendered');
+      });
+      await render({ App, handler: {} as never }, config as never, context as never, {});
+      expect(logger.warn).toHaveBeenCalledTimes(enabled ? 1 : 0);
+    },
+  );
 
   it.each(['GET', 'POST'])(
     'shares the Fetch %s request across all render hooks',

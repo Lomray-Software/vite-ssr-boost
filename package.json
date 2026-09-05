@@ -58,6 +58,7 @@
     "lint:format": "eslint . --fix",
     "ts:check": "tsc --project ./tsconfig.json --skipLibCheck --noemit",
     "test": "vitest run",
+    "test:size": "node scripts/test-browser-size.mjs",
     "test:core:no-optional": "node scripts/test-core-no-optional.mjs",
     "test:edge:packed": "node scripts/test-packed-edge.mjs",
     "test:bun": "bun scripts/test-bun.mjs",

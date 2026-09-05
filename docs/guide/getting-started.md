@@ -1,6 +1,38 @@
 # Getting Started
 
+## Create a new app
+
+Requires Node.js `22.12.0` or newer. Create an app with the `minimal` template (default):
+
+```bash
+npm create @lomray/ssr-app@latest my-app
+cd my-app
+npm run develop
+```
+
+The [create-ssr-app README](https://github.com/Lomray-Software/create-ssr-app#templates) describes the templates:
+
+- `full`: Streaming SSR, MobX, consistent Suspense, meta tags and route management
+- `minimal` (default): Six runtime dependencies, loaders, a lazy route with CSS, redirect, client-only route and 404, plus the SPA-to-SSR file diff
+- `custom-server`: Development through the managed CLI, production through an application-owned Fastify server with static assets, compression and Early Hints; dual export of the managed entry and a Fetch handler
+- `localization`: i18next with the language chosen on the server from the cookie or Accept-Language, transferred to the client before hydration, and a cookie-based switcher
+
+With npm, put flags after `--` so npm forwards them to the scaffolder:
+
+```bash
+npm create @lomray/ssr-app@latest my-app -- --template full
+```
+
+| Flag | Default | Description |
+| ---- | ------- | ----------- |
+| `-t, --template <name>` | `minimal` | `full`, `minimal`, `custom-server`, or `localization`. |
+| `--no-install` | Install | Skip installation and print the install command in Next steps. |
+| `--no-git` | Initialize git | Skip git initialization; remove `.husky/` and `scripts.prepare`. |
+| `-y, --yes` | Off | Accept defaults without prompts. |
+
 ## Install
+
+For an existing Vite app, install the package and follow the setup below.
 
 ```bash
 npm i @lomray/vite-ssr-boost

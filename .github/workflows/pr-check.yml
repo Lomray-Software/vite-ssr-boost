@@ -58,6 +58,9 @@ jobs:
           npm pkg delete scripts.prepare
           npm run build
 
+      - name: Enforce browser size budgets
+        run: npm run test:size
+
       - name: Boot the built edge package in workerd
         run: npm run test:edge:packed
 
@@ -74,7 +77,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: acceptance/vite-template
-          ref: 922db6703a1f5baabec9288d9fa35ff787f6454f
+          ref: 71d859cb1a6faae030fa0a561681a7de4aead810
           repository: Lomray-Software/vite-template
 
       - name: Install template dependencies

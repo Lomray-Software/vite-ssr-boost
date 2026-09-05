@@ -1,9 +1,15 @@
 import htmlEscape from '@helpers/html-escape';
+import type Diagnostics from '@services/diagnostics';
 
 /**
  * Build custom state
  */
-function buildCustomState(initState?: Record<string, Record<string, any>> | void): string {
+function buildCustomState(
+  initState?: Record<string, Record<string, any>> | void,
+  diagnostics?: Diagnostics,
+): string {
+  diagnostics?.inspectState(initState);
+
   const stateScripts = Object.entries(initState ?? {}).map(([key, state]) => {
     if (!key || !state || !Object.keys(state || {}).length) {
       return '';

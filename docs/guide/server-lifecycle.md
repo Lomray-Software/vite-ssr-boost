@@ -17,6 +17,13 @@ That is where the customization hooks fit.
 
 Render hooks receive a [context](/api/server-entry#hook-context) with the shared Fetch `request` and live Express `req` / `res`; `onRequest` receives `(req, res)` before that context is created.
 
+Development requests also run [diagnostics](/reference/diagnostics) for non-serializable state,
+invalid `onResponse` returns, missing hydration scripts and duplicate output, with stable warning
+codes emitted once per distinct message. They are enabled for `ssr-boost dev`, disabled for
+`ssr-boost start` and managed serverless, and controlled by the Fetch handler's `diagnostics` option;
+`SSR_BOOST_DIAGNOSTICS=0|1` overrides either setting. Invalid HTML outlet counts always throw for
+file-backed shells, including in production.
+
 ## `onServerCreated`
 
 Called once after the Express app exists.
