@@ -165,6 +165,36 @@ describe('core render', () => {
     expect(renderer.output.start).toHaveBeenCalledOnce();
   });
 
+  it.each([undefined, '-CUSTOM-FOOTER'])(
+    'emits custom state before router state and footer %s',
+    async (footer) => {
+      const renderer = createRenderer();
+      const pending = render(
+        {
+          createApp,
+          handler: createRouter() as never,
+          renderToStream: renderer.renderToStream,
+        },
+        createContext(),
+        {
+          getState: () => ({ app: { ready: true }, store: { items: [1, 2, 3] } }),
+          onShellReady: () => ({ footer }),
+        },
+      );
+
+      await vi.waitFor(() => expect(renderer.renderToStream).toHaveBeenCalledOnce());
+      renderer.shellReady();
+      renderer.allReady();
+
+      const html = await (await pending).text();
+
+      expect(html).toMatch(
+        /^HEADER-BODY<script[^>]*>window\.app = .*<\/script><script[^>]*>window\.store = .*<\/script><script[^>]*>window\.__staticRouterHydrationData = .*<\/script>/,
+      );
+      expect(html.endsWith(footer ?? '-FOOTER')).toBe(true);
+    },
+  );
+
   it('returns redirects without starting React rendering', async () => {
     const renderer = createRenderer();
     const redirect = new Response(null, {

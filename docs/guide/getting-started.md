@@ -61,8 +61,9 @@ metadata or crawler-specific rendering. For a custom HTTP server, see [runtime a
 
 ## HTML shell
 
-Place this in `src/index.html`. The outlet marks where the React stream goes; keep the client
-entry after it so serialized state arrives before hydration.
+Place this in `src/index.html`. The outlet marks where the React stream goes. The browser entry
+waits for the serialized state (or `DOMContentLoaded`) before creating the router and hydrating,
+so the client script may be `async` and Vite may hoist it into `<head>`.
 
 ```html
 <!doctype html>
