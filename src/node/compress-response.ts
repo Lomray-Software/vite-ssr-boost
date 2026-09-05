@@ -23,7 +23,7 @@ const compressNodeResponse = (
         },
       }),
       writable: Writable.toWeb(stream),
-    } as ReadableWritablePair<Uint8Array, Uint8Array>;
+    };
   });
 
 export default compressNodeResponse;

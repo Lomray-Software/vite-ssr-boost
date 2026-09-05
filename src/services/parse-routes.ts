@@ -8,7 +8,8 @@ import type { ParseResult } from '@babel/parser';
 import babelTraverse from '@babel/traverse';
 import type * as TraverseTypes from '@babel/traverse';
 import type {
-  CallExpression,
+  ImportExpression,
+  Node as BabelNode,
   File as BabelFile,
   VariableDeclaration,
   ObjectExpression,
@@ -104,6 +105,7 @@ class ParseRoutes {
 
       return parser.parse(code, {
         sourceType: 'module',
+        createImportExpressions: true,
         plugins: ['typescript', 'jsx'],
       });
     } catch {
@@ -250,7 +252,7 @@ class ParseRoutes {
    * Parse ast array routes objects
    */
   private parseRoutesArray(
-    elements: TraverseTypes.Node[],
+    elements: BabelNode[],
     importsMap: IMapImports,
     relativeFile: string,
   ): TRoutesTree[] {
@@ -263,7 +265,7 @@ class ParseRoutes {
         node.properties.forEach((prop) => {
           const objectProp = prop as {
             key: { name: string };
-            value: { type: string; elements: TraverseTypes.Node[] };
+            value: { type: string; elements: BabelNode[] };
           };
 
           if (objectProp.key.name === 'children' && objectProp.value.type === 'ArrayExpression') {
@@ -280,10 +282,10 @@ class ParseRoutes {
             objectProp.value.type === 'ArrowFunctionExpression'
           ) {
             // @ts-expect-error incorrect types
-            const importCall = objectProp.value.body as CallExpression;
+            const importCall = objectProp.value.body as ImportExpression;
 
-            if (importCall.type === 'CallExpression' && importCall.callee.type === 'Import') {
-              const [importArg] = importCall.arguments;
+            if (importCall.type === 'ImportExpression') {
+              const importArg = importCall.source;
 
               if (importArg.type === 'StringLiteral') {
                 routeInfo.import = importArg.value;
@@ -390,7 +392,7 @@ class ParseRoutes {
     const importsMap = ParseRoutes.parseImportsMap(ast);
 
     // @ts-expect-error missing types
-    const elements = routesNode.declarations[0].init?.elements as TraverseTypes.Node[];
+    const elements = routesNode.declarations[0].init?.elements as BabelNode[];
 
     results.push(...this.parseRoutesArray(elements, importsMap, filename));
 
@@ -410,7 +412,7 @@ class ParseRoutes {
       if (isObjectProperty(property) && isIdentifier(property.key)) {
         // async routes
         if (property.key.name === 'lazy' && property.value.type === 'ArrowFunctionExpression') {
-          const importCall = property.value.body as CallExpression;
+          const importCall = property.value.body as ImportExpression;
           const onlyClientProp = nodePath.node.properties.find(
             (p) => isObjectProperty(p) && isIdentifier(p.key) && p.key.name === 'onlyClient',
           );
@@ -441,8 +443,8 @@ class ParseRoutes {
 
           addImportRouteWrapper();
 
-          if (importCall.type === 'CallExpression' && importCall.callee.type === 'Import') {
-            const [importArg] = importCall.arguments;
+          if (importCall.type === 'ImportExpression') {
+            const importArg = importCall.source;
             // current object has part of array (inside array)
             const parent = nodePath.findParent?.((p) => isArrayExpression(p.node));
 
@@ -520,6 +522,7 @@ class ParseRoutes {
 
     const ast = parser.parse(code, {
       sourceType: 'module',
+      createImportExpressions: true,
       plugins: ['typescript', 'jsx'],
     });
 

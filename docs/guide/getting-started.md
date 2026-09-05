@@ -6,8 +6,8 @@
 npm i @lomray/vite-ssr-boost
 ```
 
-Requires Node `>=22`, React/React DOM `>=18.2`, React Router `>=7` and Vite `>=5`.
-Your Vite version may require a newer Node 22 minor. Use matching React and React DOM versions.
+Requires Node `^22.22.2 || >=24.15.0`, React/React DOM `>=18.2`, React Router `>=7` and Vite `>=5`.
+Use matching React and React DOM versions. React Router 8 requires React 19.
 The [template](https://github.com/Lomray-Software/vite-template) includes compatible dependencies
 and complete client/server entries.
 

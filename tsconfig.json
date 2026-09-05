@@ -4,7 +4,6 @@
     "allowUnreachableCode": false,
     "noFallthroughCasesInSwitch": true,
     "allowSyntheticDefaultImports": true,
-    "downlevelIteration": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
@@ -21,8 +20,9 @@
       "webworker"
     ],
     "module": "ES2022",
-    "moduleResolution": "Node",
-    "target": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "types": ["node", "react"],
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "declaration": true,
@@ -34,7 +34,6 @@
     "pretty": true,
     "useDefineForClassFields": true,
     "jsx": "react",
-    "baseUrl": ".",
     "paths": {
       "@__helpers__/*": ["./__helpers__/*"],
       "@__mocks__/*": ["./__mocks__/*"],

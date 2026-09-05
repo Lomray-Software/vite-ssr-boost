@@ -14,7 +14,7 @@ on:
       node-version:
         required: false
         type: string
-        default: 22.21.0
+        default: 22.23.2
       npm-cache:
         required: false
         type: string

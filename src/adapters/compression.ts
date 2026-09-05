@@ -8,7 +8,7 @@ export type TCompression = boolean | ICompressionOptions;
 
 type TCreateCompressionStream = (
   format: TCompressionFormat,
-) => ReadableWritablePair<Uint8Array, Uint8Array>;
+) => ReadableWritablePair<Uint8Array, BufferSource>;
 
 /**
  * Read the negotiated encoding quality, including wildcard fallbacks.

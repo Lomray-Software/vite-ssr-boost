@@ -23,8 +23,7 @@ const getTransformHook = (plugin: ReturnType<typeof ViteHandleCustomEntrypointPl
 const getTransformIndexHtmlHook = (plugin: ReturnType<typeof ViteHandleCustomEntrypointPlugin>) =>
   (typeof plugin.transformIndexHtml === 'function'
     ? plugin.transformIndexHtml
-    : // @ts-expect-error just needed
-      plugin.transformIndexHtml?.handler) as any;
+    : plugin.transformIndexHtml?.handler) as any;
 const getCloseBundleHook = (plugin: ReturnType<typeof ViteHandleCustomEntrypointPlugin>) =>
   (typeof plugin.closeBundle === 'function'
     ? plugin.closeBundle
@@ -67,7 +66,13 @@ describe('handle-custom-entrypoint', () => {
         clientFile: './worker.ts',
       },
     });
-    const map = {};
+    const map = {
+      version: 3,
+      names: [],
+      sources: ['client.ts'],
+      sourcesContent: [null],
+      mappings: '',
+    };
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     const renameSync = vi.spyOn(fs, 'renameSync').mockImplementation(() => undefined);
 
@@ -101,7 +106,7 @@ describe('handle-custom-entrypoint', () => {
       ),
     ).toEqual({
       code: '<script src="/worker.ts"></script>',
-      map,
+      map: JSON.stringify(map),
     });
 
     expect(
@@ -126,7 +131,13 @@ describe('handle-custom-entrypoint', () => {
         type: 'spa',
       },
     });
-    const map = {};
+    const map = {
+      version: 3,
+      names: [],
+      sources: ['client.ts'],
+      sourcesContent: [null],
+      mappings: '',
+    };
 
     expect(
       getTransformHook(plugin).call(
@@ -136,7 +147,7 @@ describe('handle-custom-entrypoint', () => {
       ),
     ).toEqual({
       code: '<html></html>',
-      map,
+      map: JSON.stringify(map),
     });
   });
 });

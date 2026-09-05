@@ -5,21 +5,41 @@ on:
 
 jobs:
   react:
-    name: React ${{ matrix.react }}
+    name: React ${{ matrix.react }} / Router ${{ matrix.router }} / Vite ${{ matrix.vite }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        react: ['18.2.0', '19.2.8']
+        include:
+          - react: '18.2.0'
+            router: '7.18.3'
+            vite: '6.4.3'
+            babel: '7.29.8'
+            generator: '7.29.8'
+          - react: '19.2.8'
+            router: '7.18.3'
+            vite: '7.3.6'
+            babel: '7.29.8'
+            generator: '7.29.8'
+          - react: '19.2.8'
+            router: '8.3.1'
+            vite: '8.2.2'
+            babel: '8.0.4'
+            generator: '8.0.0'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.21.0
+          node-version: 22.23.2
           cache: npm
       - run: npm ci --ignore-scripts
-      - name: Install matching React and React DOM
-        run: npm install --no-save --ignore-scripts react@${{ matrix.react }} react-dom@${{ matrix.react }}
+      - name: Install matching runtime dependencies
+        run: >-
+          npm install --no-save --ignore-scripts
+          react@${{ matrix.react }} react-dom@${{ matrix.react }}
+          react-router@${{ matrix.router }} vite@${{ matrix.vite }}
+          @babel/generator@${{ matrix.generator }} @babel/parser@${{ matrix.babel }}
+          @babel/traverse@${{ matrix.babel }} @babel/types@${{ matrix.babel }}
       - name: Run the full suite with real React
         run: npm test
       - name: Verify the built Worker with this React version

@@ -6,7 +6,7 @@ on:
     types: [opened, synchronize, reopened]
 
 env:
-  NODE_VERSION: 22.21.0
+  NODE_VERSION: 22.23.2
   ENABLE_CACHE: yes
 
 jobs:
@@ -31,8 +31,13 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      - name: Audit dependencies
+        run: npm audit --audit-level=low
+
       - name: Commit lint PR title
-        run: echo "${{ github.event.pull_request.title }}" | npx --no-install commitlint -g commitlint.config.js
+        run: printf '%s\n' "$PR_TITLE" | npx --no-install commitlint -g commitlint.config.js
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
 
       - name: Check eslint
         run: npm run lint:check
@@ -78,6 +83,11 @@ jobs:
 
       - name: Test template in development and production
         run: node scripts/test-template.mjs acceptance/vite-template
+
+      - name: Test template with current runtime dependencies
+        run: node scripts/test-template.mjs acceptance/vite-template
+        env:
+          SSR_BOOST_TEMPLATE_CURRENT: '1'
 
       - name: Build documentation
         run: npm run docs:build

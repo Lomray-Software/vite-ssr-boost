@@ -55,8 +55,7 @@ const getApplyHook = (plugin: ReturnType<typeof ViteCreateSPAIndexPlugin>) => pl
 const getTransformIndexHtmlHook = (plugin: ReturnType<typeof ViteCreateSPAIndexPlugin>) =>
   (typeof plugin.transformIndexHtml === 'function'
     ? plugin.transformIndexHtml
-    : // @ts-expect-error just needed
-      plugin.transformIndexHtml?.handler) as any;
+    : plugin.transformIndexHtml?.handler) as any;
 const getGenerateBundleHook = (plugin: ReturnType<typeof ViteCreateSPAIndexPlugin>) =>
   (typeof plugin.generateBundle === 'function'
     ? plugin.generateBundle
