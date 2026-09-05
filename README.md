@@ -51,7 +51,7 @@ For production, run `npm run build` and `npm run start:ssr`. For a static SPA, r
 
 Full documentation lives here: [lomray-software.github.io/vite-ssr-boost](https://lomray-software.github.io/vite-ssr-boost/)
 
-Existing Express applications keep their imports and hooks. See
+Existing Express applications move one import to `adapters/express/entry`; hooks are unchanged. See
 [runtime adapters](https://lomray-software.github.io/vite-ssr-boost/guide/runtime-adapters)
 for the Fetch API and the differences between the managed CLI server and a custom runtime.
 
