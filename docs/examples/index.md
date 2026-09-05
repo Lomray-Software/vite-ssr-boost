@@ -2,6 +2,8 @@
 
 The [vite-template repository](https://github.com/Lomray-Software/vite-template) contains the application examples. Start with `example/minimal` for the entries used in the [migration guide](/guide/migrate-existing-spa), or choose `prod` for state management and deployment workflows.
 
+Use `npm create @lomray/ssr-app@latest my-app -- --template <name>` to create an app from a branch: `full` selects `prod`, `minimal` (the default) selects `example/minimal`, `custom-server` selects `example/custom-server`, and `localization` selects `example/localization`. See [Create a new app](/guide/getting-started#create-a-new-app) for the flags.
+
 ## `prod`
 
 The [prod branch](https://github.com/Lomray-Software/vite-template/tree/prod) combines a MobX manager, consistent-suspense, a route manager and meta tags. It includes component-level data streaming, Docker, Amplify and Vercel build scripts, and deployment workflows. Use it when the application needs the state and stream wiring shown in its server and client entries.

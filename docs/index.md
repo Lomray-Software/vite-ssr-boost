@@ -10,11 +10,11 @@ hero:
     alt: Vite SSR BOOST logo
   actions:
     - theme: brand
+      text: Create an app
+      link: /guide/getting-started#create-a-new-app
+    - theme: alt
       text: Migrate a SPA
       link: /guide/migrate-existing-spa
-    - theme: alt
-      text: Get Started
-      link: /guide/getting-started
     - theme: alt
       text: GitHub
       link: https://github.com/Lomray-Software/vite-ssr-boost
@@ -40,7 +40,7 @@ features:
 
 ## Start with the managed server
 
-Add `SsrBoost()` to the Vite plugins, use `@lomray/vite-ssr-boost/browser/entry` in the browser entry and `@lomray/vite-ssr-boost/adapters/express/entry` in the server entry. The CLI handles development, HMR, SSR builds and SPA builds. Use the [Fetch core and runtime adapters](/guide/runtime-adapters) when your application needs to own the transport and its asset integration.
+Create a new app with `npm create @lomray/ssr-app@latest my-app` to start from the minimal template. For an existing app, add `SsrBoost()` to the Vite plugins, use `@lomray/vite-ssr-boost/browser/entry` in the browser entry and `@lomray/vite-ssr-boost/adapters/express/entry` in the server entry. The CLI handles development, HMR, SSR builds and SPA builds. Use the [Fetch core and runtime adapters](/guide/runtime-adapters) when your application needs to own the transport and its asset integration.
 
 ## Read this first
 
