@@ -8,12 +8,31 @@ export default defineConfig({
   title,
   description,
   base: '/vite-ssr-boost/',
+  head: [
+    [
+      'link',
+      { rel: 'icon', type: 'image/png', sizes: '64x64', href: '/vite-ssr-boost/favicon.png' },
+    ],
+    ['meta', { property: 'og:title', content: title }],
+    ['meta', { property: 'og:description', content: description }],
+    [
+      'meta',
+      {
+        property: 'og:image',
+        content: 'https://lomray-software.github.io/vite-ssr-boost/logo.png',
+      },
+    ],
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { name: 'twitter:card', content: 'summary' }],
+  ],
   cleanUrls: true,
   lastUpdated: true,
   sitemap: {
     hostname: 'https://lomray-software.github.io/vite-ssr-boost/',
   },
   themeConfig: {
+    logo: '/logo.png',
+    siteTitle: 'Vite SSR BOOST',
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'API', link: '/api/plugin' },
@@ -65,15 +84,14 @@ export default defineConfig({
         items: [
           { text: 'AI Usage', link: '/ai-usage' },
           { text: 'Talking Points', link: '/reference/talking-points' },
+          { text: 'Hydration order and streaming', link: '/reference/hydration-and-streaming' },
           { text: 'FAQ', link: '/reference/faq' },
           { text: 'Acceptance Gates', link: '/reference/acceptance-gates' },
           { text: 'Useful Links', link: '/reference/useful-links' },
         ],
       },
     ],
-    socialLinks: [
-      { icon: 'github', link: 'https://github.com/Lomray-Software/vite-ssr-boost' },
-    ],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/Lomray-Software/vite-ssr-boost' }],
     footer: {
       message:
         'Released under the MIT License. &middot; <a href="https://audit.lomray.com/?utm_source=github-pages&amp;utm_medium=docs-vite-ssr-boost&amp;utm_campaign=owned-surface-github" target="_blank" rel="noopener">Free performance audit for your deployed app</a>',

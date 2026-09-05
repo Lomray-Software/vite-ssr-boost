@@ -1,0 +1,46 @@
+:root {
+  /* The battery's magenta, violet and cyan, darkened for light surfaces. */
+  --vp-c-brand-1: #9d2589;
+  --vp-c-brand-2: #7e22ce;
+  --vp-c-brand-3: #6d28d9;
+  --vp-c-brand-soft: rgba(157, 37, 137, 0.12);
+
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-text: #ffffff;
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(110deg, #9d2589 0%, #6d28d9 50%, #087b90 100%);
+  --vp-home-hero-image-background-image: linear-gradient(
+    135deg,
+    #ec489944 10%,
+    #8b5cf644 50%,
+    #22d3ee44 90%
+  );
+  --vp-home-hero-image-filter: blur(44px);
+}
+
+.dark {
+  --vp-c-brand-1: #f0abdf;
+  --vp-c-brand-2: #dbb0ff;
+  --vp-c-brand-3: #c4b5fd;
+  --vp-c-brand-soft: rgba(240, 171, 223, 0.14);
+
+  --vp-button-brand-text: #1b1b1f;
+  --vp-button-brand-hover-text: #1b1b1f;
+  --vp-button-brand-active-text: #1b1b1f;
+
+  --vp-home-hero-name-background: linear-gradient(110deg, #f0abdf 0%, #c4b5fd 50%, #67e8f9 100%);
+}
+
+@media (min-width: 640px) {
+  :root {
+    --vp-home-hero-image-filter: blur(56px);
+  }
+}
+
+@media (min-width: 960px) {
+  :root {
+    --vp-home-hero-image-filter: blur(68px);
+  }
+}
