@@ -100,6 +100,10 @@ explicit `.js` imports remain supported.
 
 ## Adapters
 
+The managed CLI is the default path. A custom transport owns the development server, static assets
+and route-asset injection. The [custom-server example](https://github.com/Lomray-Software/vite-template/tree/example/custom-server)
+demonstrates this integration with the managed CLI in development and Fastify in production.
+
 Native Node or connect-style:
 
 ```ts
@@ -140,7 +144,12 @@ import adapterHono from '@lomray/vite-ssr-boost/adapters/hono';
 app.all('*', adapterHono(handler));
 ```
 
-Cloudflare Workers:
+### Cloudflare Workers
+
+The managed CLI is the default path for Node/Express applications. A custom Worker transport owns
+the development server, static assets and route-asset injection; the
+[custom-server example](https://github.com/Lomray-Software/vite-template/tree/example/custom-server)
+demonstrates those responsibilities with a Fastify production launcher.
 
 ```ts
 import adapterEdge from '@lomray/vite-ssr-boost/adapters/edge';
@@ -249,6 +258,8 @@ React Router exposes loader/action headers on `context.routerContext`; copy the 
 document needs in `onRouterReady`. A JSON loader's `Content-Type` is not the document's content type.
 
 ## Streaming and cancellation
+
+Follow the [data-loading contract](/guide/migrate-existing-spa#data-loading) for loader data at first paint and the Suspense pattern used for streamed data.
 
 The default sends the shell as soon as React makes it available. Return `{ isStream: false }`
 from `onRouterReady` to wait for the complete tree, for example for crawlers. `onResponse` still

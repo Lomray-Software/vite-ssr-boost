@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress';
 
 const title = 'Vite SSR BOOST';
 const description =
-  'SSR and SPA toolkit for React Router applications on top of Vite, with server rendering, streaming and deployment helpers.';
+  'SSR for React Router apps in Data mode. Keep your Vite config, route objects and components, and build SSR or SPA output.';
 
 export default defineConfig({
   title,
@@ -33,6 +33,8 @@ export default defineConfig({
         items: [
           { text: 'Introduction', link: '/' },
           { text: 'Getting Started', link: '/guide/getting-started' },
+          { text: 'Migrate an Existing SPA', link: '/guide/migrate-existing-spa' },
+          { text: 'Choosing an SSR Approach', link: '/guide/choosing' },
           { text: 'Rendering Modes', link: '/guide/rendering-modes' },
           { text: 'Routing', link: '/guide/routing' },
           { text: 'Server Lifecycle', link: '/guide/server-lifecycle' },
@@ -52,13 +54,17 @@ export default defineConfig({
       },
       {
         text: 'Examples',
-        items: [{ text: 'Recipes', link: '/examples/recipes' }],
+        items: [
+          { text: 'Example Projects', link: '/examples/' },
+          { text: 'Recipes', link: '/examples/recipes' },
+        ],
       },
       {
         text: 'Reference',
         items: [
           { text: 'AI Usage', link: '/ai-usage' },
           { text: 'Talking Points', link: '/reference/talking-points' },
+          { text: 'FAQ', link: '/reference/faq' },
           { text: 'Acceptance Gates', link: '/reference/acceptance-gates' },
           { text: 'Useful Links', link: '/reference/useful-links' },
         ],
