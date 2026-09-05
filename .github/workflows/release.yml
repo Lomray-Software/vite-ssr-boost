@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: acceptance/vite-template
-          ref: fbbd65524ceb95764bebc39da67af7d9c5737f80
+          ref: 922db6703a1f5baabec9288d9fa35ff787f6454f
           repository: Lomray-Software/vite-template
 
       - name: Install template dependencies
