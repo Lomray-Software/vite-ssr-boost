@@ -373,17 +373,6 @@ const verifySpa = async (origin) => {
   console.info('SPA: root, deep links, fallback and client assets passed');
 };
 
-// Apply the documented major-version migration only to the candidate template.
-const migrateServerEntry = async () => {
-  const filename = join(directory, 'src/server.ts');
-  const sourceText = await readFile(filename, 'utf8');
-  const entrypoint = '@lomray/vite-ssr-boost/adapters/express/entry';
-  const migrated = sourceText.replace('@lomray/vite-ssr-boost/node/entry', entrypoint);
-
-  assert.ok(migrated.includes(entrypoint), 'Template server entry import changed.');
-  await writeFile(filename, migrated);
-};
-
 // Install the publishable package with its dependencies after measuring the original baseline.
 const installCandidate = async () => {
   execFileSync('npm', [
@@ -499,7 +488,6 @@ try {
   }
 
   await installCandidate();
-  await migrateServerEntry();
 
   const devPort = await getPort();
 
@@ -567,7 +555,6 @@ try {
   for (const filename of ['vite.config.ts', 'src/client.ts', 'src/server.ts']) {
     await cp(join(source, filename), join(directory, filename));
   }
-  await migrateServerEntry();
   await run(['build', '--focus-only', 'client']);
   const spaPort = await getPort();
   const spa = start(['start', '--focus-only', 'client', '--port', String(spaPort)]);
