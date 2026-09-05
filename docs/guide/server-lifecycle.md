@@ -99,9 +99,27 @@ Typical uses:
 
 ## `onResponse`
 
-Runs on HTML chunks as they are written.
+Receives `{ context, html, isEnd }` for HTML chunks as they are written, with `isEnd: false`.
 
 Use it when you need to mutate generated HTML in transit, for example to inject payloads or patch chunks before they leave the server.
+
+Return `undefined` (or return nothing) to keep the original chunk. A string replaces the chunk,
+including `''`, which withholds it so an incremental transform can retain an unfinished token
+until more HTML arrives.
+
+After the composed body stream finishes, including its footer, the hook runs once more with
+`html: ''` and `isEnd: true`. Return a string to append any retained content to the response;
+`undefined` or `''` appends nothing. The same contract applies when `isStream` is `false`.
+Existing hooks can ignore `isEnd`.
+
+For example, with an `@lomray/consistent-suspense` stream transform stored in `appProps`:
+
+```ts
+onResponse: ({ context: { appProps: { streamSuspense }, isStream }, html, isEnd }) => {
+  if (!isStream) return;
+  return isEnd ? streamSuspense.end() : streamSuspense.analyze(html);
+},
+```
 
 ## `getState`
 
