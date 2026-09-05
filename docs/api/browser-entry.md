@@ -28,6 +28,8 @@ interface IEntryClientOptions<T> {
 
 ## What it does
 
+While the document is loading, the entry waits for serialized router state (SSR only) or `DOMContentLoaded` before creating the router and rendering.
+
 The browser entry:
 
 - resolves currently matched lazy routes before router creation
