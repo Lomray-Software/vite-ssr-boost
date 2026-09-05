@@ -15,6 +15,8 @@ At runtime the package:
 
 That is where the customization hooks fit.
 
+Render hooks receive a [context](/api/server-entry#hook-context) with the shared Fetch `request` and live Express `req` / `res`; `onRequest` receives `(req, res)` before that context is created.
+
 ## `onServerCreated`
 
 Called once after the Express app exists.
