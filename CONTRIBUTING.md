@@ -12,9 +12,6 @@
 
 ## Basics
 
-Follow the [Xorial coding standards](https://github.com/Lomray-Software/Xorial/tree/main/core/coding-standards),
-adapting them to this library's existing naming, module boundaries and short block comments.
-
 #### Install
 
 Download repo and install dependencies:
@@ -45,8 +42,8 @@ Check develop progress in any test repo:
 npm run test:template
 ```
 
-The acceptance script copies the template to a temporary directory and installs the local build
-there. To retain that copy for browser checks, run
+The acceptance script copies the template to a temporary directory, installs the local build and
+migrates its server entry import to `adapters/express/entry`. To retain that copy for browser checks, run
 `SSR_BOOST_KEEP_TEMPLATE=1 npm run test:template`; its path is printed at the end.
 
 #### Test & Checks

@@ -12,7 +12,7 @@ Use this file as a compact grounding reference for AI tools working with this pa
 
 - Vite plugin: `@lomray/vite-ssr-boost/plugin`
 - browser entry: `@lomray/vite-ssr-boost/browser/entry`
-- server entry: `@lomray/vite-ssr-boost/node/entry`
+- server entry: `@lomray/vite-ssr-boost/adapters/express/entry`
 - CLI binary: `ssr-boost`
 
 ## What the package is not

@@ -6,9 +6,9 @@ import type { RouteObject } from 'react-router';
 import { createStaticHandler } from 'react-router';
 import type { ServeStaticOptions } from 'serve-static';
 import type { Logger } from 'vite';
+import type { IRenderOptions, IRenderParams, TRender } from '@adapters/express/render';
+import render from '@adapters/express/render';
 import type { TRouteObject } from '@interfaces/route-object';
-import type { IRenderOptions, IRenderParams, TRender } from '@node/render';
-import render from '@node/render';
 import type ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 

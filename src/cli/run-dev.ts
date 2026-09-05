@@ -1,6 +1,6 @@
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
-import createServer from '@node/server';
+import createServer from '@adapters/express/server';
 import { setCurrentEntrypointName } from '@plugins/handle-custom-entrypoint';
 import ServerConfig from '@services/server-config';
 

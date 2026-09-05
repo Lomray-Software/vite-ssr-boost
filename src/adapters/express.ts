@@ -1,9 +1,9 @@
 import type { NextFunction, Request, RequestHandler, Response as ExpressResponse } from 'express';
 import serializeBody from '@adapters/body';
+import createFetchRequest from '@adapters/express/create-request';
 import { handleRequest } from '@adapters/node';
 import type { INodeAdapterOptions } from '@adapters/node';
 import type { TSsrHandler } from '@core/types';
-import createFetchRequest from '@node/create-fetch-request';
 import createRequestSignal from '@node/request-signal';
 
 export interface IExpressAdapterOptions extends INodeAdapterOptions {

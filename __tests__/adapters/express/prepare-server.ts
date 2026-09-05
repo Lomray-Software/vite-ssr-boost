@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import process from 'node:process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import PrepareServer from '@services/prepare-server';
+import PrepareServer from '@adapters/express/prepare-server';
 
 describe('PrepareServer', () => {
   afterEach(() => {

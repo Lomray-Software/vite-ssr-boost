@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import entry from '@node/entry';
+import entry from '@adapters/express/entry';
 
-vi.mock('@node/render', () => ({
+vi.mock('@adapters/express/render', () => ({
   default: vi.fn(),
 }));
 

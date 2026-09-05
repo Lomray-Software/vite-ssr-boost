@@ -9,8 +9,8 @@ import type { PropsWithChildren } from 'react';
 import React from 'react';
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import entry from '@node/entry';
-import createServer from '@node/server';
+import entry from '@adapters/express/entry';
+import createServer from '@adapters/express/server';
 import splitLinkHeader from '@node/split-link-header';
 
 type TScenario =
@@ -90,7 +90,7 @@ vi.mock('react-dom/server', async (importOriginal) => ({
   renderToPipeableStream: fixture.renderToPipeableStream,
 }));
 
-vi.mock('@services/prepare-server', () => ({
+vi.mock('@adapters/express/prepare-server', () => ({
   default: {
     init: vi.fn(() => fixture.prepareServer),
   },

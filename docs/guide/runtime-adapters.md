@@ -18,21 +18,34 @@ owns the HTTP server, bundling and asset delivery; an adapter does not replace t
 
 ## Existing Express applications
 
-Existing imports and hooks keep working:
+Move your server entry import into the Express adapter:
 
 ```ts
-import entryServer from '@lomray/vite-ssr-boost/node/entry';
+import entryServer from '@lomray/vite-ssr-boost/adapters/express/entry';
 
 export default entryServer(App, routes, options);
 ```
 
-The `node/entry`, `node/server`, and legacy hook paths remain compatibility entrypoints backed by
-the Express adapter. Legacy `onRequest` and render hooks receive the same live Express 5 `req` and
-`res` objects, so existing headers, cookies, and response takeover keep working. New Fetch handlers
-do not emulate Express objects. `onResponse` keeps the same signature and still transforms streamed
-HTML. The core decodes split UTF-8 chunks safely before invoking it.
+The old entrypoints are removed in this major release. `onRequest` and render hooks receive the same
+live Express 5 `req` and `res` objects, so existing headers, cookies, and response takeover keep working.
+New Fetch handlers do not emulate Express objects. `onResponse` keeps the same signature and still
+transforms streamed HTML. The core decodes split UTF-8 chunks safely before invoking it.
 
 ### Migration notes
+
+Update imports relative to `@lomray/vite-ssr-boost/` (also applies to explicit `.js` imports):
+
+| Removed path | New path |
+| --- | --- |
+| `node/entry` | `adapters/express/entry` |
+| `node/server` | `adapters/express/server` |
+| `node/render` | `adapters/express/render` |
+| `node/create-fetch-request` | `adapters/express/create-request` |
+| `services/prepare-server` | `adapters/express/prepare-server` |
+
+The old `node/write-response` and `helpers/handle-response` internals are removed. The renderer now
+handles response composition and redirects through the Fetch core; custom Node transports can send
+the resulting `Response` with `node/write-fetch-response`.
 
 - The default shell-error page returns a generic HTTP 500 without exception messages. Use `onError`
   for diagnostics or `onShellError` for a custom page.
@@ -41,11 +54,11 @@ HTML. The core decodes split UTF-8 chunks safely before invoking it.
 - Unless explicitly overridden, rendered responses use React Router's status, including 404 for
   unmatched routes. Previously these could be sent as 200.
 - Render timeouts and client/intentional cancellation report `onError` codes `timeout` and `cancel`.
-  The legacy logger keeps these at info level. Unexpected errors still retain their original error.
+  The managed Express server logs these at info level. Unexpected errors retain their original error.
 - Parsed JSON and flat URL-encoded bodies work automatically. Nested form values and unsupported
   custom or multipart parser results fail explicitly; use `getBody` as shown below.
-- Package exports support extensionless imports directly in Node and bundlers. Existing `.js`
-  imports and deep paths keep working, with matching TypeScript declarations.
+- Package exports support extensionless and explicit `.js` imports for the new paths, with matching
+  TypeScript declarations. Other module paths are unchanged.
 
 Express and compression are optional dependencies installed by default. If your install command
 uses `--omit=optional`, install them explicitly:
@@ -159,7 +172,7 @@ app.use(adapterExpress(handler, {
 
 This keeps parser-specific objects out of the core and makes conversion failures explicit.
 
-The managed/legacy server accepts `getBody` from `init` too. For middleware that already consumed
+The managed Express server accepts `getBody` from `init` too. For middleware that already consumed
 a multipart body, rebuild the fields/files your router action needs as `FormData`:
 
 ```ts
@@ -196,7 +209,7 @@ Node and Fastify feature-detect `writeEarlyHints`. Unsupported runtimes safely i
 
 ## Compression
 
-Compression is an adapter concern and never runs in the core. The legacy Express server keeps its
+Compression is an adapter concern and never runs in the core. The managed Express server keeps its
 existing `compression` middleware. The new Node, Express, Fastify, and edge adapters can opt into
 streaming compression:
 

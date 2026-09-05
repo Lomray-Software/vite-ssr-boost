@@ -5,9 +5,9 @@ import path from 'node:path';
 import compression from 'compression';
 import type { Express } from 'express';
 import express from 'express';
+import PrepareServer from '@adapters/express/prepare-server';
+import type { IRequestContext } from '@adapters/express/render';
 import printServerInfo from '@helpers/print-server-info';
-import type { IRequestContext } from '@node/render';
-import PrepareServer from '@services/prepare-server';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 

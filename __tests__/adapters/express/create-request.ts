@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import createFetchRequest from '@node/create-fetch-request';
+import createFetchRequest from '@adapters/express/create-request';
 
 describe('createFetchRequest', () => {
   it('should convert express request to fetch request with headers and body', async () => {

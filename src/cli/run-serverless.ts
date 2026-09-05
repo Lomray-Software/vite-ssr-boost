@@ -1,7 +1,7 @@
 import { performance } from 'node:perf_hooks';
+import type { ICreateServerOut } from '@adapters/express/server';
+import createServer from '@adapters/express/server';
 import printServerInfo from '@helpers/print-server-info';
-import type { ICreateServerOut } from '@node/server';
-import createServer from '@node/server';
 import ServerConfig from '@services/server-config';
 
 interface IRunServerlessParams {

@@ -48,7 +48,7 @@ void entryClient(App, routes);
 ## Create the server entry
 
 ```tsx
-import entryServer from '@lomray/vite-ssr-boost/node/entry';
+import entryServer from '@lomray/vite-ssr-boost/adapters/express/entry';
 import App from './App';
 import routes from './routes';
 

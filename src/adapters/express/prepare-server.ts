@@ -4,9 +4,9 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import chalk from 'chalk';
 import type { Express, Request } from 'express';
+import type { IEntrypointOptions, IPrepareRenderOut } from '@adapters/express/entry';
+import type { TRender } from '@adapters/express/render';
 import type { TRouteObject } from '@interfaces/route-object';
-import type { IEntrypointOptions, IPrepareRenderOut } from '@node/entry';
-import type { TRender } from '@node/render';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 

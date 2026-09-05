@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
-import createServer from '@node/server';
+import createServer from '@adapters/express/server';
 
 const {
   appUse,
@@ -43,7 +43,7 @@ vi.mock('express', () => ({
   default: Object.assign(() => ({ disable: appDisable }), { static: expressStaticMock }),
 }));
 vi.mock('compression', () => ({ default: compressionMock }));
-vi.mock('@services/prepare-server', () => ({
+vi.mock('@adapters/express/prepare-server', () => ({
   default: {
     init: vi.fn(() => prepareServer),
   },

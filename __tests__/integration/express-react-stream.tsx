@@ -9,7 +9,7 @@ import compression from 'compression';
 import { redirect } from 'react-router';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import StreamError from '@constants/stream-error';
-import entry from '@node/entry';
+import entry from '@adapters/express/entry';
 
 interface IResource {
   read: () => void;

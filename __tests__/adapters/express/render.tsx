@@ -2,7 +2,7 @@
 import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import StreamError from '@constants/stream-error';
-import render from '@node/render';
+import render from '@adapters/express/render';
 
 const { coreRenderMock, createFetchRequestMock, injectAssetsMock, writeFetchResponseMock } =
   vi.hoisted(() => ({
@@ -13,7 +13,7 @@ const { coreRenderMock, createFetchRequestMock, injectAssetsMock, writeFetchResp
   }));
 
 vi.mock('@core/render', () => ({ default: coreRenderMock }));
-vi.mock('@node/create-fetch-request', () => ({ default: createFetchRequestMock }));
+vi.mock('@adapters/express/create-request', () => ({ default: createFetchRequestMock }));
 vi.mock('@node/write-fetch-response', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@node/write-fetch-response')>()),
   default: writeFetchResponseMock,

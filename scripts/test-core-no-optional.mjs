@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { access, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -95,6 +96,23 @@ try {
   const packageRoot = join(directory, 'node_modules', '@lomray', 'vite-ssr-boost');
   const packageJson = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'));
 
+  // Removed entrypoints must not survive in npm archives as stale build output.
+  for (const subpath of [
+    'node/entry',
+    'node/render',
+    'node/server',
+    'node/create-fetch-request',
+    'node/write-response',
+    'services/prepare-server',
+    'helpers/handle-response',
+    'adapters/express/write-response',
+    'adapters/express/handle-response',
+  ]) {
+    for (const suffix of ['.js', '.d.ts', '.js.map', '.d.ts.map']) {
+      await assert.rejects(access(join(packageRoot, subpath + suffix)), { code: 'ENOENT' });
+    }
+  }
+
   for (const dependency of ['compression', 'express']) {
     if (packageJson.dependencies?.[dependency]) {
       throw new Error(`${dependency} is still a required runtime dependency.`);
@@ -182,9 +200,9 @@ try {
     import type { TSsrHandler as TSsrHandlerJs } from '@lomray/vite-ssr-boost/core/types.js';
 
     const handler: TSsrHandler = async (request) => new Response(request.url);
-    const legacy: TSsrHandlerJs = handler;
+    const handlerJs: TSsrHandlerJs = handler;
     const response: Response = await adapterEdge(handler)(new Request('https://example.com'));
-    const responseJs: Response = await adapterEdgeJs(legacy)(new Request('https://example.com'));
+    const responseJs: Response = await adapterEdgeJs(handlerJs)(new Request('https://example.com'));
     // @ts-expect-error A handler must return a Response, not a string.
     const invalid: TSsrHandler = async () => 'invalid';
     // @ts-expect-error The adapter requires a Fetch Request.

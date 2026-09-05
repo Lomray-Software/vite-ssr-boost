@@ -3,7 +3,7 @@
 ## Import
 
 ```ts
-import entryServer from '@lomray/vite-ssr-boost/node/entry';
+import entryServer from '@lomray/vite-ssr-boost/adapters/express/entry';
 ```
 
 ## Signature
