@@ -1,0 +1,27 @@
+{
+  "0": [
+    {
+      "type": "script",
+      "url": "/assets/home.js",
+      "weight": 2,
+      "isNested": false,
+      "isPreload": true
+    }
+  ],
+  "1": [
+    {
+      "type": "style",
+      "url": "/assets/about.css",
+      "weight": 1,
+      "isNested": false,
+      "isPreload": true
+    },
+    {
+      "type": "script",
+      "url": "/assets/about.js",
+      "weight": 2,
+      "isNested": false,
+      "isPreload": true
+    }
+  ]
+}

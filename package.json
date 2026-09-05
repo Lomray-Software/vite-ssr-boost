@@ -4,6 +4,14 @@
   "description": "Vite plugin for create awesome SSR or SPA applications on React.",
   "type": "module",
   "exports": {
+    "./node/production": {
+      "types": "./node/production.d.ts",
+      "default": "./node/production.js"
+    },
+    "./node/production.js": {
+      "types": "./node/production.d.ts",
+      "default": "./node/production.js"
+    },
     "./*.js": {
       "types": "./*.d.ts",
       "default": "./*.js"

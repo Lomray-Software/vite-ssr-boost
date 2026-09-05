@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import chalk from 'chalk';
-import type { RouterState, StaticHandlerContext } from 'react-router';
+import type { RouterState } from 'react-router';
 import type { Alias, ModuleNode, RenderBuiltAssetUrl } from 'vite';
 import type { IAsyncRoute } from '@helpers/import-route';
 import type { TRoutesTree } from '@services/parse-routes';
 import ParseRoutes from '@services/parse-routes';
 import PathNormalize from '@services/path-normalize';
+import type { IAsset, TAssets } from '@services/route-assets';
+import RouteAssets, { AssetType } from '@services/route-assets';
 import type ServerConfig from '@services/server-config';
 
 interface ISsrManifestParams {
@@ -26,35 +28,10 @@ interface IManifest {
   };
 }
 
-enum AssetType {
-  style = 'style',
-  script = 'script',
-  image = 'image',
-  font = 'font',
-}
-
-interface IAsset {
-  type: AssetType;
-  url: string;
-  weight: number;
-  isNested: boolean;
-  isPreload: boolean;
-  content?: string;
-}
-
-type TAssets = { [id: string]: IAsset };
-
-interface IInjectAssetsContext {
-  html: {
-    header: string;
-  };
-  routerContext?: StaticHandlerContext;
-}
-
 /**
  * Working with SSR Manifest file
  */
-class SsrManifest {
+class SsrManifest extends RouteAssets {
   /**
    * Singleton
    */
@@ -86,11 +63,6 @@ class SsrManifest {
   protected readonly manifestName = 'manifest.json';
 
   /**
-   * Assets manifest file name
-   */
-  protected readonly assetsManifest = 'assets-manifest.json';
-
-  /**
    * Vite resolve aliases
    */
   protected readonly viteAliases?: Alias[];
@@ -106,17 +78,14 @@ class SsrManifest {
   protected readonly renderBuiltUrl?: RenderBuiltAssetUrl;
 
   /**
-   * Loaded assets manifest file
-   */
-  protected routesAssets: Record<string, IAsset[]> | null = null;
-
-  /**
    * @constructor
    */
   protected constructor(
     config: ServerConfig,
     { buildDir, viteAliases, basename, renderBuiltUrl }: ISsrManifestParams = {},
   ) {
+    super(path.resolve(config.getParams().root, buildDir || ''), config.isModulePreload);
+
     this.config = config;
     this.root = config.getParams().root;
     this.buildDir = buildDir;
@@ -138,17 +107,24 @@ class SsrManifest {
   }
 
   /**
-   * Get output dir
+   * Use inline styles while the managed Vite server is running.
    */
-  protected getOutDir() {
+  protected get isDev(): boolean {
+    return Boolean(this.config.getVite());
+  }
+
+  /**
+   * Get output dir.
+   */
+  protected getOutDir(): string {
     return path.resolve(this.root, this.buildDir || '');
   }
 
   /**
-   * Get assets manifest file name
+   * Keep the managed server's build path resolution.
    */
   protected getAssetsManifestFile(): string {
-    return `${this.getOutDir()}/server/${this.assetsManifest}`;
+    return `${this.getOutDir()}/server/assets-manifest.json`;
   }
 
   /**
@@ -177,28 +153,6 @@ class SsrManifest {
   }
 
   /**
-   * Load assets manifest
-   */
-  protected loadAssetsManifest(): Record<string, IAsset[]> {
-    if (this.routesAssets !== null) {
-      return this.routesAssets;
-    }
-
-    const manifestFile = this.getAssetsManifestFile();
-
-    if (!fs.existsSync(manifestFile)) {
-      return {};
-    }
-
-    this.routesAssets = JSON.parse(fs.readFileSync(manifestFile, { encoding: 'utf-8' })) as Record<
-      string,
-      IAsset[]
-    >;
-
-    return this.routesAssets;
-  }
-
-  /**
    * Same as 'getAsyncRoutesIds' but for routes tree from 'ParseRoutes'
    */
   protected getRoutesTreeIds(
@@ -220,15 +174,6 @@ class SsrManifest {
     });
 
     return result;
-  }
-
-  /**
-   * Sort assets
-   */
-  protected sortAssets(assets: IAsset[]): IAsset[] {
-    return assets.sort((a, b) =>
-      a.weight === b.weight ? Number(a.isNested) - Number(b.isNested) : a.weight - b.weight,
-    );
   }
 
   /**
@@ -316,27 +261,10 @@ class SsrManifest {
   }
 
   /**
-   * Get route assets
+   * Get route assets from Vite in development or the built manifest in production.
    */
   protected getAssets(routes?: RouterState['matches']): IAsset[] {
-    if (this.config.getVite()) {
-      return this.getAssetsDev(routes);
-    }
-
-    const routeIds = routes?.map(({ route }) => route.id).filter(Boolean) ?? [];
-
-    if (!routeIds.length) {
-      return [];
-    }
-
-    const routesAssets = this.loadAssetsManifest();
-
-    return this.sortAssets(
-      routeIds
-        .map((routeId) => routesAssets[routeId])
-        .flat()
-        .filter(Boolean),
-    );
+    return this.isDev ? this.getAssetsDev(routes) : super.getAssets(routes);
   }
 
   /**
@@ -515,54 +443,6 @@ class SsrManifest {
       default:
         return null;
     }
-  }
-
-  /**
-   * Build preload hints without depending on a particular HTTP transport.
-   */
-  public getEarlyHints(assets: IAsset[]): Headers {
-    const headers = new Headers();
-
-    assets.forEach(({ type, url }) => {
-      if (!type || !['style', 'script'].includes(type)) {
-        return;
-      }
-
-      headers.append('Link', `<${url}>; rel=preload; as=${type}`);
-    });
-
-    return headers;
-  }
-
-  /**
-   * Inject route assets to head html
-   */
-  public injectAssets({ routerContext, html }: IInjectAssetsContext): Headers {
-    const assets = this.getAssets(routerContext?.matches);
-    const htmlAssets = assets
-      .map(({ type, url, isPreload, content = '' }) => {
-        switch (type) {
-          case AssetType.style:
-            return this.config.getVite()
-              ? `<style data-vite-dev-id="${url}">${content}</style>`
-              : `<link rel="stylesheet" href="${url}">`;
-
-          case AssetType.script:
-            return isPreload
-              ? this.config.isModulePreload
-                ? // can reduce lighthouse performance
-                  `<link rel="modulepreload" as="script" crossorigin href="${url}">`
-                : null
-              : `<script async type="module" crossorigin src="${url}"></script>`;
-        }
-
-        return null;
-      })
-      .filter(Boolean);
-
-    html.header = html.header.replace('</head>', `${htmlAssets.join('\n')}</head>`);
-
-    return this.getEarlyHints(assets);
   }
 }
 

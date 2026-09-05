@@ -1,0 +1,56 @@
+import { readFile } from 'node:fs/promises';
+import type { ICreateHandlerOptions, IHtmlShell } from '@core/handler';
+import RouteAssets from '@services/route-assets';
+
+interface ILoadHtmlShellOptions {
+  indexFile: string;
+  outlet?: string;
+}
+
+interface IRouteAssetPreparerOptions {
+  buildDir: string;
+  modulePreload?: boolean;
+}
+
+/**
+ * Read a built document once and supply a fresh shell for each request.
+ */
+const loadHtmlShell = async ({
+  indexFile,
+  outlet = '<!--ssr-outlet-->',
+}: ILoadHtmlShellOptions): Promise<() => IHtmlShell> => {
+  const html = await readFile(indexFile, 'utf8');
+  const parts = html.split(outlet);
+
+  if (!outlet || parts.length !== 2) {
+    throw new Error(
+      `Invalid HTML shell in "${indexFile}": expected exactly one non-empty outlet ${JSON.stringify(outlet)}.`,
+    );
+  }
+
+  const [header, footer] = parts;
+
+  return () => ({ header, footer });
+};
+
+/**
+ * Inject matched route assets using a manifest cache owned by this preparer.
+ */
+const createRouteAssetPreparer = <TAppProps = Record<string, any>>({
+  buildDir,
+  modulePreload = false,
+}: IRouteAssetPreparerOptions): NonNullable<ICreateHandlerOptions<TAppProps>['prepare']> => {
+  const assets = new RouteAssets(buildDir, modulePreload);
+
+  return async ({ context, executionContext }) => {
+    const hints = assets.injectAssets(context);
+
+    if (hints.has('Link')) {
+      await executionContext?.onEarlyHints?.(hints);
+    }
+  };
+};
+
+export { createRouteAssetPreparer, loadHtmlShell };
+
+export type { IHtmlShell, ILoadHtmlShellOptions, IRouteAssetPreparerOptions };

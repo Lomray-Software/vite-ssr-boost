@@ -100,8 +100,9 @@ explicit `.js` imports remain supported.
 
 ## Adapters
 
-The managed CLI is the default path. A custom transport owns the development server, static assets
-and route-asset injection. The [custom-server example](https://github.com/Lomray-Software/vite-template/tree/example/custom-server)
+The managed CLI is the default path. A custom transport owns the development server and static assets.
+For Node production servers, the production helpers supply the HTML shell and matched route assets.
+The [custom-server example](https://github.com/Lomray-Software/vite-template/tree/example/custom-server)
 demonstrates this integration with the managed CLI in development and Fastify in production.
 
 Native Node or connect-style:
@@ -124,13 +125,64 @@ import adapterExpress from '@lomray/vite-ssr-boost/adapters/express';
 app.use(adapterExpress(handler));
 ```
 
-Fastify:
+Fastify production launcher (`server/index.mjs`):
 
-```ts
+The built server in the custom-server example exports `handler` and `configureHandler`. The latter
+passes `getHtml` and `prepare` to its Fetch handler before Fastify starts accepting requests.
+Run `npm run build` first, then start this launcher with `node server/index.mjs`.
+
+```js
+import { join, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fastifyStatic from '@fastify/static';
 import adapterFastify from '@lomray/vite-ssr-boost/adapters/fastify';
+import { createRouteAssetPreparer, loadHtmlShell } from '@lomray/vite-ssr-boost/node/production';
+import Fastify from 'fastify';
+import { configureHandler, handler } from '../build/server/server.js';
 
-app.all('/*', adapterFastify(handler));
+const buildDir = fileURLToPath(new URL('../build/', import.meta.url));
+const clientDir = join(buildDir, 'client');
+
+configureHandler({
+  getHtml: await loadHtmlShell({ indexFile: join(clientDir, 'index.html') }),
+  prepare: createRouteAssetPreparer({ buildDir }),
+});
+
+const app = Fastify();
+
+await app.register(fastifyStatic, {
+  root: clientDir,
+  index: false,
+  wildcard: false,
+  immutable: true,
+  maxAge: '1y',
+  setHeaders: (reply, filePath) => {
+    if (!filePath.startsWith(`${join(clientDir, 'assets')}${sep}`)) {
+      reply.header('Cache-Control', 'public, max-age=0');
+    }
+  },
+});
+app.all('/*', adapterFastify(handler, { compression: true }));
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.once(signal, () => {
+    void app.close().catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+  });
+}
+
+const address = await app.listen({ port: Number(process.env.PORT ?? 3000), host: '0.0.0.0' });
+
+console.info(`Fastify listening at ${address}`);
 ```
+
+`loadHtmlShell` reads the built HTML once and returns a fresh shell per request.
+`createRouteAssetPreparer` reads `build/server/assets-manifest.json` when a request first matches
+routes, caches it for that preparer, and forwards Early Hints through the adapter. Paths resolved
+from `import.meta.url` let the launcher start from any working directory. See the
+[Node production API](/api/node-production) for options.
 
 Fastify request hooks and their response headers are preserved. The adapter uses `reply.hijack()`
 to stream through the raw transport, so Fastify serialization and `onSend` hooks are bypassed.
