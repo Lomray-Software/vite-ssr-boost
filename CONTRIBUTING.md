@@ -7,7 +7,8 @@
 
 > These requirements are only needed for developing the source code.
 
-- Node.js `^22.22.2 || >=24.15.0`; `.nvmrc` pins the version used by CI.
+- Node.js 22.23.2, pinned in `.nvmrc` and CI. Development tools require a newer Node
+  version than the published package, which supports Node 22.12+.
 - [npm](https://www.npmjs.com/).
 
 ## Basics

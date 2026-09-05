@@ -35,7 +35,8 @@ It is built for applications that want to keep Vite and React Router visible, bu
 npm i @lomray/vite-ssr-boost
 ```
 
-Use Node 22.22.2+ (22.x) or 24.15+. Start with the [React template](https://github.com/Lomray-Software/vite-template):
+Requires Node 22.12+. Your React Router and Babel versions may require a newer Node release.
+Start with the [React template](https://github.com/Lomray-Software/vite-template):
 
 ```bash
 git clone https://github.com/Lomray-Software/vite-template.git
