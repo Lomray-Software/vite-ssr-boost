@@ -25,6 +25,50 @@ export interface IEntryClientOptions<T> {
 }
 
 /**
+ * Wait for the shell and state when an async entry runs before HTML parsing finishes.
+ */
+const waitForDocument = (): Promise<void> | void => {
+  const hydrationKey = '__staticRouterHydrationData';
+
+  if (
+    document.readyState !== 'loading' ||
+    (IS_SSR_MODE && Reflect.get(window, hydrationKey) !== undefined)
+  ) {
+    return;
+  }
+
+  return new Promise<void>((resolve) => {
+    const onReady = () => {
+      if (IS_SSR_MODE) {
+        Reflect.deleteProperty(window, hydrationKey);
+      }
+
+      resolve();
+    };
+
+    document.addEventListener('DOMContentLoaded', onReady, { once: true });
+
+    if (IS_SSR_MODE) {
+      Object.defineProperty(window, hydrationKey, {
+        configurable: true,
+        enumerable: true,
+        get: () => undefined,
+        set: (value: unknown) => {
+          Object.defineProperty(window, hydrationKey, {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value,
+          });
+          document.removeEventListener('DOMContentLoaded', onReady);
+          resolve();
+        },
+      });
+    }
+  });
+};
+
+/**
  * Render client side application
  */
 async function entry<TAppProps>(
@@ -37,6 +81,7 @@ async function entry<TAppProps>(
     rootId = 'root',
   }: IEntryClientOptions<TAppProps> = {},
 ): Promise<ReactDOM.Root | void> {
+  const documentReady = waitForDocument();
   const lazyMatches = matchRoutes(
     routes as RouteObject[],
     window.location,
@@ -45,9 +90,10 @@ async function entry<TAppProps>(
 
   // Load the lazy matches and update the routes before creating router,
   // so we can hydrate the SSR-rendered content synchronously
-  if (lazyMatches && lazyMatches?.length > 0) {
-    await Promise.all(
-      lazyMatches.map(async (m) => {
+  if (documentReady || lazyMatches?.length) {
+    await Promise.all([
+      documentReady,
+      ...(lazyMatches ?? []).map(async (m) => {
         const { lazy } = m.route;
 
         if (typeof lazy === 'function') {
@@ -61,7 +107,7 @@ async function entry<TAppProps>(
           }
         }
       }),
-    );
+    ]);
   }
 
   const router = createRouter(routes as RouteObject[], routerOptions);

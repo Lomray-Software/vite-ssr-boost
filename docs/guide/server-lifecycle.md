@@ -77,7 +77,8 @@ This is the place to switch between streaming and full-document rendering based 
 ## `onShellReady`
 
 Replaces the template header or footer around the React stream. Generated hydration state is
-preserved when replacing the footer.
+preserved when replacing the footer. Custom state scripts from `getState` come first, followed by
+router state and then the footer, so custom state is available when router state unblocks hydration.
 
 Return:
 
