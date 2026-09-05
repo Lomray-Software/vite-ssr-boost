@@ -91,6 +91,7 @@ export interface ICoreRenderOptions<TAppProps = Record<string, any>> {
   onResponse?: (params: {
     context: ISsrRequestContext<TAppProps>;
     html: string;
+    isEnd: boolean;
   }) => string | undefined | void;
   onRouterReady?: (params: {
     context: ISsrRequestContext<TAppProps>;
@@ -354,7 +355,7 @@ const render = async <TAppProps,>(
     const body = composeHtml(header, output.stream, footer, abort, cleanup);
     const transformed = transformHtml(
       body,
-      onResponse ? (html) => onResponse({ context, html }) : undefined,
+      onResponse ? (html, isEnd) => onResponse({ context, html, isEnd }) : undefined,
     );
 
     output.start();
