@@ -15,17 +15,30 @@ interface IRequestInit<TAppProps> {
 }
 
 interface ICreateHandlerOptions<TAppProps> extends ICoreRenderOptions<TAppProps> {
+  /**
+   * Supply the document shell, including the application's browser entry script.
+   */
   getHtml: (request: Request) => IHtmlShell | Promise<IHtmlShell>;
+
+  /**
+   * Initialize request metadata or return a Response to bypass rendering.
+   */
   onRequest?: (params: {
     executionContext?: ISsrExecutionContext;
     request: Request;
   }) => IRequestInit<TAppProps> | Promise<IRequestInit<TAppProps> | Response> | Response;
 }
 
+/**
+ * Create isolated request state and allow request hooks to bypass rendering.
+ */
 const createHandler = <TAppProps = Record<string, any>>(
   params: ICoreRenderParams<TAppProps>,
   { getHtml, onRequest, ...options }: ICreateHandlerOptions<TAppProps>,
 ): TSsrHandler => {
+  /**
+   * Build fresh context for this request before invoking the renderer.
+   */
   return async (request, executionContext) => {
     const requestInit = await onRequest?.({ executionContext, request });
 

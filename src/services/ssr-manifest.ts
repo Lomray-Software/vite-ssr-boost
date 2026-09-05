@@ -370,7 +370,9 @@ class SsrManifest {
     return modules;
   }
 
-  /** Compile styles from the SSR graph before the browser has populated the client graph. */
+  /**
+   * Compile SSR graph styles before the browser has populated the client graph.
+   */
   public async prepareDevAssets(routes?: RouterState['matches']): Promise<void> {
     const vite = this.config.getVite();
 
@@ -379,6 +381,10 @@ class SsrManifest {
     }
 
     const visited = new Set<string>();
+
+    /**
+     * Transform each stylesheet once, including dependencies shared by several routes.
+     */
     const visit = async (module: ModuleNode): Promise<void> => {
       if (visited.has(module.url)) {
         return;
@@ -396,6 +402,9 @@ class SsrManifest {
     await Promise.all(this.getDevModules(routes).map(visit));
   }
 
+  /**
+   * Collect development assets from the current server and client module graphs.
+   */
   protected getAssetsDev(routes?: RouterState['matches']): IAsset[] {
     const assets = Object.assign(
       {},
@@ -508,6 +517,9 @@ class SsrManifest {
     }
   }
 
+  /**
+   * Build preload hints without depending on a particular HTTP transport.
+   */
   public getEarlyHints(assets: IAsset[]): Headers {
     const headers = new Headers();
 

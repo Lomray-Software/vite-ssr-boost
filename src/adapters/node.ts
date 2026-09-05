@@ -14,6 +14,9 @@ export interface INodeAdapterOptions {
   compression?: TCompression;
 }
 
+/**
+ * Render and write a Fetch response using the Node transport.
+ */
 const handleRequest = async (
   handler: TSsrHandler,
   request: Request,
@@ -31,7 +34,13 @@ const handleRequest = async (
   await writeFetchResponse(res, response);
 };
 
+/**
+ * Connect Node requests to the Fetch handler and dispose disconnect listeners.
+ */
 const adapterNode = (handler: TSsrHandler, options: INodeAdapterOptions = {}): TNodeHandler => {
+  /**
+   * Scope disconnect handling to the lifetime of this Node request.
+   */
   return async (req, res, next) => {
     const requestSignal = createRequestSignal(req, res);
 

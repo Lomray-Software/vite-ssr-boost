@@ -1,3 +1,6 @@
+/**
+ * Split Link entries while preserving commas inside URLs and quoted parameters.
+ */
 const splitLinkHeader = (header: string): string[] => {
   const links: string[] = [];
   let angleDepth = 0;

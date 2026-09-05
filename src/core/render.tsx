@@ -15,15 +15,20 @@ import buildRouterState from '@helpers/build-router-state';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import obtainStreamError from '@helpers/obtain-stream-error';
 
-const HTML_CONTENT_TYPE = 'text/html';
-const CONTENT_TYPE = 'Content-Type';
-
 export interface ISsrRequestContext<TAppProps = Record<string, any>> {
   appProps: NonNullable<TAppProps>;
+
+  /**
+   * First render failure, or the explicit timeout/cancellation classification.
+   */
   didError?: StreamError;
   html: { footer: string; header: string };
   isStream?: boolean;
   request: Request;
+
+  /**
+   * Mutable response metadata shared with request and render hooks.
+   */
   response: {
     headers: Headers;
     status?: number;
@@ -38,9 +43,24 @@ export interface IRenderStreamOptions {
 }
 
 export interface IRenderStream {
+  /**
+   * Settles after all suspended content completes or rendering is aborted.
+   */
   allReady: Promise<void>;
+
+  /**
+   * Stop rendering and settle pending readiness promises.
+   */
   abort: (reason?: unknown) => void;
+
+  /**
+   * Settles when the first shell is available or cannot be produced.
+   */
   shellReady: Promise<void>;
+
+  /**
+   * Begin piping after the core commits its response metadata.
+   */
   start: () => void;
   stream: ReadableStream<Uint8Array>;
 }
@@ -57,6 +77,9 @@ export interface ICoreRenderParams<TAppProps = Record<string, any>> {
 }
 
 export interface ICoreRenderOptions<TAppProps = Record<string, any>> {
+  /**
+   * React rendering deadline in milliseconds, starting after router preparation.
+   */
   abortDelay?: number;
   getState?: (params: {
     context: ISsrRequestContext<TAppProps>;
@@ -87,11 +110,74 @@ export interface ICoreRenderOptions<TAppProps = Record<string, any>> {
   routerRequestContext?: unknown;
 }
 
+interface IHtmlResponse {
+  header: string;
+  footer: string;
+  headers: Headers;
+  status: number;
+}
+
+const HTML_CONTENT_TYPE = 'text/html';
+const CONTENT_TYPE = 'Content-Type';
+
+/**
+ * Distinguish navigational redirects from bodyless statuses such as 304.
+ */
 const isRedirect = (response?: Response | null): boolean =>
   Boolean(
     response && response.status >= 300 && response.status < 400 && response.headers.has('Location'),
   );
 
+/**
+ * Build a bodyless HEAD or generic 500 response when React cannot produce a shell.
+ */
+const createShellErrorResponse = <TAppProps,>(
+  context: ISsrRequestContext<TAppProps>,
+  error: unknown,
+  onShellError: ICoreRenderOptions<TAppProps>['onShellError'],
+): Response => {
+  const shellError = error instanceof Error ? error : new Error(String(error));
+  const html =
+    onShellError?.({ context, error: shellError }) || '<!doctype html><p>Internal Server Error</p>';
+  const headers = new Headers(context.response.headers);
+
+  headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
+
+  return new Response(context.request.method === 'HEAD' ? null : html, {
+    headers,
+    status: 500,
+  });
+};
+
+/**
+ * Prepare the document shell and let hooks finalize response metadata synchronously.
+ */
+const prepareHtmlResponse = <TAppProps,>(
+  context: ISsrRequestContext<TAppProps>,
+  { getState, onShellReady }: ICoreRenderOptions<TAppProps>,
+): IHtmlResponse => {
+  const serverResponse = context.serverContext!.response;
+
+  context.response.status =
+    serverResponse?.status ?? context.response.status ?? context.routerContext!.statusCode ?? 200;
+
+  if (!context.response.headers.has(CONTENT_TYPE)) {
+    context.response.headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
+  }
+
+  const shell = onShellReady?.({ context }) ?? {};
+  const routerState = buildRouterState(context.routerContext!);
+  const customState = buildCustomState(getState?.({ context }));
+  const header = shell.header || context.html.header;
+  const footer = routerState + customState + (shell.footer || context.html.footer);
+  const headers = new Headers(context.response.headers);
+
+  return { header, footer, headers, status: context.response.status };
+};
+
+/**
+ * Coordinate router queries, React rendering and the final Fetch response.
+ */
 const render = async <TAppProps,>(
   { createApp, handler, renderToStream }: ICoreRenderParams<TAppProps>,
   context: ISsrRequestContext<TAppProps>,
@@ -140,14 +226,34 @@ const render = async <TAppProps,>(
   );
   const renderController = new AbortController();
   let abortReason: unknown;
-  // Assigned after abort is defined so an async renderer can be cancelled while it initializes.
+
+  /**
+   * Assigned after abort is defined so an async renderer can be cancelled while it initializes.
+   */
   let output: IRenderStream | undefined;
   let hasAborted = false;
+
+  /**
+   * Propagate the request cancellation reason into the renderer.
+   */
   const onRequestAbort = (): void => abort(context.request.signal.reason);
+
+  /**
+   * Clear the deadline when React finishes or the response is cancelled.
+   */
+  const clearAbortTimer = (): void => clearTimeout(abortTimer);
+
+  /**
+   * Release the render deadline and request disconnect listener.
+   */
   const cleanup = (): void => {
-    clearTimeout(abortTimer);
+    clearAbortTimer();
     context.request.signal.removeEventListener('abort', onRequestAbort);
   };
+
+  /**
+   * Cancel rendering once while preserving the reason reported by lifecycle hooks.
+   */
   const abort = (reason?: unknown): void => {
     if (hasAborted) {
       return;
@@ -161,6 +267,9 @@ const render = async <TAppProps,>(
     output?.abort(reason);
   };
 
+  /**
+   * Apply the render deadline after routing and preparation finish.
+   */
   const abortTimer = setTimeout(() => {
     context.didError = StreamError.RenderTimeout;
     abort();
@@ -174,6 +283,9 @@ const render = async <TAppProps,>(
 
   try {
     output = await renderToStream(node, {
+      /**
+       * Classify expected cancellation separately from unexpected React errors.
+       */
       onError: (error) => {
         const streamError = obtainStreamError(error);
 
@@ -200,28 +312,14 @@ const render = async <TAppProps,>(
       output.abort(abortReason);
     }
 
-    void output.allReady.then(
-      () => clearTimeout(abortTimer),
-      () => clearTimeout(abortTimer),
-    );
+    void output.allReady.then(clearAbortTimer, clearAbortTimer);
 
     await (isStream ? output.shellReady : output.allReady);
   } catch (error) {
     abort(error);
     await output?.stream.cancel(error).catch(() => undefined);
 
-    const shellError = error instanceof Error ? error : new Error(String(error));
-    const html =
-      onShellError?.({ context, error: shellError }) ||
-      '<!doctype html><p>Internal Server Error</p>';
-    const headers = new Headers(context.response.headers);
-
-    headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
-
-    return new Response(context.request.method === 'HEAD' ? null : html, {
-      headers,
-      status: 500,
-    });
+    return createShellErrorResponse(context, error, onShellError);
   }
 
   try {
@@ -237,27 +335,18 @@ const render = async <TAppProps,>(
       );
     }
 
-    context.response.status =
-      serverResponse?.status ?? context.response.status ?? context.routerContext.statusCode ?? 200;
+    const { header, footer, headers, status } = prepareHtmlResponse(context, {
+      getState,
+      onShellReady,
+    });
 
-    if (!context.response.headers.has(CONTENT_TYPE)) {
-      context.response.headers.set(CONTENT_TYPE, HTML_CONTENT_TYPE);
-    }
-
-    const shell = onShellReady?.({ context }) ?? {};
-    const routerState = buildRouterState(context.routerContext);
-    const customState = buildCustomState(getState?.({ context }));
-    const header = shell.header || context.html.header;
-    const footer = routerState + customState + (shell.footer || context.html.footer);
-    const headers = new Headers(context.response.headers);
-
-    if (context.request.method === 'HEAD' || [204, 205, 304].includes(context.response.status)) {
+    if (context.request.method === 'HEAD' || [204, 205, 304].includes(status)) {
       abort();
       await output.stream.cancel().catch(() => undefined);
 
       return new Response(null, {
         headers,
-        status: context.response.status,
+        status,
       });
     }
 
@@ -271,7 +360,7 @@ const render = async <TAppProps,>(
 
     return new Response(transformed, {
       headers,
-      status: context.response.status,
+      status,
     });
   } catch (error) {
     abort(error);

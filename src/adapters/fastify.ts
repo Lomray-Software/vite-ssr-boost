@@ -26,10 +26,16 @@ export interface IFastifyAdapterOptions {
   getBody?: (request: IFastifyRequest) => BodyInit | null | undefined;
 }
 
+/**
+ * Bridge Fastify requests and hook metadata to the raw streaming transport.
+ */
 const adapterFastify = (
   handler: TSsrHandler,
   options: IFastifyAdapterOptions = {},
 ): TFastifyHandler => {
+  /**
+   * Render one request before handing response ownership to the raw transport.
+   */
   return async (request, reply) => {
     const { body, raw: req } = request;
     const requestSignal = createRequestSignal(req, reply.raw);
@@ -54,7 +60,9 @@ const adapterFastify = (
         options.compression,
       );
 
-      // Fastify keeps reply.header() values separately from the raw Node response.
+      /**
+       * Fastify keeps reply.header() values separately from the raw Node response.
+       */
       Object.entries(reply.getHeaders?.() ?? {}).forEach(([name, value]) => {
         if (value !== undefined) {
           reply.raw.setHeader(name, value);
@@ -67,7 +75,9 @@ const adapterFastify = (
         throw error;
       }
 
-      // The socket is gone; prevent Fastify from attempting an automatic response.
+      /**
+       * The socket is gone; prevent Fastify from attempting an automatic response.
+       */
       reply.hijack();
     } finally {
       requestSignal.dispose();

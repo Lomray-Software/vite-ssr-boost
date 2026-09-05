@@ -13,7 +13,9 @@ const handleResponse = (
     return defaultStatus;
   }
 
-  // redirect
+  /**
+   * redirect
+   */
   if (response.status >= 300 && response.status < 400) {
     res.redirect(response.status, response.headers.get('Location')!);
 

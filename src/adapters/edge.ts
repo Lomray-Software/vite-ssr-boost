@@ -12,10 +12,16 @@ export type TEdgeHandler<TPlatformArgs extends unknown[] = unknown[]> = (
   ...platformArgs: TPlatformArgs
 ) => Promise<Response>;
 
+/**
+ * Adapt the Fetch handler to runtime fetch entrypoints and optional compression.
+ */
 const adapterEdge = <TPlatformArgs extends unknown[] = unknown[]>(
   handler: TSsrHandler,
   { compression = false }: IEdgeAdapterOptions = {},
 ): TEdgeHandler<TPlatformArgs> => {
+  /**
+   * Apply compression and HEAD handling to the completed Fetch response.
+   */
   return async (...[request]: Parameters<TEdgeHandler<TPlatformArgs>>) => {
     return headResponse(request, compressResponse(request, await handler(request), compression));
   };

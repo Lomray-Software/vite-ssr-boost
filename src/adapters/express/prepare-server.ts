@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
@@ -10,18 +10,13 @@ import type { TRender } from '@node/render';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 
-interface IPrepareServerEntrypointLoadOut<TAppProps = Record<string, any>> {
+interface IPrepareServerEntrypointLoadOut<TAppProps = Record<string, any>> extends Omit<
+  IEntrypointOptions<TAppProps>,
+  'onServerCreated' | 'onServerStarted'
+> {
   render: TRender;
   routes: TRouteObject[];
   abortDelay?: number;
-  onRequest?: IEntrypointOptions<TAppProps>['onRequest'];
-  onRouterReady?: IEntrypointOptions<TAppProps>['onRouterReady'];
-  onShellReady?: IEntrypointOptions<TAppProps>['onShellReady'];
-  onShellError?: IEntrypointOptions<TAppProps>['onShellError'];
-  onResponse?: IEntrypointOptions<TAppProps>['onResponse'];
-  onError?: IEntrypointOptions<TAppProps>['onError'];
-  getState?: IEntrypointOptions<TAppProps>['getState'];
-  getBody?: IEntrypointOptions<TAppProps>['getBody'];
 }
 
 /**
@@ -29,6 +24,11 @@ interface IPrepareServerEntrypointLoadOut<TAppProps = Record<string, any>> {
  *  DEV MODE: refresh entrypoint and template
  */
 class PrepareServer {
+  /**
+   * Hook which calls after express server started
+   */
+  public onServerStarted?: NonNullable<IEntrypointOptions['onServerStarted']>;
+
   /**
    * Server configuration
    */
@@ -47,12 +47,7 @@ class PrepareServer {
   /**
    * Hook which calls after express server created
    */
-  protected onServerCreated?: IEntrypointOptions['onServerCreated'];
-
-  /**
-   * Hook which calls after express server started
-   */
-  public onServerStarted?: IEntrypointOptions['onServerStarted'];
+  protected onServerCreated?: NonNullable<IEntrypointOptions['onServerCreated']>;
 
   /**
    * Html shell
@@ -62,10 +57,10 @@ class PrepareServer {
   /**
    * Middlewares configs
    */
-  protected middlewaresConfigs?: IPrepareRenderOut['middlewares'];
+  protected middlewaresConfigs?: NonNullable<IPrepareRenderOut['middlewares']>;
 
   /**
-   * @constructor
+   * Retain runtime configuration and reuse the existing server API.
    */
   protected constructor(config: ServerConfig, serverApi?: ServerApi) {
     this.config = config;
@@ -83,7 +78,9 @@ class PrepareServer {
    * Resolve and return entrypoint params
    */
   public async loadEntrypoint(shouldInit = true): Promise<IPrepareServerEntrypointLoadOut> {
-    // load server entrypoint each time only in development mode (for fast refresh)
+    /**
+     * load server entrypoint each time only in development mode (for fast refresh)
+     */
     if (this.entrypoint && this.config.isProd) {
       return this.entrypoint;
     }
@@ -178,21 +175,18 @@ class PrepareServer {
         `${this.config.getVite()?.config.base}/${clientFile}`,
       );
 
-      // Apply Vite HTML transforms. This injects the Vite HMR client,
-      // and also applies HTML transforms from Vite plugins, e.g. global
-      // preambles from @vitejs/plugin-react
+      /**
+       * Apply Vite transforms and remove async from the entry to preserve plugin preambles.
+       */
       modifiedHtml = (
         await this.config.getVite()!.transformIndexHtml(req.originalUrl, this.html, indexFile)
-      )
-        // remove 'async' attribute from app entrypoint for development
-        // it might cause problems with preambles from @vitejs/plugin-react
-        .replace(
-          new RegExp(
-            `<script[^>]*?\\bsrc=["']/?${clientFileEntry}([^"']*)["'][^>]*?\\sasync\\b`,
-            'g',
-          ),
-          (match) => match.replace(/\sasync\b/, ''),
-        );
+      ).replace(
+        new RegExp(
+          String.raw`<script[^>]*?\bsrc=["']/?${clientFileEntry}([^"']*)["'][^>]*?\sasync\b`,
+          'g',
+        ),
+        (match) => match.replace(/\sasync\b/, ''),
+      );
     }
 
     return modifiedHtml.split('<!--ssr-outlet-->') as [string, string];
@@ -218,13 +212,13 @@ class PrepareServer {
       compression:
         compression !== false
           ? {
-              ...(compression ?? {}),
+              ...compression,
             }
           : false,
       expressStatic:
         expressStatic !== false
           ? {
-              ...(expressStatic ?? {}),
+              ...expressStatic,
               basename: expressStatic?.basename ?? '/',
             }
           : false,

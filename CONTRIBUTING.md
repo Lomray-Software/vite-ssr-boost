@@ -12,6 +12,9 @@
 
 ## Basics
 
+Follow the [Xorial coding standards](https://github.com/Lomray-Software/Xorial/tree/main/core/coding-standards),
+adapting them to this library's existing naming, module boundaries and short block comments.
+
 #### Install
 
 Download repo and install dependencies:

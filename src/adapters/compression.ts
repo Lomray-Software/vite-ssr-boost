@@ -10,6 +10,9 @@ type TCreateCompressionStream = (
   format: TCompressionFormat,
 ) => ReadableWritablePair<Uint8Array, Uint8Array>;
 
+/**
+ * Read the negotiated encoding quality, including wildcard fallbacks.
+ */
 const getQuality = (header: string, format: TCompressionFormat): number => {
   const values = new Map<string, number>();
 
@@ -24,6 +27,9 @@ const getQuality = (header: string, format: TCompressionFormat): number => {
   return values.get(format) ?? values.get('*') ?? 0;
 };
 
+/**
+ * Include the negotiation header without duplicating existing Vary values.
+ */
 const appendVary = (headers: Headers, value: string): void => {
   const vary =
     headers
@@ -36,6 +42,9 @@ const appendVary = (headers: Headers, value: string): void => {
   }
 };
 
+/**
+ * Compress eligible responses using the transport-provided stream implementation.
+ */
 const compressResponse = (
   request: Request,
   response: Response,

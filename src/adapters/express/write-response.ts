@@ -9,7 +9,11 @@ interface IWriteResponseParams {
   pipe: PipeableStream['pipe'];
   onShellReady: IRenderOptions['onShellReady'];
   getState: IRenderOptions['getState'];
-  statusCode?: number; // default status
+
+  /**
+   * Default status before server components override it.
+   */
+  statusCode?: number;
 }
 
 /**
@@ -20,19 +24,25 @@ const writeResponse = (context: IRequestContext, params: IWriteResponseParams): 
   const { pipe, onShellReady, getState } = params;
   let { statusCode } = params;
 
-  // handle response from server components (navigate, status)
+  /**
+   * handle response from server components (navigate, status)
+   */
   statusCode = handleResponse(res, serverContext!.response, statusCode);
 
   if (!statusCode) {
     return;
   }
 
-  // catch close connection from React and write footer
+  /**
+   * catch close connection from React and write footer
+   */
   if (didError) {
     const end = res.end.bind(res) as ExpressResponse['end'];
 
     res.end = (...args: unknown[]): ExpressResponse => {
-      // send second part of app shell
+      /**
+       * send second part of app shell
+       */
       res.write(modifiedFooter || html.footer);
 
       // @ts-ignore
@@ -49,13 +59,20 @@ const writeResponse = (context: IRequestContext, params: IWriteResponseParams): 
 
   html.footer = routerState + customState + html.footer;
 
-  // send first part of app shell
+  /**
+   * send first part of app shell
+   */
   res.write(modifiedHeader || html.header);
-  // start streaming app
+
+  /**
+   * start streaming app
+   */
   pipe(res);
 
   if (!didError) {
-    // send second part of app shell
+    /**
+     * send second part of app shell
+     */
     res.write(modifiedFooter || html.footer);
   }
 };

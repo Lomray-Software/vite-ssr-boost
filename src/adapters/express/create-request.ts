@@ -8,7 +8,9 @@ interface ICreateFetchRequestOptions {
   signal?: AbortSignal;
 }
 
-/** Preserve Express's trusted protocol and original URL when creating the router request. */
+/**
+ * Preserve Express's trusted protocol and original URL when creating the router request.
+ */
 function createFetchRequest(
   req: ExpressRequest,
   options: ICreateFetchRequestOptions = {},

@@ -19,20 +19,22 @@ export interface IInitServerRequestOut<T = Record<string, any>> {
   shouldCancel?: boolean;
 }
 
-export interface IEntrypointOptions<TAppProps = Record<string, any>> {
+export interface IEntrypointOptions<TAppProps = Record<string, any>> extends Pick<
+  IRenderOptions<TAppProps>,
+  | 'onRouterReady'
+  | 'onShellReady'
+  | 'onShellError'
+  | 'onResponse'
+  | 'onError'
+  | 'getState'
+  | 'getBody'
+> {
   onServerCreated?: (app: Express, serverApi: ServerApi) => Promise<void> | void;
   onServerStarted?: (app: Express, serverApi: ServerApi, server: Server) => Promise<void> | void;
   onRequest?: (
     req: Request,
     res: ExpressResponse,
   ) => Promise<IInitServerRequestOut<TAppProps>> | IInitServerRequestOut<TAppProps>;
-  onRouterReady?: IRenderOptions<TAppProps>['onRouterReady'];
-  onShellReady?: IRenderOptions<TAppProps>['onShellReady'];
-  onShellError?: IRenderOptions<TAppProps>['onShellError'];
-  onResponse?: IRenderOptions<TAppProps>['onResponse'];
-  onError?: IRenderOptions<TAppProps>['onError'];
-  getState?: IRenderOptions<TAppProps>['getState'];
-  getBody?: IRenderOptions<TAppProps>['getBody'];
 }
 
 export interface IPrepareRenderOut<TAppProps = Record<string, any>> {
@@ -44,7 +46,10 @@ export interface IPrepareRenderOut<TAppProps = Record<string, any>> {
   loggerDev?: Logger;
   middlewares?: {
     compression?: CompressionOptions | false;
-    // basename should be same as vite 'base' config
+
+    /**
+     * basename should be same as vite 'base' config
+     */
     expressStatic?: (ServeStaticOptions & { basename?: string }) | false;
   };
 }
@@ -55,14 +60,14 @@ export interface IAppServerProps<T = Record<string, any>> {
 
 export type TApp<T> = FC<PropsWithChildren<Record<string, any> & IAppServerProps<T>>>;
 
-export interface IEntryServerOptions<TAppProps = Record<string, any>> {
+export interface IEntryServerOptions<TAppProps = Record<string, any>> extends Pick<
+  IPrepareRenderOut,
+  'loggerProd' | 'loggerDev' | 'middlewares'
+> {
   abortDelay?: number;
   init?: (params: {
     config: ServerConfig;
   }) => IEntrypointOptions<TAppProps> | Promise<IEntrypointOptions<TAppProps>>;
-  loggerProd?: IPrepareRenderOut['loggerProd'];
-  loggerDev?: IPrepareRenderOut['loggerDev'];
-  middlewares?: IPrepareRenderOut['middlewares'];
   routerOptions?: Parameters<typeof createStaticHandler>[1];
 }
 

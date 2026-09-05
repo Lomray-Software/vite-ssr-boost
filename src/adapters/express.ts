@@ -10,12 +10,22 @@ export interface IExpressAdapterOptions extends INodeAdapterOptions {
   getBody?: (request: Request) => BodyInit | null | undefined;
 }
 
+/**
+ * Bridge Express middleware to Fetch while retaining parsed body support.
+ */
 const adapterExpress = (
   handler: TSsrHandler,
   options: IExpressAdapterOptions = {},
 ): RequestHandler => {
+  /**
+   * Preserve Express routing semantics and dispose request listeners on completion.
+   */
   return (req: Request, res: ExpressResponse, next: NextFunction): void => {
     const requestSignal = createRequestSignal(req, res);
+
+    /**
+     * Forward failures only while the client connection is still active.
+     */
     const onError = (error: unknown): void => {
       if (!requestSignal.signal.aborted) {
         next(error);

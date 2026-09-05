@@ -5,14 +5,29 @@ interface IRequestSignal {
   signal: AbortSignal;
 }
 
+/**
+ * Expose incomplete Node requests and disconnected responses as an AbortSignal.
+ */
 const createRequestSignal = (req: TIncomingMessage, res: TServerResponse): IRequestSignal => {
   const controller = new AbortController();
+
+  /**
+   * Cancel downstream work when the incoming request is aborted.
+   */
   const abort = (): void => controller.abort();
+
+  /**
+   * Distinguish an interrupted response from normal completion.
+   */
   const onClose = (): void => {
     if (!res.writableEnded) {
       abort();
     }
   };
+
+  /**
+   * Remove transport listeners after the handler finishes.
+   */
   const dispose = (): void => {
     req.off('aborted', abort);
     res.off('close', onClose);

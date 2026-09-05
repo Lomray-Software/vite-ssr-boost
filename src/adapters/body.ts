@@ -1,3 +1,6 @@
+/**
+ * Serialize flat form fields without silently flattening nested parser output.
+ */
 const serializeForm = (body: Record<string, unknown>): URLSearchParams => {
   const form = new URLSearchParams();
 
@@ -18,6 +21,9 @@ const serializeForm = (body: Record<string, unknown>): URLSearchParams => {
   return form;
 };
 
+/**
+ * Reconstruct supported parsed bodies while preserving native Fetch body values.
+ */
 const serializeBody = (body: unknown, contentType = ''): BodyInit | null => {
   if (body == null) {
     return null;

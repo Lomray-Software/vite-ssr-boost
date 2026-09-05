@@ -1,3 +1,6 @@
+/**
+ * Stream the shell, React body and hydration footer under downstream backpressure.
+ */
 const composeHtml = (
   header: string,
   body: ReadableStream<Uint8Array>,
@@ -10,6 +13,9 @@ const composeHtml = (
   let phase: 'body' | 'footer' | 'header' = 'header';
 
   return new ReadableStream<Uint8Array>({
+    /**
+     * Release the React reader when the response consumer cancels.
+     */
     cancel: async (reason) => {
       abort?.(reason);
 
@@ -24,6 +30,10 @@ const composeHtml = (
         onComplete?.();
       }
     },
+
+    /**
+     * Emit one available shell or React chunk per downstream pull.
+     */
     async pull(controller) {
       if (phase === 'header') {
         phase = 'body';

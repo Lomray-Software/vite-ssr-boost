@@ -2,6 +2,9 @@ import { getHeaderEntries } from '@core/headers';
 import type { TServerResponse } from '@node/http';
 import splitLinkHeader from '@node/split-link-header';
 
+/**
+ * Send Node early hints with distinct Link entries when the transport supports them.
+ */
 const writeEarlyHints = (res: TServerResponse, headers: Headers): void => {
   if (res.headersSent || typeof res.writeEarlyHints !== 'function') {
     return;

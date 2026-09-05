@@ -3,7 +3,9 @@ import { constants, createDeflate, createGzip } from 'node:zlib';
 import compressResponse from '@adapters/compression';
 import type { TCompression } from '@adapters/compression';
 
-/** Flush each compressed chunk so browsers can render the shell while React is suspended. */
+/**
+ * Flush each compressed chunk so browsers can render the shell while React is suspended.
+ */
 const compressNodeResponse = (
   request: Request,
   response: Response,
