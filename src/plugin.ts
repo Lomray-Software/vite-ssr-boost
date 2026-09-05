@@ -13,6 +13,7 @@ import {
 import type { IPluginOptions as IMakeAliasesPluginOptions } from '@plugins/make-aliases';
 import ViteMakeAliasesPlugin from '@plugins/make-aliases';
 import ViteNormalizeRouterPlugin from '@plugins/normalize-route';
+import optimizeBrowserDependencies from '@plugins/optimize-browser-dependencies';
 import type { IBuildEntrypoint } from '@services/build';
 
 export interface IPluginOptions {
@@ -71,7 +72,7 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
         isDev: action === CliActions.dev,
       },
 
-      config(config, { isSsrBuild }) {
+      config(config, { command, isSsrBuild }) {
         config.define = {
           ...(config.define ?? {}),
           __IS_SSR__: entrypointConfig ? entrypointConfig.type === 'ssr' : isSSR,
@@ -82,6 +83,10 @@ function ViteSsrBoostPlugin(options: IPluginOptions = {}): Plugin[] {
         };
 
         if (!isSsrBuild) {
+          if (command === 'serve') {
+            config.optimizeDeps = optimizeBrowserDependencies(config.optimizeDeps);
+          }
+
           if (isSSR && isBuild) {
             config.build.manifest = true;
           }
