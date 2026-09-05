@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import type { ICreateHandlerOptions, IHtmlShell } from '@core/handler';
+import { splitHtmlShell } from '@services/diagnostics';
 import RouteAssets from '@services/route-assets';
 
 interface ILoadHtmlShellOptions {
@@ -20,15 +21,7 @@ const loadHtmlShell = async ({
   outlet = '<!--ssr-outlet-->',
 }: ILoadHtmlShellOptions): Promise<() => IHtmlShell> => {
   const html = await readFile(indexFile, 'utf8');
-  const parts = html.split(outlet);
-
-  if (!outlet || parts.length !== 2) {
-    throw new Error(
-      `Invalid HTML shell in "${indexFile}": expected exactly one non-empty outlet ${JSON.stringify(outlet)}.`,
-    );
-  }
-
-  const [header, footer] = parts;
+  const [header, footer] = splitHtmlShell(html, indexFile, outlet);
 
   return () => ({ header, footer });
 };

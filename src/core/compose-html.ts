@@ -12,71 +12,75 @@ const composeHtml = (
   const reader = body.getReader();
   let phase: 'body' | 'footer' | 'header' = 'header';
 
-  return new ReadableStream<Uint8Array>({
-    /**
-     * Release the React reader when the response consumer cancels.
-     */
-    cancel: async (reason) => {
-      abort?.(reason);
+  return new ReadableStream<Uint8Array>(
+    {
+      /**
+       * Release the React reader when the response consumer cancels.
+       */
+      cancel: async (reason) => {
+        abort?.(reason);
 
-      if (phase === 'footer') {
-        return;
-      }
-
-      try {
-        await reader.cancel(reason);
-      } finally {
-        reader.releaseLock();
-        onComplete?.();
-      }
-    },
-
-    /**
-     * Emit one available shell or React chunk per downstream pull.
-     */
-    async pull(controller) {
-      if (phase === 'header') {
-        phase = 'body';
-
-        if (header) {
-          controller.enqueue(encoder.encode(header));
-
+        if (phase === 'footer') {
           return;
         }
-      }
-
-      if (phase === 'body') {
-        let chunk: ReadableStreamReadResult<Uint8Array>;
 
         try {
-          chunk = await reader.read();
-        } catch (error) {
-          abort?.(error);
+          await reader.cancel(reason);
+        } finally {
           reader.releaseLock();
           onComplete?.();
-          controller.error(error);
+        }
+      },
 
-          return;
+      /**
+       * Emit one available shell or React chunk per downstream pull.
+       */
+      async pull(controller) {
+        if (phase === 'header') {
+          phase = 'body';
+
+          if (header) {
+            controller.enqueue(encoder.encode(header));
+
+            return;
+          }
         }
 
-        if (!chunk.done) {
-          controller.enqueue(chunk.value);
+        if (phase === 'body') {
+          let chunk: ReadableStreamReadResult<Uint8Array>;
 
-          return;
+          try {
+            chunk = await reader.read();
+          } catch (error) {
+            abort?.(error);
+            reader.releaseLock();
+            onComplete?.();
+            controller.error(error);
+
+            return;
+          }
+
+          if (!chunk.done) {
+            controller.enqueue(chunk.value);
+
+            return;
+          }
+
+          phase = 'footer';
+          reader.releaseLock();
+          onComplete?.();
         }
 
-        phase = 'footer';
-        reader.releaseLock();
-        onComplete?.();
-      }
+        if (footer) {
+          controller.enqueue(encoder.encode(footer));
+        }
 
-      if (footer) {
-        controller.enqueue(encoder.encode(footer));
-      }
-
-      controller.close();
+        controller.close();
+      },
     },
-  });
+    // Do not start reading React while a downstream wrapper is still delivering the header.
+    { highWaterMark: 0 },
+  );
 };
 
 export default composeHtml;

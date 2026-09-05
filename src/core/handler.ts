@@ -2,6 +2,7 @@ import headResponse from '@core/head-response';
 import render from '@core/render';
 import type { ICoreRenderOptions, ICoreRenderParams, ISsrRequestContext } from '@core/render';
 import type { ISsrExecutionContext, TSsrHandler } from '@core/types';
+import Diagnostics, { isDiagnosticsEnabled } from '@services/diagnostics';
 
 interface IHtmlShell {
   footer: string;
@@ -15,6 +16,11 @@ interface IRequestInit<TAppProps> {
 }
 
 interface ICreateHandlerOptions<TAppProps> extends ICoreRenderOptions<TAppProps> {
+  /**
+   * Development checks; defaults to NODE_ENV !== 'production', overridden by SSR_BOOST_DIAGNOSTICS.
+   */
+  diagnostics?: boolean;
+
   /**
    * Supply the document shell, including the application's browser entry script.
    */
@@ -34,7 +40,7 @@ interface ICreateHandlerOptions<TAppProps> extends ICoreRenderOptions<TAppProps>
  */
 const createHandler = <TAppProps = Record<string, any>>(
   params: ICoreRenderParams<TAppProps>,
-  { getHtml, onRequest, ...options }: ICreateHandlerOptions<TAppProps>,
+  { diagnostics, getHtml, onRequest, ...options }: ICreateHandlerOptions<TAppProps>,
 ): TSsrHandler => {
   /**
    * Build fresh context for this request before invoking the renderer.
@@ -48,6 +54,9 @@ const createHandler = <TAppProps = Record<string, any>>(
 
     const context: ISsrRequestContext<TAppProps> = {
       appProps: (requestInit?.appProps ?? {}) as NonNullable<TAppProps>,
+      diagnostics: isDiagnosticsEnabled(diagnostics)
+        ? new Diagnostics(new URL(request.url).pathname)
+        : undefined,
       html: await getHtml(request),
       request,
       response: {
