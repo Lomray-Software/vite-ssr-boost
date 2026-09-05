@@ -1,0 +1,28 @@
+name: React compatibility
+
+on:
+  workflow_call:
+
+jobs:
+  react:
+    name: React ${{ matrix.react }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        react: ['18.2.0', '19.2.8']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.21.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install matching React and React DOM
+        run: npm install --no-save --ignore-scripts react@${{ matrix.react }} react-dom@${{ matrix.react }}
+      - name: Run the full suite with real React
+        run: npm test
+      - name: Verify the built Worker with this React version
+        run: |
+          npm run build
+          npm run test:edge:packed

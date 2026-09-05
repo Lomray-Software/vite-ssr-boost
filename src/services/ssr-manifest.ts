@@ -1,11 +1,9 @@
 import fs from 'node:fs';
-import type { Socket } from 'node:net';
 import path from 'node:path';
 import chalk from 'chalk';
-import type { RouterState } from 'react-router';
+import type { RouterState, StaticHandlerContext } from 'react-router';
 import type { Alias, ModuleNode, RenderBuiltAssetUrl } from 'vite';
 import type { IAsyncRoute } from '@helpers/import-route';
-import type { IRequestContext } from '@node/render';
 import type { TRoutesTree } from '@services/parse-routes';
 import ParseRoutes from '@services/parse-routes';
 import PathNormalize from '@services/path-normalize';
@@ -46,7 +44,12 @@ interface IAsset {
 
 type TAssets = { [id: string]: IAsset };
 
-const CRLF = '\r\n';
+interface IInjectAssetsContext {
+  html: {
+    header: string;
+  };
+  routerContext?: StaticHandlerContext;
+}
 
 /**
  * Working with SSR Manifest file
@@ -339,33 +342,74 @@ class SsrManifest {
   /**
    * Get development route assets
    */
-  protected getAssetsDev(routes?: RouterState['matches']): IAsset[] {
+  protected getDevModules(routes?: RouterState['matches']): ModuleNode[] {
     const routeIds =
       (routes
         ?.map(({ route }) => this.pathNormalize.getAppPath((route as IAsyncRoute)?.pathId, true))
         .filter(Boolean) as string[]) ?? [];
 
-    if (!routeIds.length) {
-      return [];
-    }
-
-    let assets: TAssets = {};
     const postfixes = this.pathNormalize.getImportPostfix();
-    const rootId = path.resolve(
-      this.root,
-      this.config.getPluginConfig()?.clientFile ?? 'client.ts',
-    );
+    const pluginConfig = this.config.getPluginConfig();
+    const rootIds = [
+      pluginConfig?.clientFile ?? 'client.ts',
+      pluginConfig?.serverFile ?? 'server.ts',
+    ].map((file) => path.resolve(this.root, file));
+    const modules: ModuleNode[] = [];
 
-    [rootId, ...routeIds].forEach((moduleId) => {
+    [...rootIds, ...routeIds].forEach((moduleId) => {
       for (const ext of postfixes) {
         const module = this.config.getVite()?.moduleGraph.getModuleById(`${moduleId}${ext}`);
 
         if (module) {
-          assets = { ...assets, ...this.getModuleAssets(module) };
+          modules.push(module);
           break;
         }
       }
     });
+
+    return modules;
+  }
+
+  /**
+   * Compile SSR graph styles before the browser has populated the client graph.
+   */
+  public async prepareDevAssets(routes?: RouterState['matches']): Promise<void> {
+    const vite = this.config.getVite();
+
+    if (!vite) {
+      return;
+    }
+
+    const visited = new Set<string>();
+
+    /**
+     * Transform each stylesheet once, including dependencies shared by several routes.
+     */
+    const visit = async (module: ModuleNode): Promise<void> => {
+      if (visited.has(module.url)) {
+        return;
+      }
+
+      visited.add(module.url);
+
+      if (module.file && /\.(?:css|less|s[ac]ss|styl(?:us)?|pcss|postcss)$/.test(module.file)) {
+        await vite.transformRequest(module.url);
+      }
+
+      await Promise.all([...module.importedModules].map(visit));
+    };
+
+    await Promise.all(this.getDevModules(routes).map(visit));
+  }
+
+  /**
+   * Collect development assets from the current server and client module graphs.
+   */
+  protected getAssetsDev(routes?: RouterState['matches']): IAsset[] {
+    const assets = Object.assign(
+      {},
+      ...this.getDevModules(routes).map((module) => this.getModuleAssets(module)),
+    ) as TAssets;
 
     return Object.values(assets);
   }
@@ -374,19 +418,25 @@ class SsrManifest {
    * Get module assets
    */
   protected getModuleAssets(module?: ModuleNode, skipModules: Set<string> = new Set()): TAssets {
-    if (!module?.clientImportedModules.size || skipModules.has(module.file!)) {
+    const imports = module?.importedModules ?? module?.clientImportedModules;
+
+    if (!imports?.size || skipModules.has(module!.file!)) {
       return {};
     }
 
     let assets: TAssets = {};
 
-    skipModules.add(module.file!);
+    skipModules.add(module!.file!);
 
-    module.clientImportedModules.forEach((subModule) => {
-      const { file, clientImportedModules, transformResult } = subModule;
+    imports.forEach((subModule) => {
+      const { file, transformResult } = subModule;
       const ext = file?.split('.').at(-1);
 
-      if (file && ext && ['css', 'scss'].includes(ext)) {
+      if (
+        file &&
+        ext &&
+        ['css', 'scss', 'sass', 'less', 'styl', 'stylus', 'pcss', 'postcss'].includes(ext)
+      ) {
         // @TODO investigate better method?
         const code = transformResult?.code.match(/__vite__css\s+=\s+"(?<css>.+)"/)?.groups?.css;
 
@@ -404,7 +454,7 @@ class SsrManifest {
             console.warn(chalk.yellowBright('Failed to parse style: ', file));
           }
         }
-      } else if (clientImportedModules.size) {
+      } else {
         assets = {
           ...assets,
           ...this.getModuleAssets(subModule, skipModules),
@@ -468,24 +518,26 @@ class SsrManifest {
   }
 
   /**
-   * Write 103 Early Hits header
+   * Build preload hints without depending on a particular HTTP transport.
    */
-  public writeEarlyHits(assets: IAsset[], socket: Socket): void {
-    socket.write(`HTTP/1.1 103 Early Hints${CRLF}`);
+  public getEarlyHints(assets: IAsset[]): Headers {
+    const headers = new Headers();
+
     assets.forEach(({ type, url }) => {
       if (!type || !['style', 'script'].includes(type)) {
         return;
       }
 
-      socket.write(`Link: <${url}>; rel=preload; as=${type}${CRLF}`);
+      headers.append('Link', `<${url}>; rel=preload; as=${type}`);
     });
-    socket.write(CRLF);
+
+    return headers;
   }
 
   /**
    * Inject route assets to head html
    */
-  public injectAssets({ routerContext, html, res, hasEarlyHints = false }: IRequestContext): void {
+  public injectAssets({ routerContext, html }: IInjectAssetsContext): Headers {
     const assets = this.getAssets(routerContext?.matches);
     const htmlAssets = assets
       .map(({ type, url, isPreload, content = '' }) => {
@@ -510,9 +562,7 @@ class SsrManifest {
 
     html.header = html.header.replace('</head>', `${htmlAssets.join('\n')}</head>`);
 
-    if (hasEarlyHints && htmlAssets.length && res.socket) {
-      this.writeEarlyHits(assets, res.socket);
-    }
+    return this.getEarlyHints(assets);
   }
 }
 

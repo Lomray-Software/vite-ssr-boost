@@ -14,7 +14,7 @@ It is built for applications that want to keep Vite and React Router visible, bu
 - React Router on both client and server
 - stream rendering with request lifecycle hooks
 - a Vite-native plugin and CLI flow
-- Switch between SPA and SSR in 1 second.
+- a Fetch-based SSR core with Node, Express, Fastify, Hono and edge adapters
 - response-aware helpers such as redirects and status codes
 - custom entrypoints for mobile, embedded and service-worker-friendly shells
 
@@ -35,9 +35,25 @@ It is built for applications that want to keep Vite and React Router visible, bu
 npm i @lomray/vite-ssr-boost
 ```
 
+Use Node 22 or newer. Start with the [React template](https://github.com/Lomray-Software/vite-template):
+
+```bash
+git clone https://github.com/Lomray-Software/vite-template.git
+cd vite-template
+npm ci
+npm run develop
+```
+
+For production, run `npm run build` and `npm run start:ssr`. For a static SPA, run
+`npm run build:spa` and `npm run start:spa`.
+
 ## Documentation
 
 Full documentation lives here: [lomray-software.github.io/vite-ssr-boost](https://lomray-software.github.io/vite-ssr-boost/)
+
+Existing Express applications move one import to `adapters/express/entry`; hooks are unchanged. See
+[runtime adapters](https://lomray-software.github.io/vite-ssr-boost/guide/runtime-adapters)
+for the Fetch API and the differences between the managed CLI server and a custom runtime.
 
 ## License
 

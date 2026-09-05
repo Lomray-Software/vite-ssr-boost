@@ -6,7 +6,10 @@
 npm i @lomray/vite-ssr-boost
 ```
 
-Peer dependencies matter here. The package expects modern `vite`, `react-dom`, `react-router`, Babel parser packages and Node `>=22`.
+Requires Node `>=22`, React/React DOM `>=18.2`, React Router `>=7` and Vite `>=5`.
+Your Vite version may require a newer Node 22 minor. Use matching React and React DOM versions.
+The [template](https://github.com/Lomray-Software/vite-template) includes compatible dependencies
+and complete client/server entries.
 
 ## Add the Vite plugin
 
@@ -31,21 +34,10 @@ That is the minimal setup. The plugin handles SSR flags, route normalization and
 
 ```tsx
 import entryClient from '@lomray/vite-ssr-boost/browser/entry';
-import { createBrowserRouter } from 'react-router';
 import App from './App';
 import routes from './routes';
 
-void entryClient(App, routes, {
-  init: async ({ isSSRMode, router }) => {
-    return {
-      isSSRMode,
-      currentUrl: router.state.location.pathname,
-    };
-  },
-  routerOptions: {},
-  createRouter: createBrowserRouter,
-  rootId: 'root',
-});
+void entryClient(App, routes);
 ```
 
 `entryClient` does two important things for you:
@@ -56,46 +48,31 @@ void entryClient(App, routes, {
 ## Create the server entry
 
 ```tsx
-import entryServer from '@lomray/vite-ssr-boost/node/entry';
+import entryServer from '@lomray/vite-ssr-boost/adapters/express/entry';
 import App from './App';
 import routes from './routes';
 
-export default entryServer(App, routes, {
-  abortDelay: 15000,
-  init: async ({ config }) => ({
-    onServerCreated: (app) => {
-      void app;
-      void config;
-    },
-    onServerStarted: (_, __, server) => {
-      void server;
-    },
-    onRequest: async (req) => ({
-      appProps: {
-        url: req.url,
-      },
-    }),
-    onRouterReady: () => ({
-      isStream: true,
-    }),
-    onShellReady: () => ({
-      header: '',
-      footer: '',
-    }),
-    onResponse: ({ html }) => html,
-    onError: ({ error }) => {
-      console.error(error);
-    },
-    getState: () => ({
-      app: {
-        hydratedAt: Date.now(),
-      },
-    }),
-  }),
-});
+export default entryServer(App, routes);
 ```
 
-The package does not force one app-level abstraction. You decide what request state to prepare, whether to stream immediately, how to mutate HTML chunks and what serialized state should be sent to the client.
+Add [lifecycle hooks](/guide/server-lifecycle) when you need request state, authentication,
+metadata or crawler-specific rendering. For a custom HTTP server, see [runtime adapters](/guide/runtime-adapters).
+
+## HTML shell
+
+Place this in `src/index.html`. The outlet marks where the React stream goes; keep the client
+entry after it so serialized state arrives before hydration.
+
+```html
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>My app</title></head>
+  <body>
+    <div id="root"><!--ssr-outlet--></div>
+    <script type="module" src="/client.ts"></script>
+  </body>
+</html>
+```
 
 ## Replace scripts
 
@@ -104,6 +81,7 @@ The package does not force one app-level abstraction. You decide what request st
   "scripts": {
     "develop": "ssr-boost dev",
     "build": "ssr-boost build",
+    "build:spa": "ssr-boost build --focus-only client",
     "start:ssr": "ssr-boost start",
     "start:spa": "ssr-boost start --focus-only client",
     "preview": "ssr-boost preview"
@@ -112,6 +90,7 @@ The package does not force one app-level abstraction. You decide what request st
 ```
 
 `start:spa` above is the explicit form. Older examples often used `--only-client`, but the current CLI works through `--focus-only`.
+Run `build:spa` before `start:spa`. For SSR, use `build` followed by `start:ssr`.
 
 ## Run it
 
@@ -124,11 +103,15 @@ npm run develop
 ```txt
 src/
   App.tsx
-  client.tsx
+  client.ts
   server.ts
   routes.tsx
+  index.html
 public/
 vite.config.ts
 ```
 
 You can move files around, but the defaults assume `client.ts`, `server.ts` and `index.html`. If you change that, configure the plugin options instead of relying on convention by accident.
+
+Without TypeScript aliases, use `SsrBoost({ tsconfigAliases: false })`. For JavaScript projects,
+also set `clientFile: 'client.js'` and `serverFile: 'server.js'`, and update the HTML script path.

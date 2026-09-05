@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Express } from 'express';
 import type { Logger, ViteDevServer } from 'vite';
 import type { IPluginConfig } from '@helpers/plugin-config';
 import getPluginConfig from '@helpers/plugin-config';
@@ -66,7 +65,7 @@ class ServerConfig {
   /**
    * Express application
    */
-  protected app?: Express;
+  protected app?: unknown;
 
   /**
    * Config params
@@ -197,8 +196,8 @@ class ServerConfig {
   /**
    * Set express server
    */
-  public setApp(express: Express): void {
-    this.app = express;
+  public setApp<T>(app: T): void {
+    this.app = app;
   }
 
   /**
@@ -212,8 +211,8 @@ class ServerConfig {
   /**
    * Return express server
    */
-  public getApp(): Express | undefined {
-    return this.app;
+  public getApp<T = unknown>(): T | undefined {
+    return this.app as T | undefined;
   }
 
   /**
