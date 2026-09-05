@@ -10,7 +10,7 @@ interface IRunProdParams {
   port?: number;
   isHost?: boolean;
   isPrintInfo?: boolean;
-  focusOnly?: IBuildParams['focusOnly'];
+  focusOnly?: NonNullable<IBuildParams['focusOnly']>;
   mode?: string;
   modulePreload?: boolean;
   buildDir?: string;
