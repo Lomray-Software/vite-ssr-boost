@@ -99,6 +99,34 @@ It can return:
 
 That lets you shape app props, skip a request, or stop the rendering path entirely.
 
+## `onResponse`
+
+```ts
+onResponse?: (params: {
+  context: IRequestContext<TAppProps>;
+  html: string;
+  isEnd: boolean;
+}) => string | undefined | void;
+```
+
+Regular HTML chunks arrive with `isEnd: false`. Returning `undefined` (or nothing) keeps the
+original chunk; a string replaces it. Returning `''` withholds the chunk, allowing an
+incremental transform to retain unfinished tokens.
+
+After the composed body stream finishes, including the footer, the hook receives one final
+call with `html: ''` and `isEnd: true`. Its returned string is appended to the response;
+`undefined` or `''` appends nothing. This also applies to buffered rendering (`isStream: false`).
+Hooks that ignore `isEnd` remain supported.
+
+For example, using `@lomray/consistent-suspense`:
+
+```ts
+onResponse: ({ context: { appProps: { streamSuspense }, isStream }, html, isEnd }) => {
+  if (!isStream) return;
+  return isEnd ? streamSuspense.end() : streamSuspense.analyze(html);
+},
+```
+
 ## Middleware config
 
 Production middleware can be configured without replacing the whole server pipeline:

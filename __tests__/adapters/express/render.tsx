@@ -1,9 +1,10 @@
 // @vitest-environment node
 import type { PropsWithChildren } from 'react';
+import { createStaticHandler } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import StreamError from '@constants/stream-error';
 import render from '@adapters/express/render';
-import type { IRequestContext } from '@adapters/express/render';
+import type { IRenderOptions, IRequestContext } from '@adapters/express/render';
 
 const { coreRenderMock, createFetchRequestMock, injectAssetsMock, writeFetchResponseMock } =
   vi.hoisted(() => ({
@@ -146,7 +147,7 @@ describe('legacy Express render adapter', () => {
         await options.prepare({ context: coreContext });
         await options.onRouterReady({ context: coreContext });
         options.onShellReady({ context: coreContext });
-        options.onResponse({ context: coreContext, html: 'chunk' });
+        options.onResponse({ context: coreContext, html: 'chunk', isEnd: false });
         options.getState({ context: coreContext });
         options.onError({
           context: coreContext,
@@ -195,7 +196,7 @@ describe('legacy Express render adapter', () => {
       expect(onRouterReady).toHaveBeenCalledWith({ context });
       expect(onShellReady).toHaveBeenCalledWith({ context });
       expect(onShellError).toHaveBeenCalledWith({ context, error: shellError });
-      expect(onResponse).toHaveBeenCalledWith({ context, html: 'chunk' });
+      expect(onResponse).toHaveBeenCalledWith({ context, html: 'chunk', isEnd: false });
       expect(getState).toHaveBeenCalledWith({ context });
       expect(onError).toHaveBeenCalledWith({
         context,
@@ -204,6 +205,56 @@ describe('legacy Express render adapter', () => {
       expect(writeFetchResponseMock).toHaveBeenCalledWith(context.res, response);
       expect(context.req.off).toHaveBeenCalledWith('aborted', expect.any(Function));
       expect(context.res.off).toHaveBeenCalledWith('close', expect.any(Function));
+    },
+  );
+
+  it.each([true, false])(
+    'transforms chunks and flushes after the footer with isStream=%s',
+    async (isStream) => {
+      const { default: coreRender } =
+        await vi.importActual<typeof import('@core/render')>('@core/render');
+      const { config, context } = createContext();
+      const handler = createStaticHandler([{ path: '*', Component: () => 'BODY' }]);
+      const onResponse = vi.fn<NonNullable<IRenderOptions['onResponse']>>(({ html, isEnd }) => {
+        if (isEnd) {
+          return 'FLUSHED';
+        }
+
+        return html === context.html.header ? '' : undefined;
+      });
+      let output = '';
+
+      coreRenderMock.mockImplementationOnce(coreRender);
+      writeFetchResponseMock.mockImplementationOnce(async (_, response: Response) => {
+        output = await response.text();
+      });
+
+      await render({ App: App as never, handler }, config as never, context as never, {
+        onResponse,
+        onRouterReady: () => ({ isStream }),
+      });
+
+      const calls = onResponse.mock.calls.map(([params]) => params);
+      const chunks = calls.slice(0, -1);
+
+      expect(chunks.length).toBeGreaterThanOrEqual(3);
+      expect(chunks.every((params) => params.context === context && params.isEnd === false)).toBe(
+        true,
+      );
+      expect(chunks[0].html).toBe(context.html.header);
+      expect(chunks.at(-1)?.html).toContain(context.html.footer);
+      expect(calls.filter(({ isEnd }) => isEnd)).toEqual([{ context, html: '', isEnd: true }]);
+      expect(calls.at(-1)).toEqual({ context, html: '', isEnd: true });
+      expect(context.isStream).toBe(isStream);
+      expect(output).toBe(
+        `${chunks
+          .slice(1)
+          .map(({ html }) => html)
+          .join('')}FLUSHED`,
+      );
+      expect(output).toContain('BODY');
+      expect(output).toContain('window.__staticRouterHydrationData');
+      expect(output.endsWith(`${context.html.footer}FLUSHED`)).toBe(true);
     },
   );
 
