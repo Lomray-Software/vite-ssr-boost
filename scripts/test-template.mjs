@@ -426,6 +426,21 @@ const configureBasename = async () => {
   );
 };
 
+const configureTypedRoutes = async () => {
+  const filename = join(directory, 'src', 'routes', 'index.ts');
+  const original = await readFile(filename, 'utf8');
+  const declaration = 'const routes: TRouteObject[] = [';
+  const declarationIndex = original.indexOf(declaration);
+  const arrayEnd = original.lastIndexOf('];');
+
+  assert.match(original, /import type \{ TRouteObject \} from '@lomray\/vite-ssr-boost\/interfaces\/route-object'/);
+  assert.ok(declarationIndex !== -1, 'Template routes declaration changed.');
+  assert.ok(arrayEnd > declarationIndex, 'Template routes array terminator must follow its declaration.');
+  const typedRoutes = `${original.slice(0, arrayEnd)}] satisfies TRouteObject[];${original.slice(arrayEnd + 2)}`;
+  await writeFile(filename, typedRoutes.replace(declaration, 'const routes = ['));
+  console.info('Template routes: satisfies TRouteObject[] enabled for candidate acceptance');
+};
+
 const verifyHmr = async (origin) => {
   const filename = join(directory, 'src', 'pages', 'home', 'index.tsx');
   const original = await readFile(filename, 'utf8');
@@ -488,6 +503,7 @@ try {
   }
 
   await installCandidate();
+  await configureTypedRoutes();
 
   const devPort = await getPort();
 
