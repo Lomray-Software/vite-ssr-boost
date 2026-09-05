@@ -39,9 +39,7 @@ async function printServerInfo(
     { clear: !Logger.hasWarned },
   );
 
-  const viteConfig = config.getVite()?.config as
-    | (ResolvedConfig & { rawBase?: string })
-    | undefined;
+  const viteConfig: (ResolvedConfig & { rawBase?: string }) | undefined = config.getVite()?.config;
   const isProdBuild = !viteConfig?.mode && !fs.existsSync(devMarker);
   const resolvedUrls = server
     ? await resolveServerUrls(server, {

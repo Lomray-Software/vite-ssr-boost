@@ -104,14 +104,14 @@ function ViteHandleCustomEntrypointPlugin(options: IPluginOptions): Plugin {
         if (clientFile) {
           return {
             code: replaceEntrypoint(code, origClientFile, clientFile),
-            map: this.getCombinedSourcemap(),
+            map: JSON.stringify(this.getCombinedSourcemap()),
           };
         }
       }
 
       return {
         code,
-        map: this.getCombinedSourcemap(),
+        map: JSON.stringify(this.getCombinedSourcemap()),
       };
     },
     /**
