@@ -1,15 +1,12 @@
 import lomrayConfig from '@lomray/eslint-config-react';
-// noinspection NpmUsedModulesInstalled
 import baseConfig from '@lomray/eslint-config';
-// noinspection NpmUsedModulesInstalled
 import globals from 'globals';
-// noinspection NpmUsedModulesInstalled
 import tseslint from 'typescript-eslint';
 
 export default [
   {
     ignores: [
-      ...baseConfig['filesIgnores'].ignores,
+      ...baseConfig.filesIgnores.ignores,
       'coverage/**',
       'docs/**',
       'lib/**',
@@ -17,7 +14,7 @@ export default [
       '*.js',
     ],
   },
-  ...lomrayConfig.config(baseConfig['filesIgnores']),
+  ...lomrayConfig.config(),
   {
     files: ['**/*.{ts,tsx,d.ts}'],
     plugins: {
@@ -59,8 +56,8 @@ export default [
       '@typescript-eslint/await-thenable': 0,
       '@typescript-eslint/no-floating-promises': 0,
       'padding-line-between-statements': 0,
-      'import/no-duplicates': 0,
-      'import/prefer-default-export': 0,
+      'import-x/no-duplicates': 0,
+      'import-x/prefer-default-export': 0,
       'unicorn/error-message': 0,
       'sonarjs/no-duplicate-string': 0,
     },
