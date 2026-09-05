@@ -168,6 +168,12 @@ try {
     const { default: createHandler } = await import('@lomray/vite-ssr-boost/core/handler');
     const { default: adapterEdge } = await import('@lomray/vite-ssr-boost/adapters/edge');
     const { default: adapterNode } = await import('@lomray/vite-ssr-boost/adapters/node');
+    const production = await import('@lomray/vite-ssr-boost/node/production');
+    const productionJs = await import('@lomray/vite-ssr-boost/node/production.js');
+    for (const name of ['loadHtmlShell', 'createRouteAssetPreparer']) {
+      assert.equal(typeof production[name], 'function', name);
+      assert.equal(production[name], productionJs[name], name);
+    }
     assert.equal(createHandler, (await import('@lomray/vite-ssr-boost/core/handler.js')).default);
     assert.equal(adapterEdge, (await import('@lomray/vite-ssr-boost/adapters/edge.js')).default);
     assert.equal(adapterNode, (await import('@lomray/vite-ssr-boost/adapters/node.js')).default);
@@ -198,6 +204,23 @@ try {
     import adapterEdgeJs from '@lomray/vite-ssr-boost/adapters/edge.js';
     import type { TSsrHandler } from '@lomray/vite-ssr-boost/core/types';
     import type { TSsrHandler as TSsrHandlerJs } from '@lomray/vite-ssr-boost/core/types.js';
+
+    import { loadHtmlShell, createRouteAssetPreparer } from '@lomray/vite-ssr-boost/node/production';
+    import { loadHtmlShell as loadHtmlShellJs, createRouteAssetPreparer as createRouteAssetPreparerJs } from '@lomray/vite-ssr-boost/node/production.js';
+    import type { IHtmlShell, ILoadHtmlShellOptions, IRouteAssetPreparerOptions } from '@lomray/vite-ssr-boost/node/production';
+    import type { IHtmlShell as IHtmlShellJs } from '@lomray/vite-ssr-boost/node/production.js';
+    import type { ICreateHandlerOptions } from '@lomray/vite-ssr-boost/core/handler';
+
+    const shellOptions: ILoadHtmlShellOptions = { indexFile: '/app/build/client/index.html' };
+    const assetOptions: IRouteAssetPreparerOptions = { buildDir: '/app/build', modulePreload: true };
+    const shell: IHtmlShell = (await loadHtmlShell(shellOptions))();
+    const shellJs: IHtmlShellJs = (await loadHtmlShellJs(shellOptions))();
+    const prepare: NonNullable<ICreateHandlerOptions<{ app: string }>['prepare']> = createRouteAssetPreparer<{ app: string }>(assetOptions);
+    const prepareJs: typeof prepare = createRouteAssetPreparerJs<{ app: string }>(assetOptions);
+    // @ts-expect-error The build directory is required.
+    createRouteAssetPreparer({});
+    // @ts-expect-error The index file must be a string.
+    loadHtmlShell({ indexFile: new URL('file:///app/index.html') });
 
     const handler: TSsrHandler = async (request) => new Response(request.url);
     const handlerJs: TSsrHandlerJs = handler;
@@ -240,7 +263,7 @@ try {
     }
   }
 
-  process.stdout.write('Packed exports, NodeNext/Bundler declarations and optional-free core passed.\n');
+  process.stdout.write('Packed exports (including node/production), NodeNext/Bundler declarations and optional-free core passed.\n');
 } finally {
   await rm(directory, { force: true, recursive: true });
 }

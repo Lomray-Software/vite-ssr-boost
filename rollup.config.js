@@ -40,6 +40,7 @@ export default {
     'node:process',
     'node:child_process',
     'node:fs',
+    'node:fs/promises',
     'node:stream',
     'node:zlib',
     'node:url',
