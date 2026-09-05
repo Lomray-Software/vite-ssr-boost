@@ -12,6 +12,7 @@ import type {
   Node as BabelNode,
   File as BabelFile,
   VariableDeclaration,
+  ExportDefaultDeclaration,
   ObjectExpression,
 } from '@babel/types';
 import {
@@ -59,6 +60,24 @@ export type TRoutesTree = {
  * Parse react router routes array
  */
 class ParseRoutes {
+  /**
+   * Unwrap expression-only TypeScript syntax and parentheses.
+   */
+  private static unwrapExpression(
+    node: BabelNode | null | undefined,
+  ): BabelNode | null | undefined {
+    switch (node?.type) {
+      case 'TSSatisfiesExpression':
+      case 'TSAsExpression':
+      case 'TSTypeAssertion':
+      case 'TSNonNullExpression':
+      case 'ParenthesizedExpression':
+        return ParseRoutes.unwrapExpression(node.expression);
+      default:
+        return node;
+    }
+  }
+
   /**
    * Path normalize service
    */
@@ -148,8 +167,9 @@ class ParseRoutes {
   private findRoutesDefinition(
     ast: ParseResult<BabelFile>,
     exportName: string | null,
-  ): null | VariableDeclaration {
+  ): null | VariableDeclaration | ExportDefaultDeclaration {
     let exportNameResolved = exportName;
+    let defaultExportNode: ExportDefaultDeclaration | null = null;
 
     // noinspection JSUnusedGlobalSymbols
     traverse(ast, {
@@ -173,6 +193,8 @@ class ParseRoutes {
       },
       ExportDefaultDeclaration({ node }) {
         if (exportName === null) {
+          defaultExportNode = node;
+
           if (node.declaration.type === 'Identifier') {
             exportNameResolved = node.declaration.name;
             // @ts-expect-error missing in types
@@ -202,7 +224,7 @@ class ParseRoutes {
       return variableNode;
     }
 
-    return null;
+    return defaultExportNode;
   }
 
   /**
@@ -268,12 +290,16 @@ class ParseRoutes {
             value: { type: string; elements: BabelNode[] };
           };
 
-          if (objectProp.key.name === 'children' && objectProp.value.type === 'ArrayExpression') {
-            routeInfo.children = this.parseRoutesArray(
-              objectProp.value.elements,
-              importsMap,
-              relativeFile,
-            );
+          if (objectProp.key.name === 'children') {
+            const children = ParseRoutes.unwrapExpression(objectProp.value as BabelNode);
+
+            if (isArrayExpression(children)) {
+              routeInfo.children = this.parseRoutesArray(
+                children.elements as BabelNode[],
+                importsMap,
+                relativeFile,
+              );
+            }
           }
 
           // async routes
@@ -391,10 +417,31 @@ class ParseRoutes {
 
     const importsMap = ParseRoutes.parseImportsMap(ast);
 
-    // @ts-expect-error missing types
-    const elements = routesNode.declarations[0].init?.elements as BabelNode[];
+    const routesArray = ParseRoutes.unwrapExpression(
+      routesNode.type === 'VariableDeclaration'
+        ? routesNode.declarations[0].init
+        : routesNode.declaration,
+    );
 
-    results.push(...this.parseRoutesArray(elements, importsMap, filename));
+    if (!isArrayExpression(routesArray)) {
+      if (routesNode.type === 'ExportDefaultDeclaration') {
+        const Logger = this.config.getLogger();
+
+        Logger.warn(
+          `Routes manifest: default export of ${filename} is a ${routesArray?.type} and cannot be analyzed; lazy route assets will not be injected.`,
+        );
+
+        return results;
+      }
+
+      throw new Error(
+        `Expected routes array in ${filename}, received ${routesArray?.type ?? 'undefined'}.`,
+      );
+    }
+
+    results.push(
+      ...this.parseRoutesArray(routesArray.elements as BabelNode[], importsMap, filename),
+    );
 
     return results;
   }
@@ -446,7 +493,9 @@ class ParseRoutes {
           if (importCall.type === 'ImportExpression') {
             const importArg = importCall.source;
             // current object has part of array (inside array)
-            const parent = nodePath.findParent?.((p) => isArrayExpression(p.node));
+            const parent = nodePath.findParent?.((p) =>
+              isArrayExpression(ParseRoutes.unwrapExpression(p.node)),
+            );
 
             if (
               parent &&
@@ -479,7 +528,9 @@ class ParseRoutes {
           }
 
           // current object has part of array (inside array)
-          const parent = nodePath.findParent?.((p) => isArrayExpression(p.node));
+          const parent = nodePath.findParent?.((p) =>
+            isArrayExpression(ParseRoutes.unwrapExpression(p.node)),
+          );
           const importName = importsMap[componentName]?.path;
 
           if (parent && importName && shouldAddPathId) {
@@ -494,9 +545,11 @@ class ParseRoutes {
           }
         }
 
-        if (property.key.name === 'children' && isArrayExpression(property.value)) {
+        const children = ParseRoutes.unwrapExpression(property.value);
+
+        if (property.key.name === 'children' && isArrayExpression(children)) {
           // Process each object in the children array recursively
-          property.value.elements.forEach((element) => {
+          children.elements.forEach((element) => {
             if (isObjectExpression(element)) {
               ParseRoutes.processRouteFileCode(
                 { node: element } as TraverseTypes.NodePath<ObjectExpression>,
