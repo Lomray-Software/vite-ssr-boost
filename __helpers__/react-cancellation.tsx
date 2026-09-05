@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import Navigate from '@components/navigate';
 import StreamError from '@constants/stream-error';
 import createHandler from '@core/handler';
-import type { ICoreRenderOptions, TRenderToStream } from '@core/render';
+import type { ICreateHandlerOptions } from '@core/handler';
+import type { TRenderToStream } from '@core/render';
 
 const pending = new Promise<never>(() => undefined);
 const Pending = (): never => {
@@ -18,7 +19,7 @@ const Page = () => (
 
 const fixture = (
   renderToStream: TRenderToStream,
-  options: ICoreRenderOptions = {},
+  options: Partial<ICreateHandlerOptions<Record<string, any>>> = {},
   root = false,
 ) => {
   const onError = vi.fn();
@@ -67,11 +68,25 @@ const testReactCancellation = (renderer: TRenderToStream): void => {
       ).toBe(true);
     });
 
-    it.each([undefined, new Error('client disconnected')])(
-      'reports cancellation with reason %s',
-      async (reason) => {
+    it.each(
+      [false, true].flatMap((diagnostics) =>
+        [false, true].flatMap((withHook) =>
+          [undefined, new Error('client disconnected')].map((reason) => ({
+            diagnostics,
+            withHook,
+            reason,
+          })),
+        ),
+      ),
+    )(
+      'reports cancellation with reason $reason, diagnostics=$diagnostics, onResponse=$withHook',
+      async ({ diagnostics, withHook, reason }) => {
         const controller = new AbortController();
-        const { handler, onError } = fixture(renderer, { abortDelay: 5_000 });
+        const { handler, onError } = fixture(renderer, {
+          abortDelay: 5_000,
+          diagnostics,
+          onResponse: withHook ? ({ html }) => html : undefined,
+        });
         const response = await handler(
           new Request('http://example.com/', { signal: controller.signal }),
         );
@@ -79,12 +94,16 @@ const testReactCancellation = (renderer: TRenderToStream): void => {
 
         await reader.read();
         controller.abort(reason);
-        await reader.cancel().catch(() => undefined);
+        await reader.cancel();
 
-        expect(onError).toHaveBeenCalled();
-        expect(
-          onError.mock.calls.every(([{ error }]) => error.code === StreamError.RenderCancel),
-        ).toBe(true);
+        expect(onError.mock.calls.map(([{ error }]) => error)).toEqual([
+          {
+            code: StreamError.RenderCancel,
+            message: controller.signal.reason.message,
+            original: controller.signal.reason,
+          },
+        ]);
+        expect(onError.mock.calls[0][0].error.original).toBe(controller.signal.reason);
       },
     );
 
