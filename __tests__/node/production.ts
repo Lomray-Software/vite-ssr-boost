@@ -48,8 +48,9 @@ describe('loadHtmlShell', () => {
     'rejects invalid outlet counts in %s and names the file',
     async (html) => {
       await writeFile(indexFile, html);
-      await expect(loadHtmlShell({ indexFile })).rejects.toThrow(indexFile);
-      await expect(loadHtmlShell({ indexFile })).rejects.toThrow('expected exactly one');
+      await expect(loadHtmlShell({ indexFile })).rejects.toThrow(
+        `[ssr-boost] SSR_BOOST_OUTLET_MISSING: Invalid HTML shell in "${indexFile}": expected exactly one non-empty outlet "<!--ssr-outlet-->". See https://lomray-software.github.io/vite-ssr-boost/reference/diagnostics#ssr_boost_outlet_missing`,
+      );
     },
   );
 

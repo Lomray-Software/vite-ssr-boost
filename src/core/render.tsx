@@ -14,9 +14,11 @@ import buildCustomState from '@helpers/build-custom-state';
 import buildRouterState from '@helpers/build-router-state';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import obtainStreamError from '@helpers/obtain-stream-error';
+import type Diagnostics from '@services/diagnostics';
 
 export interface ISsrRequestContext<TAppProps = Record<string, any>> {
   appProps: NonNullable<TAppProps>;
+  diagnostics?: Diagnostics;
 
   /**
    * First render failure, or the explicit timeout/cancellation classification.
@@ -167,11 +169,15 @@ const prepareHtmlResponse = <TAppProps,>(
   }
 
   const shell = onShellReady?.({ context }) ?? {};
-  const routerState = buildRouterState(context.routerContext!);
-  const customState = buildCustomState(getState?.({ context }));
+  const routerState = buildRouterState(context.routerContext!, context.diagnostics);
+  const customState = buildCustomState(getState?.({ context }), context.diagnostics);
   const header = shell.header || context.html.header;
+  const shellFooter = shell.footer || context.html.footer;
+
+  context.diagnostics?.inspectShell({ header, footer: shellFooter });
+
   // Router state unblocks the browser entry, so custom state must already be available.
-  const footer = customState + routerState + (shell.footer || context.html.footer);
+  const footer = customState + routerState + shellFooter;
   const headers = new Headers(context.response.headers);
 
   return { header, footer, headers, status: context.response.status };
@@ -356,6 +362,7 @@ const render = async <TAppProps,>(
     const transformed = transformHtml(
       body,
       onResponse ? (html, isEnd) => onResponse({ context, html, isEnd }) : undefined,
+      context.diagnostics,
     );
 
     output.start();

@@ -15,6 +15,7 @@ import renderToStream from '@node/render-to-stream';
 import createRequestSignal from '@node/request-signal';
 import writeEarlyHints from '@node/write-early-hints';
 import writeFetchResponse, { writeFetchHeaders } from '@node/write-fetch-response';
+import Diagnostics, { isDiagnosticsEnabled } from '@services/diagnostics';
 import type ServerConfig from '@services/server-config';
 import SsrManifest from '@services/ssr-manifest';
 
@@ -185,6 +186,9 @@ async function render(
     });
     const coreContext: ISsrRequestContext = {
       appProps,
+      diagnostics: isDiagnosticsEnabled(!config.isProd)
+        ? new Diagnostics(new URL(context.request.url).pathname, Logger)
+        : undefined,
       html: shellHtml,
       request: context.request,
       response: {

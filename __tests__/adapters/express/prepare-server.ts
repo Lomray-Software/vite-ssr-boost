@@ -6,6 +6,7 @@ import PrepareServer from '@adapters/express/prepare-server';
 describe('PrepareServer', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   const createConfig = (isProd = false) => {
@@ -115,6 +116,34 @@ describe('PrepareServer', () => {
     await service.onAppCreated();
 
     expect(onServerCreated).toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    'rejects zero and multiple outlets even with diagnostics off (isProd=%s)',
+    async (isProd) => {
+      vi.stubEnv('SSR_BOOST_DIAGNOSTICS', '0');
+      const config = createConfig(isProd);
+      const read = vi.spyOn(fs, 'readFileSync');
+
+      for (const html of ['<html></html>', '<!--ssr-outlet--><!--ssr-outlet-->']) {
+        read.mockReturnValue(html);
+        config.getVite().transformIndexHtml.mockResolvedValue(html);
+        await expect(
+          PrepareServer.init(config as never).loadHtml({ originalUrl: '/' } as never),
+        ).rejects.toThrow(
+          '[ssr-boost] SSR_BOOST_OUTLET_MISSING: Invalid HTML shell in "/root/index.html": expected exactly one non-empty outlet "<!--ssr-outlet-->". See https://lomray-software.github.io/vite-ssr-boost/reference/diagnostics#ssr_boost_outlet_missing',
+        );
+      }
+    },
+  );
+
+  it('validates the shell after Vite transforms it', async () => {
+    const config = createConfig(false);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue('<!--ssr-outlet-->');
+    config.getVite().transformIndexHtml.mockResolvedValue('<html></html>');
+    await expect(
+      PrepareServer.init(config as never).loadHtml({ originalUrl: '/' } as never),
+    ).rejects.toThrow('SSR_BOOST_OUTLET_MISSING');
   });
 
   it('should stop process with friendly message when prod build is missing', async () => {

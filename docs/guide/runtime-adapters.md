@@ -98,6 +98,14 @@ router and `getState` data before that footer so it is available when the browse
 or a `Response` to bypass rendering. These extensionless imports work directly in Node and bundlers;
 explicit `.js` imports remain supported.
 
+`createHandler` also accepts `diagnostics?: boolean` in its second argument, alongside `getHtml`.
+It defaults to `process.env.NODE_ENV !== 'production'`, or `true` in runtimes without `process`.
+`SSR_BOOST_DIAGNOSTICS=0` or `1` overrides the option wherever environment variables are available.
+Enabled checks warn once per distinct message about state serialization, shell boundaries and
+completed response output; disabled checks do no state walking or HTML accumulation.
+See [Development diagnostics](/reference/diagnostics) for the codes and fixes. For file-backed
+shells, `loadHtmlShell` validates exactly one outlet in every mode before producing `{ header, footer }`.
+
 ## Adapters
 
 The managed CLI is the default path. A custom transport owns the development server and static assets.

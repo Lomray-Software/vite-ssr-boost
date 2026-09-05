@@ -1,11 +1,14 @@
 import type { StaticHandlerContext } from 'react-router';
 import htmlEscape from '@helpers/html-escape';
 import serializeErrors from '@helpers/serialize-errors';
+import type Diagnostics from '@services/diagnostics';
 
 /**
  * Build router state
  */
-function buildRouterState(context: StaticHandlerContext): string {
+function buildRouterState(context: StaticHandlerContext, diagnostics?: Diagnostics): string {
+  diagnostics?.inspectRouterState(context);
+
   const { loaderData, actionData, errors } = context;
   const routerState = {
     loaderData,

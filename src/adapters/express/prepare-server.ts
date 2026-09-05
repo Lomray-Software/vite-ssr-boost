@@ -7,6 +7,7 @@ import type { Express, Request } from 'express';
 import type { IEntrypointOptions, IPrepareRenderOut } from '@adapters/express/entry';
 import type { TRender } from '@adapters/express/render';
 import type { TRouteObject } from '@interfaces/route-object';
+import { splitHtmlShell } from '@services/diagnostics';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 
@@ -189,7 +190,7 @@ class PrepareServer {
       );
     }
 
-    return modifiedHtml.split('<!--ssr-outlet-->') as [string, string];
+    return splitHtmlShell(modifiedHtml, path.resolve(`${root}/${indexFile}`));
   }
 
   /**

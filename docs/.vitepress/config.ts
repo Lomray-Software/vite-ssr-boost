@@ -86,6 +86,7 @@ export default defineConfig({
           { text: 'Talking Points', link: '/reference/talking-points' },
           { text: 'Hydration order and streaming', link: '/reference/hydration-and-streaming' },
           { text: 'FAQ', link: '/reference/faq' },
+          { text: 'Diagnostics', link: '/reference/diagnostics' },
           { text: 'Acceptance Gates', link: '/reference/acceptance-gates' },
           { text: 'Useful Links', link: '/reference/useful-links' },
         ],
