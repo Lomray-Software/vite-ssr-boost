@@ -58,6 +58,9 @@ jobs:
           npm pkg delete scripts.prepare
           npm run build
 
+      - name: Enforce browser size budgets
+        run: npm run test:size
+
       - name: Boot the built edge package in workerd
         run: npm run test:edge:packed
 

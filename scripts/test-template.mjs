@@ -1,20 +1,31 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { appendFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
-import { createGunzip } from 'node:zlib';
+import { createGunzip, gzipSync } from 'node:zlib';
 import { stripVTControlCharacters } from 'node:util';
 import { parse } from '@babel/parser';
+
+// KB = 1024 bytes. For intentional growth, measure the pinned template again and
+// set this to Math.ceil(measured gzip KB * 1.05); document the reason and new size.
+const TEMPLATE_CLIENT_GZIP_BUDGET_KB = 154;
 
 const projectRoot = process.cwd();
 const source = resolve(process.argv[2] ?? join(projectRoot, '..', 'vite-template'));
 const directory = await mkdtemp(join(tmpdir(), 'vite-ssr-boost-template-'));
 const keepTemplate = process.env.SSR_BOOST_KEEP_TEMPLATE === '1';
 const useCurrentDependencies = process.env.SSR_BOOST_TEMPLATE_CURRENT === '1';
+const acceptance = {
+  clientGzipKb: undefined,
+  productionReadyMs: undefined,
+  baselineTtfb: undefined,
+  candidateTtfb: undefined,
+  chunks: [],
+};
 const cli = join(directory, 'node_modules', '@lomray', 'vite-ssr-boost', 'cli.js');
 const runtimePath = [
   join(directory, 'node_modules', '.bin'),
@@ -99,6 +110,7 @@ const waitUntilReady = async (origin, child) => {
     try {
       const response = await fetch(origin, { signal: AbortSignal.timeout(5_000) });
       await response.arrayBuffer();
+      if (!response.ok) throw new Error(`Server responded with ${response.status}.`);
 
       return;
     } catch {
@@ -223,12 +235,14 @@ const verify = async (origin, mode, base = '') => {
   // A fully rendered tree has no pending Suspense boundaries; compare content, not two clocks.
   assert.doesNotMatch(buffered.html, /<!--\$\?-->/, `${mode} crawler has pending content`);
 
+  let gzipChunks;
   if (mode !== 'development') {
     const compressed = await inspectEarlyStream(origin, `${base}/details`, `${mode} gzip`, {
       'Accept-Encoding': 'gzip',
     });
     assert.equal(compressed.encoding, 'gzip');
     assert.match(compressed.html, /<\/html>/);
+    gzipChunks = compressed.chunks;
     console.info(
       `${mode}: gzip HTML shell ${Math.round(compressed.firstChunkMs)}ms / complete ${Math.round(compressed.totalMs)}ms`,
     );
@@ -239,6 +253,39 @@ const verify = async (origin, mode, base = '') => {
       streamed.firstChunkMs,
     )}ms/${Math.round(streamed.totalMs)}ms); buffered=${buffered.chunks} chunks`,
   );
+  acceptance.chunks.push({ mode, streamed: streamed.chunks, buffered: buffered.chunks, gzip: gzipChunks });
+};
+
+const measureClientGzip = async () => {
+  const assets = join(directory, 'build', 'client', 'assets');
+  const scripts = (await readdir(assets, { withFileTypes: true }))
+    .filter((file) => file.isFile() && file.name.endsWith('.js'));
+  assert.ok(scripts.length, 'Template production build has no client JavaScript assets.');
+  const sizes = await Promise.all(scripts.map(async (file) =>
+    gzipSync(await readFile(join(assets, file.name)), { level: 9 }).length));
+  acceptance.clientGzipKb = sizes.reduce((total, bytes) => total + bytes, 0) / 1024;
+  console.info(`template client gzip total: ${acceptance.clientGzipKb.toFixed(3)} KB / ${TEMPLATE_CLIENT_GZIP_BUDGET_KB} KB budget (${scripts.length} JS assets)`);
+  assert.ok(acceptance.clientGzipKb <= TEMPLATE_CLIENT_GZIP_BUDGET_KB,
+    `Template client gzip size exceeds ${TEMPLATE_CLIENT_GZIP_BUDGET_KB} KB budget.`);
+};
+
+const reportAcceptance = async () => {
+  const milliseconds = (value) => value === undefined ? 'not measured' : `${Math.round(value)} ms`;
+  const markdown = [
+    `## Template acceptance (${useCurrentDependencies ? 'current' : 'pinned'} runtime dependencies)`,
+    '',
+    '| Metric | Measured | Budget |',
+    '| --- | ---: | ---: |',
+    `| Template client gzip total (KB, 1024 bytes) | ${acceptance.clientGzipKb?.toFixed(3) ?? 'not measured'} | ${TEMPLATE_CLIENT_GZIP_BUDGET_KB} |`,
+    `| Production server ready (process start to successful response) | ${milliseconds(acceptance.productionReadyMs)} | advisory |`,
+    `| Baseline median TTFB | ${milliseconds(acceptance.baselineTtfb)} | advisory |`,
+    `| Candidate median TTFB | ${milliseconds(acceptance.candidateTtfb)} | advisory |`,
+    ...acceptance.chunks.map(({ mode, streamed, buffered, gzip }) =>
+      `| ${mode} chunks (streamed / buffered / decoded gzip) | ${streamed} / ${buffered} / ${gzip ?? 'n/a'} | — |`),
+    '',
+  ].join('\n');
+  console.info(markdown);
+  if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `${markdown}\n`);
 };
 
 const crawlModules = async (origin) => {
@@ -497,6 +544,7 @@ try {
 
     await waitUntilReady(origin, baseline);
     baselineTtfb = await measureTtfb(origin);
+    acceptance.baselineTtfb = baselineTtfb;
     console.info(`baseline production median TTFB: ${Math.round(baselineTtfb)}ms`);
   } finally {
     await stop(baseline);
@@ -524,17 +572,21 @@ try {
   await verifyColdStart();
 
   await run(['build']);
+  await measureClientGzip();
 
   const prodPort = await getPort();
+  const prodStarted = performance.now();
   const prod = start(['start', '--port', String(prodPort)]);
 
   try {
     const origin = `http://127.0.0.1:${prodPort}`;
 
     await waitUntilReady(origin, prod);
+    acceptance.productionReadyMs = performance.now() - prodStarted;
     await verify(origin, 'production');
 
     const candidateTtfb = await measureTtfb(origin);
+    acceptance.candidateTtfb = candidateTtfb;
     const allowedTtfb = baselineTtfb + Math.max(35, baselineTtfb * 0.5);
 
     if (candidateTtfb > allowedTtfb) {
@@ -587,4 +639,5 @@ try {
   } else if (isAbsolute(directory) && directory.startsWith(tmpdir())) {
     await rm(directory, { force: true, recursive: true });
   }
+  await reportAcceptance();
 }
