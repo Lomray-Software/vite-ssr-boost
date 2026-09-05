@@ -13,8 +13,7 @@ export type IDynamicRoute = () => Promise<{ default: FCRoute | FCCRoute<any> }>;
 export type ImmutableRouteKey = 'lazy' | 'caseSensitive' | 'path' | 'id' | 'index' | 'children';
 
 export type IAsyncRoute = { pathId?: string } & (
-  | Omit<IndexRouteObject, ImmutableRouteKey>
-  | Omit<NonIndexRouteObject, ImmutableRouteKey>
+  Omit<IndexRouteObject, ImmutableRouteKey> | Omit<NonIndexRouteObject, ImmutableRouteKey>
 );
 
 /**

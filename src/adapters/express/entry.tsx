@@ -6,7 +6,7 @@ import type { RouteObject } from 'react-router';
 import { createStaticHandler } from 'react-router';
 import type { ServeStaticOptions } from 'serve-static';
 import type { Logger } from 'vite';
-import type { IRenderOptions, IRenderParams, TRender } from '@adapters/express/render';
+import type { IRenderOptions, TRender } from '@adapters/express/render';
 import render from '@adapters/express/render';
 import type { TRouteObject } from '@interfaces/route-object';
 import type ServerApi from '@services/server-api';
@@ -82,7 +82,7 @@ function entry<TAppProps>(
   const handler = createStaticHandler(routes as RouteObject[], routerOptions);
 
   return {
-    render: render.bind(null, { handler, App } as IRenderParams<TAppProps>) as TRender,
+    render: render.bind(null, { handler, App }) as TRender,
     init,
     routes,
     ...rest,

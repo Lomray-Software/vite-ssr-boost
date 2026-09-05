@@ -1,10 +1,11 @@
 import { rmSync } from 'node:fs';
-import typescript from 'rollup-plugin-ts';
+import typescript from '@rollup/plugin-typescript';
 import terser from '@rollup/plugin-terser';
 import peerDepsExternal from 'rollup-plugin-peer-deps-external';
 import { folderInput } from 'rollup-plugin-folder-input';
 import copy from 'rollup-plugin-copy';
 import { preserveShebangs } from 'rollup-plugin-preserve-shebangs';
+import { replaceTscAliasPaths } from 'tsc-alias';
 
 const dest = 'lib';
 
@@ -51,19 +52,7 @@ export default {
     peerDepsExternal({
       includeDependencies: true,
     }),
-    typescript({
-      tsconfig: resolvedConfig => ({
-        ...resolvedConfig,
-        declaration: true,
-        importHelpers: true,
-        plugins: [
-          {
-            "transform": "@zerollup/ts-transform-paths",
-            "exclude": ["*"]
-          }
-        ]
-      }),
-    }),
+    typescript({ tsconfig: './tsconfig.build.json', filterRoot: '.' }),
     preserveShebangs(),
     terser(),
     copy({
@@ -74,6 +63,16 @@ export default {
         { src: 'LICENSE', dest: dest },
         { src: 'workflow', dest: dest },
       ]
-    })
+    }),
+    {
+      name: 'resolve-declaration-imports',
+      async writeBundle() {
+        await replaceTscAliasPaths({
+          configFile: './tsconfig.build.json',
+          resolveFullPaths: true,
+          resolveFullExtension: '.js',
+        });
+      },
+    },
   ],
 };
