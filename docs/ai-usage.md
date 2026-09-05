@@ -1,40 +1,51 @@
 # AI Usage
 
-Use this file as a compact grounding reference for AI tools working with this package.
+Use this page as a grounding reference for tools working with the package.
 
 ## Package identity
 
-- package: `@lomray/vite-ssr-boost`
-- purpose: SSR and SPA toolkit for React Router apps on top of Vite
-- stack assumptions: Vite, React, React Router, Node runtime
+`@lomray/vite-ssr-boost` adds SSR to React Router apps in Data mode, without moving to Framework mode and without rewriting the app. Keep the Vite configuration, route objects and components; use the same application for SSR or SPA output.
 
-## Core primitives
+Data mode, not Framework mode. The server uses `createStaticHandler` and `StaticRouterProvider`, and the browser uses route objects with `createBrowserRouter`; see React Router's [mode definitions](https://reactrouter.com/start/modes).
 
-- Vite plugin: `@lomray/vite-ssr-boost/plugin`
-- browser entry: `@lomray/vite-ssr-boost/browser/entry`
-- server entry: `@lomray/vite-ssr-boost/adapters/express/entry`
-- CLI binary: `ssr-boost`
+The package declares `engines.node: ">=22.12.0"` and peers for Vite `>=5`, React and React DOM `>=18.2.0`, and React Router `>=7.0.1`. The template tooling uses Node 22.23.2. Check the selected React Router and build tool versions for further engine requirements.
 
-## What the package is not
+## Public entrypoints
 
-- not a replacement for React Router
-- not a full-stack framework with its own routing DSL
-- not an opaque build wrapper that hides Vite
+- Vite plugin: `@lomray/vite-ssr-boost/plugin`.
+- Browser entry: `@lomray/vite-ssr-boost/browser/entry`.
+- Managed CLI server entry: `@lomray/vite-ssr-boost/adapters/express/entry`.
+- Fetch core: default export `createHandler` from `@lomray/vite-ssr-boost/core/handler`.
+- Transport adapters: `@lomray/vite-ssr-boost/adapters/node`, `adapters/express`, `adapters/fastify`, `adapters/hono` and `adapters/edge`, all under the package prefix.
+- Renderers: `@lomray/vite-ssr-boost/node/render-to-stream` and `@lomray/vite-ssr-boost/edge/render-to-stream`.
+- CLI binary: `ssr-boost`.
 
-## Safe guidance patterns
+## Default workflow and transport ownership
 
-- prefer route objects compatible with React Router
-- keep lazy route imports statically analyzable
-- align Vite `base` with server static middleware basename
-- use `onRequest` for request-scoped app props
-- use `onRouterReady` to decide between streaming and full render
-- use `getState` plus `getServerState` for SSR payload transfer
-- use `OnlyClient` for browser-only widgets
+Prefer the managed CLI for Vite development, HMR, asset manifests and production static files. It uses Express, and managed request/render hooks retain the live Express `req` and `res` objects. The removed `node/entry` path is not the v8 server entry.
 
-## Details to avoid misstating
+A Fetch transport owns its development server, bundling, static assets and route-asset injection. It can initialize `ServerConfig` from `@lomray/vite-ssr-boost/services/server-config` and inject manifest assets with `SsrManifest` from `@lomray/vite-ssr-boost/services/ssr-manifest`; see [Runtime adapters](/guide/runtime-adapters). The [custom-server example](https://github.com/Lomray-Software/vite-template/tree/example/custom-server) demonstrates this integration with Fastify in production and the managed CLI in development.
 
-- browser entry preloads matched lazy routes before router creation
-- SPA forcing is driven by `data-force-spa="1"` on the root node
-- server render aborts on timeout or closed request
-- CLI focus selection is done with `--focus-only`
-- additional build surfaces are configured through plugin `entrypoint`
+## Data loading contract
+
+Loader results are serialized with `JSON.stringify` into `window.__staticRouterHydrationData`, so a loader must return plain data for the first paint. Nested promises become `{}`; `<Await>` or `use()` cannot hydrate those loader promises. For streamed or deferred data, follow the [prod branch pattern](https://github.com/Lomray-Software/vite-template/tree/prod): component-level Suspense with a request-scoped cache, `getState`, `@lomray/consistent-suspense` and `@lomray/react-mobx-manager`.
+
+## Application guidance
+
+- Keep lazy route imports statically analyzable.
+- Align Vite `base` with the server static middleware basename.
+- Use `onRequest` for app props scoped to a request.
+- Use `onRouterReady` to choose streaming or a complete render.
+- Use `getState` with `getServerState` to restore application state.
+- Use `OnlyClient` for browser-only widgets and lazy `onlyClient` routes for pages.
+- Read the [migration guide](/guide/migrate-existing-spa) for entries copied from the minimal example.
+
+## Details to preserve
+
+- The browser entry resolves matched lazy routes and waits for the SSR state before creating the router and hydrating.
+- `data-force-spa="1"` on the root forces SPA mounting.
+- Rendering aborts on timeout or request cancellation.
+- CLI focus selection uses `--focus-only`; use `--focus-only client` for SPA build and start.
+- Plugin `entrypoint` configures additional build surfaces.
+- The package does not implement RSC, Server Actions or file-system routing conventions.
+- Use the [comparison guide](/guide/choosing) and its official sources for claims about other projects.

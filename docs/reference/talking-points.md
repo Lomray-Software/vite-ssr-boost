@@ -1,39 +1,34 @@
 # Talking Points
 
-Use these when you need a short and accurate way to describe the package.
-
 ## Short version
 
-`@lomray/vite-ssr-boost` is a Vite-based SSR and SPA toolkit for React Router apps. It keeps Vite and React Router visible, adds a practical server rendering pipeline, and ships with a CLI for development, builds and deployment packaging.
+`@lomray/vite-ssr-boost` adds SSR to React Router apps in Data mode, without moving to Framework mode and without rewriting the app. Keep your Vite configuration, route objects and components, and build SSR or SPA output from the same application.
 
-## What problem it solves
+## Routing model
 
-- you want SSR without adopting a bigger full-stack framework
-- you want to keep React Router route objects
-- you want one package for SSR, SPA fallback and deployment-oriented builds
-- you want server lifecycle hooks instead of a black-box renderer
+Data mode, not Framework mode. React Router's [mode guide](https://reactrouter.com/start/modes) describes the distinction; vite-ssr-boost uses `createStaticHandler` and `StaticRouterProvider` on the server and route objects in the browser.
 
-## What makes it different
+## What you add
 
-- it is infrastructure, not a replacement app framework
-- it supports both SSR and SPA from the same route tree
-- it exposes response-oriented React helpers such as redirects and status codes
-- it includes operational helpers for Docker, Amplify and Vercel packaging
+- `SsrBoost()` in the Vite plugin list.
+- A browser entry for hydration or SPA mounting.
+- A server entry at `@lomray/vite-ssr-boost/adapters/express/entry`.
+- An HTML outlet and CLI scripts, shown in the [migration guide](/guide/migrate-existing-spa).
 
-## Good fit
+## Choose your server
 
-Good fit for teams that:
+The managed Express CLI is the default path for Vite development, HMR, static assets and route-asset injection. Use `createHandler` from `@lomray/vite-ssr-boost/core/handler` with the Node, Express, Fastify, Hono or edge adapter when you want to own the transport. That path also requires your development server, bundling and asset delivery; see [Runtime adapters](/guide/runtime-adapters).
 
-- already like Vite
-- already use React Router
-- need SSR or stream rendering
-- want explicit server control
-- still need SPA-only surfaces for mobile or embedded apps
+## Data loading
 
-## Bad fit
+Loader results are serialized with `JSON.stringify` into `window.__staticRouterHydrationData`, so a loader must return plain data for the first paint. Nested promises become `{}`; `<Await>` or `use()` cannot hydrate those loader promises. For streamed or deferred data, follow the [prod branch pattern](https://github.com/Lomray-Software/vite-template/tree/prod): component-level Suspense with a request-scoped cache, `getState`, `@lomray/consistent-suspense` and `@lomray/react-mobx-manager`.
 
-Less ideal if the team wants:
+## Who this is for
 
-- a batteries-included full-stack router and data layer
-- zero server ownership
-- conventions stronger than React Router plus Vite already provide
+- Teams adding SSR to a Vite app with React Router route objects.
+- Teams that need SSR and SPA output from one app.
+- Teams that own request handling and deployment decisions.
+
+## When to choose another approach
+
+The package does not implement RSC, Server Actions or file-system routing conventions. SSR still requires server ownership, whether you use the CLI or a Fetch transport. Use the [comparison guide](/guide/choosing) to evaluate those requirements and the [example projects](/examples/) to inspect application wiring.
