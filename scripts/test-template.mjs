@@ -7,6 +7,8 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
 import { createGunzip } from 'node:zlib';
+import { stripVTControlCharacters } from 'node:util';
+import { parse } from '@babel/parser';
 
 const projectRoot = process.cwd();
 const source = resolve(process.argv[2] ?? join(projectRoot, '..', 'vite-template'));
@@ -239,6 +241,121 @@ const verify = async (origin, mode, base = '') => {
   );
 };
 
+const crawlModules = async (origin) => {
+  const response = await fetch(origin, { signal: AbortSignal.timeout(20_000) });
+  assert.equal(response.status, 200, 'cold development HTML status');
+  const html = await response.text();
+  const queue = [];
+  const seen = new Set();
+  const enqueue = (specifier, importer = origin) => {
+    if (!/^(?:https?:\/\/|\/|\.\.?\/)/.test(specifier)) return;
+    const url = new URL(specifier, importer);
+    if (url.origin !== origin || seen.has(url.href)) return;
+    assert.ok(seen.size < 600, 'cold development crawl exceeded 600 modules');
+    seen.add(url.href);
+    queue.push(url.href);
+  };
+
+  for (const [tag] of html.matchAll(/<(?:script|link)\b[^>]*>/gi)) {
+    const attributes = Object.fromEntries(
+      [...tag.matchAll(/([\w-]+)\s*=\s*["']([^"']*)["']/g)].map(([, name, value]) => [
+        name.toLowerCase(),
+        value,
+      ]),
+    );
+    if (/^<script\b/i.test(tag) && attributes.type === 'module' && attributes.src) {
+      enqueue(attributes.src);
+    } else if (/^<link\b/i.test(tag) && attributes.rel === 'modulepreload' && attributes.href) {
+      enqueue(attributes.href);
+    }
+  }
+  assert.ok(queue.length, 'cold development HTML has no module entries');
+
+  // Process each breadth before requesting dependencies discovered in it.
+  for (let index = 0; index < queue.length; index += 1) {
+    const url = queue[index];
+    let module = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    // An optimizer reload can invalidate URLs already queued by the first response.
+    // Keep crawling for diagnostics; the caller still rejects the reload log.
+    if (module.status === 504 && new URL(url).searchParams.has('v')) {
+      await module.arrayBuffer();
+      const current = new URL(url);
+      current.searchParams.delete('v');
+      module = await fetch(current, { signal: AbortSignal.timeout(20_000) });
+    }
+    assert.equal(module.status, 200, `cold development module ${url}`);
+    assert.match(
+      module.headers.get('content-type') ?? '',
+      /javascript/,
+      `cold development module type ${url}`,
+    );
+    const nodes = [
+      parse(await module.text(), { sourceType: 'module', createImportExpressions: true }),
+    ];
+    while (nodes.length) {
+      const node = nodes.pop();
+      if (!node || typeof node !== 'object') continue;
+      if (
+        [
+          'ImportDeclaration',
+          'ExportNamedDeclaration',
+          'ExportAllDeclaration',
+          'ImportExpression',
+        ].includes(node.type) &&
+        node.source?.type === 'StringLiteral'
+      ) {
+        enqueue(node.source.value, url);
+      }
+      for (const value of Object.values(node)) {
+        if (Array.isArray(value)) nodes.push(...value);
+        else if (value && typeof value === 'object' && 'type' in value) nodes.push(value);
+      }
+    }
+  }
+  console.info(`development cold start: crawled ${seen.size} modules`);
+};
+
+const verifyColdStart = async () => {
+  await rm(join(directory, 'node_modules', '.vite'), { force: true, recursive: true });
+
+  const port = await getPort();
+  await writeFile(join(directory, '.env.development.local'), `VITE_PORT=${port}\n`);
+  const child = spawn(process.execPath, [cli, 'dev', '--port', String(port)], {
+    cwd: directory,
+    env: { ...process.env, PATH: runtimePath },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const closed = once(child, 'close');
+  let output = '';
+  const capture = (chunk) => {
+    output += chunk;
+  };
+  child.stdout.on('data', capture);
+  child.stderr.on('data', capture);
+
+  try {
+    const origin = `http://127.0.0.1:${port}`;
+    await waitUntilReady(origin, child);
+    await crawlModules(origin);
+    await new Promise((resolveTimeout) => {
+      setTimeout(resolveTimeout, 5_000);
+    });
+    assert.ok(!hasExited(child), 'Cold development server exited during the crawl.');
+  } finally {
+    await stop(child);
+    await closed;
+    output = stripVTControlCharacters(output);
+    console.info(output);
+  }
+
+  assert.doesNotMatch(
+    output,
+    /new dependencies optimized|optimized dependencies changed|\bdependenc(?:y|ies) optimized:/,
+    'Cold development discovered dependencies after startup.',
+  );
+  console.info('development cold start: no late dependency optimization or reload');
+};
+
 const verifySpa = async (origin) => {
   for (const pathname of ['/', '/details', '/missing']) {
     const response = await fetch(`${origin}${pathname}`);
@@ -399,6 +516,8 @@ try {
   } finally {
     await stop(dev);
   }
+
+  await verifyColdStart();
 
   await run(['build']);
 

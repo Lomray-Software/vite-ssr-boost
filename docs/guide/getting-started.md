@@ -99,6 +99,14 @@ Run `build:spa` before `start:spa`. For SSR, use `build` followed by `start:ssr`
 npm run develop
 ```
 
+### Development cold start
+
+On an empty Vite cache, dependencies discovered during the first page load can cause an
+`Invalid hook call` or a `useContext` error until Vite reloads the page. The plugin pre-bundles
+its browser entry, components and route helpers with their React dependencies before that
+first load. Existing optimization options are preserved. Use `optimizeDeps.exclude` to opt
+out for a package or a specific deep import.
+
 ## Recommended project shape
 
 ```txt
