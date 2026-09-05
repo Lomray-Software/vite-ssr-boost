@@ -60,9 +60,31 @@ interface IEntrypointOptions<TAppProps> {
 
 See [Server Lifecycle](/guide/server-lifecycle) for the flow and intent of each hook.
 
+## Hook context
+
+`onRouterReady`, `onShellReady`, `onShellError`, `onError`, `onResponse` and `getState`
+receive `{ context }`, with these fields:
+
+- `request`: the Fetch `Request` built from the Express request; use it for headers, URL and method so hooks stay portable to other adapters.
+- `req` / `res`: the live Express request and response.
+- `appProps`: request-scoped props returned by `onRequest`.
+- `html`: the template `header` and `footer`.
+- `routerContext` / `serverContext`: router and SSR metadata, once available.
+- `isStream`, `hasEarlyHints` and `didError`: rendering mode, early-hints preference and error metadata.
+
+`request` is the same object used by the Fetch core throughout a render; its `signal` tracks request cancellation.
+
+```ts
+onRouterReady: ({ context: { request } }) => ({
+  isStream: !request.headers.get('user-agent')?.includes('Googlebot'),
+}),
+```
+
 ## `onRequest`
 
 The most important request hook.
+
+It receives `(req, res)` before the render context is created.
 
 It can return:
 

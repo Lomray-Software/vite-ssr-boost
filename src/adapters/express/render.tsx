@@ -21,6 +21,7 @@ import SsrManifest from '@services/ssr-manifest';
 export interface IRequestContext<TAppProps = Record<any, any>> {
   req: ExpressRequest;
   res: ExpressResponse;
+  request: Request;
   appProps: NonNullable<TAppProps>;
   html: { header: string; footer: string };
   routerContext?: StaticHandlerContext;
@@ -32,7 +33,7 @@ export interface IRequestContext<TAppProps = Record<any, any>> {
 
 export type TRender<TAppProps = Record<any, any>> = (
   config: ServerConfig,
-  context: IRequestContext<TAppProps>,
+  context: Omit<IRequestContext<TAppProps>, 'request'>,
   options: IRenderOptions,
 ) => Promise<void>;
 
@@ -162,7 +163,7 @@ const writeResponse = async (res: ExpressResponse, response: Response): Promise<
 async function render(
   { App, handler }: IRenderParams,
   config: ServerConfig,
-  context: IRequestContext,
+  initialContext: Omit<IRequestContext, 'request'>,
   {
     onRouterReady,
     onShellReady,
@@ -174,14 +175,17 @@ async function render(
     abortDelay = 15000,
   }: IRenderOptions,
 ): Promise<void> {
-  const { appProps, html: shellHtml, req, res } = context;
+  const { appProps, html: shellHtml, req, res } = initialContext;
   const Logger = config.getLogger();
   const requestSignal = createRequestSignal(req, res);
   try {
+    const context: IRequestContext = Object.assign(initialContext, {
+      request: createRenderRequest(req, requestSignal.signal, getBody),
+    });
     const coreContext: ISsrRequestContext = {
       appProps,
       html: shellHtml,
-      request: createRenderRequest(req, requestSignal.signal, getBody),
+      request: context.request,
       response: {
         headers: new Headers(),
       },
@@ -191,6 +195,7 @@ async function render(
      * Keep legacy hooks attached to their original mutable request context.
      */
     const syncContext = (updated: ISsrRequestContext): IRequestContext => {
+      context.request = updated.request;
       context.didError = updated.didError;
       context.html = updated.html;
       context.isStream = updated.isStream;

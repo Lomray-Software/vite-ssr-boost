@@ -6,7 +6,7 @@ import compression from 'compression';
 import type { Express } from 'express';
 import express from 'express';
 import PrepareServer from '@adapters/express/prepare-server';
-import type { IRequestContext } from '@adapters/express/render';
+import type { TRender } from '@adapters/express/render';
 import printServerInfo from '@helpers/print-server-info';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
@@ -127,7 +127,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
             return next();
           }
 
-          const context: IRequestContext = {
+          const renderInput: Parameters<TRender>[1] = {
             req,
             res,
             hasEarlyHints,
@@ -135,7 +135,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
             html: { header, footer },
           };
 
-          await render(config, context, renderParams);
+          await render(config, renderInput, renderParams);
         } catch (e) {
           config
             .getLogger()
