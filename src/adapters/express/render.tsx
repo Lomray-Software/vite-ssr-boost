@@ -57,6 +57,7 @@ export interface IRenderOptions<TAppProps = Record<string, any>> {
   onResponse?: (params: {
     context: IRequestContext<TAppProps>;
     html: string;
+    isEnd: boolean;
   }) => string | undefined | void;
   getState?: (params: {
     context: IRequestContext<TAppProps>;
@@ -253,10 +254,11 @@ async function render(
         },
 
         /**
-         * Transform streamed HTML using the existing legacy hook signature.
+         * Forward HTML chunks and the end signal through the legacy request context.
          */
         onResponse: onResponse
-          ? ({ context: updated, html }) => onResponse({ context: syncContext(updated), html })
+          ? ({ context: updated, html, isEnd }) =>
+              onResponse({ context: syncContext(updated), html, isEnd })
           : undefined,
 
         /**
