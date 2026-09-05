@@ -3,6 +3,22 @@
   "version": "1.0.0",
   "description": "Vite plugin for create awesome SSR or SPA applications on React.",
   "type": "module",
+  "exports": {
+    "./*.js": {
+      "types": "./*.d.ts",
+      "default": "./*.js"
+    },
+    "./*.d.ts": "./*.d.ts",
+    "./*.map": "./*.map",
+    "./*.json": "./*.json",
+    "./*.md": "./*.md",
+    "./LICENSE": "./LICENSE",
+    "./workflow/*": "./workflow/*",
+    "./*": {
+      "types": "./*.d.ts",
+      "default": "./*.js"
+    }
+  },
   "keywords": [
     "js",
     "vite",

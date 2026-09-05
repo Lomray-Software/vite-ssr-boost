@@ -16,6 +16,11 @@ const adapterExpress = (
 ): RequestHandler => {
   return (req: Request, res: ExpressResponse, next: NextFunction): void => {
     const requestSignal = createRequestSignal(req, res);
+    const onError = (error: unknown): void => {
+      if (!requestSignal.signal.aborted) {
+        next(error);
+      }
+    };
 
     try {
       const requestOptions: { body?: BodyInit | null; signal: AbortSignal } = {
@@ -31,11 +36,11 @@ const adapterExpress = (
       void handleRequest(handler, createFetchRequest(req, requestOptions), res, {
         compression: options.compression,
       })
-        .catch(next)
+        .catch(onError)
         .finally(requestSignal.dispose);
     } catch (error) {
       requestSignal.dispose();
-      next(error);
+      onError(error);
     }
   };
 };

@@ -32,6 +32,11 @@ describe('Express adapter', () => {
       adapterExpress(async (request) => new Response(await request.text())),
     );
     app.use(
+      '/nested-form',
+      express.urlencoded({ extended: true }),
+      adapterExpress(async (request) => new Response(await request.text())),
+    );
+    app.use(
       '/error',
       adapterExpress(async () => {
         throw new Error('adapter failed');
@@ -148,5 +153,16 @@ describe('Express adapter', () => {
       body: 'body conversion failed',
       statusCode: 503,
     });
+  });
+
+  it('reports unsupported nested forms from extended parsers', async () => {
+    const response = await request('/nested-form', {
+      body: 'user[name]=Alice',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      method: 'POST',
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.body).toContain('Provide the adapter getBody option');
   });
 });

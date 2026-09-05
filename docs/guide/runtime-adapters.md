@@ -42,8 +42,10 @@ HTML. The core decodes split UTF-8 chunks safely before invoking it.
   unmatched routes. Previously these could be sent as 200.
 - Render timeouts and client/intentional cancellation report `onError` codes `timeout` and `cancel`.
   The legacy logger keeps these at info level. Unexpected errors still retain their original error.
-- Parsed JSON and URL-encoded bodies work automatically. An unsupported custom or multipart parser
-  now fails explicitly instead of sending `[object Object]`; use `getBody` as shown below.
+- Parsed JSON and flat URL-encoded bodies work automatically. Nested form values and unsupported
+  custom or multipart parser results fail explicitly; use `getBody` as shown below.
+- Package exports support extensionless imports directly in Node and bundlers. Existing `.js`
+  imports and deep paths keep working, with matching TypeScript declarations.
 
 Express and compression are optional dependencies installed by default. If your install command
 uses `--omit=optional`, install them explicitly:
@@ -80,8 +82,8 @@ This example returns server HTML. For an interactive app, put your built browser
 `footer`, after the closing root element, and serve its JS/CSS assets. The renderer writes escaped
 router and `getState` data before that footer so it is available when the browser entry runs.
 `getHtml` supplies a fresh shell per request; `onRequest` can return `{ appProps, headers, status }`
-or a `Response` to bypass rendering. Runtime imports used directly by Node need the `.js` extension;
-Vite and other bundlers resolve the extensionless examples.
+or a `Response` to bypass rendering. These extensionless imports work directly in Node and bundlers;
+explicit `.js` imports remain supported.
 
 ## Adapters
 
@@ -144,9 +146,10 @@ renderer requires APIs such as `MessageChannel` that workerd does not provide.
 
 ## Request bodies
 
-The Node adapter streams the original request body. Express and Fastify also preserve parsed JSON
-and URL-encoded bodies. For a custom parser or multipart upload, provide the explicit `getBody`
-adapter option:
+The Node adapter streams the original request body. Express and Fastify do the same when
+`request.body` is undefined, including untouched multipart uploads. Parsed JSON and flat URL-encoded
+fields (including arrays of scalar values) are serialized automatically. For nested URL-encoded
+objects or an already consumed custom/multipart body, provide `getBody`:
 
 ```ts
 app.use(adapterExpress(handler, {
@@ -226,7 +229,9 @@ headers.append('Set-Cookie', 'theme=dark; Path=/');
 Node transports use `headers.getSetCookie()` and emit distinct headers. Never split a
 `Set-Cookie` value on commas because an `Expires` attribute contains a comma.
 
-Loader/action redirects preserve their `Response` headers, including cookies. For rendered routes,
+Loader/action and server `<Navigate>` redirects also preserve headers set by `onRequest` and hooks
+that ran before the redirect. Redirect headers override matching hook headers; `Set-Cookie` values
+from both are appended separately. For rendered routes,
 React Router exposes loader/action headers on `context.routerContext`; copy the headers your HTML
 document needs in `onRouterReady`. A JSON loader's `Content-Type` is not the document's content type.
 
@@ -237,7 +242,9 @@ from `onRouterReady` to wait for the complete tree, for example for crawlers. `o
 receives chunks in either mode; a chunk is not guaranteed to contain a complete HTML tag.
 
 `abortDelay` limits React rendering, starting after loaders and request hooks finish. Pass
-`request.signal` to loader fetches to cancel their work on disconnect. Shell failures return 500;
+`request.signal` to loader fetches to cancel their work on disconnect. Node, Express and Fastify
+stop quietly if a loader rejects after the client disconnects; other handler errors still reach
+the framework's error handler. Shell failures return 500;
 errors after the shell has been sent keep the committed status and let React recover on the client.
 HEAD and 204/205/304 responses have no body. Set redirects and statuses before the shell is sent;
 components inside a suspended boundary cannot change headers after that point.

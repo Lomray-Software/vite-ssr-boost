@@ -102,4 +102,47 @@ describe('Fastify adapter', () => {
       await custom.close();
     }
   });
+
+  it('streams untouched multipart into the action when a parser leaves body undefined', async () => {
+    const custom = Fastify({ forceCloseConnections: true });
+
+    custom.addContentTypeParser('multipart/form-data', (_request, _payload, done) => {
+      done(null, undefined);
+    });
+    custom.post(
+      '/upload',
+      adapterFastify(async (request) => {
+        const form = await request.formData();
+        const file = form.get('file') as File;
+
+        return Response.json({ name: form.get('name'), file: await file.text() });
+      }),
+    );
+    custom.post(
+      '/empty',
+      adapterFastify(async (request) => new Response(await request.text()), {
+        getBody: () => null,
+      }),
+    );
+
+    try {
+      const origin = await custom.listen({ host: '127.0.0.1', port: 0 });
+      const body = new FormData();
+
+      body.set('name', 'Alice');
+      body.set('file', new Blob(['file contents']), 'test.txt');
+
+      const response = await fetch(`${origin}/upload`, { body, method: 'POST' });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ name: 'Alice', file: 'file contents' });
+
+      const empty = await fetch(`${origin}/empty`, { body, method: 'POST' });
+
+      expect(empty.status).toBe(200);
+      await expect(empty.text()).resolves.toBe('');
+    } finally {
+      await custom.close();
+    }
+  });
 });

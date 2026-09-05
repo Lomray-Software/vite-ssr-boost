@@ -35,13 +35,17 @@ const adapterFastify = (
     const requestSignal = createRequestSignal(req, reply.raw);
 
     try {
-      const requestBody = options.getBody
-        ? (options.getBody(request) ?? null)
-        : serializeBody(body, String(req.headers['content-type'] ?? ''));
-      const fetchRequest = createRequest(req, {
-        body: requestBody,
+      const requestOptions: { body?: BodyInit | null; signal: AbortSignal } = {
         signal: requestSignal.signal,
-      });
+      };
+
+      if (options.getBody) {
+        requestOptions.body = options.getBody(request) ?? null;
+      } else if (body !== undefined) {
+        requestOptions.body = serializeBody(body, String(req.headers['content-type'] ?? ''));
+      }
+
+      const fetchRequest = createRequest(req, requestOptions);
       const response = compressResponse(
         fetchRequest,
         await handler(fetchRequest, {
@@ -58,6 +62,13 @@ const adapterFastify = (
       });
       reply.hijack();
       await writeFetchResponse(reply.raw, response);
+    } catch (error) {
+      if (!requestSignal.signal.aborted) {
+        throw error;
+      }
+
+      // The socket is gone; prevent Fastify from attempting an automatic response.
+      reply.hijack();
     } finally {
       requestSignal.dispose();
     }

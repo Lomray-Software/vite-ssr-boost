@@ -20,4 +20,13 @@ describe('adapter body serialization', () => {
       'Provide the adapter getBody option',
     );
   });
+
+  it.each([{ user: { name: 'Alice' } }, { users: [{ name: 'Alice' }] }, { list: [['nested']] }])(
+    'rejects nested URL-encoded values rather than silently corrupting them',
+    (body) => {
+      expect(() => serializeBody(body, 'application/x-www-form-urlencoded')).toThrow(
+        'Provide the adapter getBody option',
+      );
+    },
+  );
 });

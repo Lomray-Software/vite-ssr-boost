@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { access, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
 const npmCli = process.env.npm_execpath;
 
@@ -10,7 +11,7 @@ if (!npmCli) {
   throw new Error('Run this proof through npm: npm run test:core:no-optional');
 }
 
-const directory = await mkdtemp(join(tmpdir(), 'vite-ssr-boost-core-'));
+const directory = await realpath(await mkdtemp(join(tmpdir(), 'vite-ssr-boost-core-')));
 const projectRoot = process.cwd();
 const runNpm = (args) =>
   execFileSync(process.execPath, [npmCli, ...args], {
@@ -133,16 +134,25 @@ try {
   await assertRuntimeClean('core');
   await assertRuntimeClean('edge');
 
+  // Exercise the installed package name: file URLs would bypass the exports map.
+  const files = (await readdir(packageRoot, { recursive: true }))
+    .filter((file) => /\.(?:js|d\.ts|map|json|md)$/.test(file) || /(?:LICENSE|Dockerfile)$/.test(file));
+  const resolutions = files.flatMap((file) => [
+    [file, pathToFileURL(join(packageRoot, file)).href],
+    ...(file.endsWith('.js') ? [[file.slice(0, -3), pathToFileURL(join(packageRoot, file)).href]] : []),
+  ]);
+
   const proof = `
-    const { default: createHandler } = await import(${JSON.stringify(
-      pathToFileURL(join(packageRoot, 'core', 'handler.js')).href,
-    )});
-    const { default: adapterEdge } = await import(${JSON.stringify(
-      pathToFileURL(join(packageRoot, 'adapters', 'edge.js')).href,
-    )});
-    const { default: adapterNode } = await import(${JSON.stringify(
-      pathToFileURL(join(packageRoot, 'adapters', 'node.js')).href,
-    )});
+    import assert from 'node:assert/strict';
+    for (const [subpath, expected] of ${JSON.stringify(resolutions)}) {
+      assert.equal(import.meta.resolve('@lomray/vite-ssr-boost/' + subpath), expected, subpath);
+    }
+    const { default: createHandler } = await import('@lomray/vite-ssr-boost/core/handler');
+    const { default: adapterEdge } = await import('@lomray/vite-ssr-boost/adapters/edge');
+    const { default: adapterNode } = await import('@lomray/vite-ssr-boost/adapters/node');
+    assert.equal(createHandler, (await import('@lomray/vite-ssr-boost/core/handler.js')).default);
+    assert.equal(adapterEdge, (await import('@lomray/vite-ssr-boost/adapters/edge.js')).default);
+    assert.equal(adapterNode, (await import('@lomray/vite-ssr-boost/adapters/node.js')).default);
     const response = await adapterEdge(async () => new Response('core-ok'))(
       new Request('https://edge.example/')
     );
@@ -155,10 +165,64 @@ try {
     }
   `;
 
-  execFileSync(process.execPath, ['--input-type=module', '--eval', proof], {
+  const runtimeProof = join(directory, 'consumer.mjs');
+
+  await writeFile(runtimeProof, proof);
+  execFileSync(process.execPath, [runtimeProof], {
     cwd: directory,
     stdio: 'inherit',
   });
+
+  const typeProof = join(directory, 'consumer.mts');
+
+  await writeFile(typeProof, `
+    import adapterEdge from '@lomray/vite-ssr-boost/adapters/edge';
+    import adapterEdgeJs from '@lomray/vite-ssr-boost/adapters/edge.js';
+    import type { TSsrHandler } from '@lomray/vite-ssr-boost/core/types';
+    import type { TSsrHandler as TSsrHandlerJs } from '@lomray/vite-ssr-boost/core/types.js';
+
+    const handler: TSsrHandler = async (request) => new Response(request.url);
+    const legacy: TSsrHandlerJs = handler;
+    const response: Response = await adapterEdge(handler)(new Request('https://example.com'));
+    const responseJs: Response = await adapterEdgeJs(legacy)(new Request('https://example.com'));
+    // @ts-expect-error A handler must return a Response, not a string.
+    const invalid: TSsrHandler = async () => 'invalid';
+    // @ts-expect-error The adapter requires a Fetch Request.
+    adapterEdge(handler)('https://example.com');
+  `);
+
+  for (const [module, moduleResolution] of [
+    [ts.ModuleKind.NodeNext, ts.ModuleResolutionKind.NodeNext],
+    [ts.ModuleKind.ESNext, ts.ModuleResolutionKind.Bundler],
+  ]) {
+    const options = { module, moduleResolution, noEmit: true, strict: true, skipLibCheck: true, target: ts.ScriptTarget.ES2022 };
+
+    for (const file of files.filter((name) => name.endsWith('.d.ts'))) {
+      const subpath = file.slice(0, -5);
+
+      for (const suffix of ['', '.js', '.d.ts']) {
+        const { resolvedModule } = ts.resolveModuleName(
+          `@lomray/vite-ssr-boost/${subpath}${suffix}`, typeProof, options, ts.sys,
+        );
+
+        if (resolvedModule?.resolvedFileName !== join(packageRoot, file)) {
+          throw new Error(`Declaration resolution failed: ${subpath}${suffix} (${moduleResolution}).`);
+        }
+      }
+    }
+
+    const diagnostics = ts.getPreEmitDiagnostics(ts.createProgram([typeProof], options));
+
+    if (diagnostics.length) {
+      throw new Error(ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+        getCanonicalFileName: (file) => file,
+        getCurrentDirectory: () => directory,
+        getNewLine: () => '\n',
+      }));
+    }
+  }
+
+  process.stdout.write('Packed exports, NodeNext/Bundler declarations and optional-free core passed.\n');
 } finally {
   await rm(directory, { force: true, recursive: true });
 }

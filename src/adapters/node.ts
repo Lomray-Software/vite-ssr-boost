@@ -43,6 +43,10 @@ const adapterNode = (handler: TSsrHandler, options: INodeAdapterOptions = {}): T
         options,
       );
     } catch (error) {
+      if (requestSignal.signal.aborted) {
+        return;
+      }
+
       if (next) {
         next(error);
       } else if (res.headersSent) {

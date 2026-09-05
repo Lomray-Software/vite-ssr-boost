@@ -172,17 +172,19 @@ describe('core render', () => {
       status: 302,
     });
 
-    await expect(
-      render(
-        {
-          createApp,
-          handler: createRouter(redirect) as never,
-          renderToStream: renderer.renderToStream,
-        },
-        createContext(),
-        {},
-      ),
-    ).resolves.toBe(redirect);
+    const response = await render(
+      {
+        createApp,
+        handler: createRouter(redirect) as never,
+        renderToStream: renderer.renderToStream,
+      },
+      createContext(),
+      {},
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe('/next');
+    expect(response.body).toBeNull();
     expect(renderer.renderToStream).not.toHaveBeenCalled();
   });
 

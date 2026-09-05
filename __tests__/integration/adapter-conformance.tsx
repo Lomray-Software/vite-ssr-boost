@@ -13,6 +13,7 @@ import adapterExpress from '@adapters/express';
 import adapterFastify from '@adapters/fastify';
 import adapterHono from '@adapters/hono';
 import adapterNode from '@adapters/node';
+import Navigate from '@components/navigate';
 import ResponseStatus from '@components/response-status';
 import createHandler from '@core/handler';
 import type { TRenderToStream } from '@core/render';
@@ -66,8 +67,19 @@ const createSsrHandler = (renderToStream: TRenderToStream, onAbort: () => void):
     },
     {
       Component: () => null,
-      loader: () => redirect('/render'),
+      loader: () => {
+        const headers = new Headers({ Location: '/render', 'X-Conformance': 'redirect' });
+
+        headers.append('Set-Cookie', 'redirect=1; Path=/');
+        headers.append('Set-Cookie', 'expires=2; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/');
+
+        return redirect('/render', { headers, status: 303 });
+      },
       path: '/redirect',
+    },
+    {
+      Component: () => <Navigate to="/render" />,
+      path: '/navigate',
     },
   ];
   const handler = createStaticHandler(routes);
@@ -105,7 +117,7 @@ const createSsrHandler = (renderToStream: TRenderToStream, onAbort: () => void):
           );
         }
 
-        const headers = new Headers({ 'X-Conformance': 'passed' });
+        const headers = new Headers({ 'Cache-Control': 'no-store', 'X-Conformance': 'passed' });
 
         headers.append('Set-Cookie', 'one=1; Path=/');
         headers.append('Set-Cookie', 'two=2; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/');
@@ -116,6 +128,14 @@ const createSsrHandler = (renderToStream: TRenderToStream, onAbort: () => void):
         };
       },
       onResponse: ({ html }) => html.replace('Привет', 'Hello'),
+      onRouterReady: ({ context }) => {
+        if (new URL(context.request.url).pathname === '/navigate') {
+          context.response.headers.set('X-Router-Ready', 'yes');
+          context.response.headers.append('Set-Cookie', 'router=1; Path=/');
+        }
+
+        return {};
+      },
       onShellError: ({ error }) => `<p data-shell-error>${error.message}</p>`,
       prepare: async ({ executionContext }) => {
         const hints = new Headers();
@@ -267,11 +287,36 @@ describe.each(factories)('$name SSR conformance', ({ renderer, start }) => {
     expect(html).toContain('</div></body></html>');
   });
 
-  it('preserves router redirects', async () => {
-    const response = await runtime.request('/redirect', { redirect: 'manual' });
+  it.each([
+    ['/redirect', 'GET', 303],
+    ['/redirect', 'HEAD', 303],
+    ['/navigate', 'GET', 301],
+    ['/navigate', 'HEAD', 301],
+  ])('merges hook headers and cookies for %s %s', async (path, method, status) => {
+    const response = await runtime.request(String(path), {
+      method: String(method),
+      redirect: 'manual',
+    });
 
-    expect(response.status).toBe(302);
+    expect(response.status).toBe(status);
     expect(response.headers.get('location')).toBe('/render');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('x-conformance')).toBe(
+      path === '/redirect' ? 'redirect' : 'passed',
+    );
+    expect(response.headers.getSetCookie()).toEqual([
+      'one=1; Path=/',
+      'two=2; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/',
+      ...(path === '/redirect'
+        ? ['redirect=1; Path=/', 'expires=2; Expires=Wed, 21 Oct 2037 07:28:00 GMT; Path=/']
+        : ['router=1; Path=/']),
+    ]);
+
+    if (path === '/navigate') {
+      expect(response.headers.get('x-router-ready')).toBe('yes');
+    }
+
+    await expect(response.text()).resolves.toBe('');
   });
 
   it('preserves a direct core Response', async () => {

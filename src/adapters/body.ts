@@ -4,7 +4,15 @@ const serializeForm = (body: Record<string, unknown>): URLSearchParams => {
   Object.entries(body).forEach(([name, value]) => {
     const values = Array.isArray(value) ? value : [value];
 
-    values.forEach((item) => form.append(name, item == null ? '' : String(item)));
+    values.forEach((item) => {
+      if (item != null && !['string', 'number', 'boolean', 'bigint'].includes(typeof item)) {
+        throw new TypeError(
+          'Cannot serialize nested or non-primitive URL-encoded fields. Provide the adapter getBody option.',
+        );
+      }
+
+      form.append(name, item == null ? '' : String(item));
+    });
   });
 
   return form;

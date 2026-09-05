@@ -7,6 +7,7 @@ import { ServerProvider } from '@context/server';
 import type { IServerContext } from '@context/server';
 import composeHtml from '@core/compose-html';
 import headResponse from '@core/head-response';
+import { mergeResponseHeaders } from '@core/headers';
 import transformHtml from '@core/transform-html';
 import type { ISsrExecutionContext } from '@core/types';
 import buildCustomState from '@helpers/build-custom-state';
@@ -112,7 +113,7 @@ const render = async <TAppProps,>(
   });
 
   if (queried instanceof Response) {
-    return headResponse(context.request, queried);
+    return headResponse(context.request, mergeResponseHeaders(queried, context.response.headers));
   }
 
   context.routerContext = queried;
@@ -230,7 +231,10 @@ const render = async <TAppProps,>(
       abort();
       await output.stream.cancel().catch(() => undefined);
 
-      return headResponse(context.request, serverResponse);
+      return headResponse(
+        context.request,
+        mergeResponseHeaders(serverResponse, context.response.headers),
+      );
     }
 
     context.response.status =
