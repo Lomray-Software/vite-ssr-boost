@@ -44,6 +44,8 @@ Start with the [minimal template](https://github.com/Lomray-Software/vite-templa
 
 For production, run `npm run build` and `npm run start:ssr`. For a SPA build, run `npm run build:spa` and `npm run start:spa`. See [Example projects](./docs/examples/index.md) for the `prod` template with state management and deployment workflows.
 
+Already running this in production? Point our [free performance audit](https://audit.lomray.com/?utm_source=github&utm_medium=readme-vite-ssr-boost&utm_campaign=owned-surface-github) at the URL. It reports Core Web Vitals, JavaScript bundle weight and whether the HTML really arrives server-rendered. No signup.
+
 ## Documentation
 
 Read the [documentation site](https://lomray-software.github.io/vite-ssr-boost/), the [comparison guide](./docs/guide/choosing.md) and the [FAQ](./docs/reference/faq.md).
