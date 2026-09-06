@@ -22,11 +22,56 @@ Typical shape:
 build/
   client/
   server/
+    server.js
+    assets-manifest.json
+    ssr-boost.json
 ```
 
 If you set `build.outDir: '../dist'`, start it with `ssr-boost start --build-dir dist`.
 
 When server output is built, the package also generates an SSR manifest for route assets.
+
+## Production startup
+
+`ssr-boost build` resolves Vite configuration and writes `server/ssr-boost.json`. This versioned
+descriptor contains the build root, base URL, build mode, public directory and output filenames
+resolved from the plugin's index/server options. Paths are relative to the output, so the build
+can be moved with its production dependencies. Deploy the descriptor with the rest of the build.
+Application hooks, loggers and middleware options remain in the compiled managed server entry.
+Development shortcuts, aliases, environment files and executable Vite plugin configuration are
+not serialized into the descriptor.
+
+Ordinary `ssr-boost start` invocations parse their flags with Node's argument parser, load the
+descriptor and start the existing managed Express server. The server loads Express, compression,
+the compiled application and its React rendering dependencies. It reads the HTML shell and route
+asset manifest on first use and caches them for that server. Colored server messages still use
+Chalk. Vite, config resolution, the CLI command tree, Commander, migration tools, Babel and
+TypeScript path analysis are absent from this serving path. Help, errors and optional-value
+syntax are delegated to the existing CLI parser; other commands load their implementations on demand.
+
+All start flags and the managed entry contract remain supported. Builds made by older versions
+without a descriptor retain the conventional `build`/`dist` paths; no Vite config is evaluated
+as a fallback. Rebuild to pick up changes to Vite or plugin configuration. The existing `--eject`
+runner also calls this same managed server implementation.
+
+Measure a built app with Node's profiler and module diagnostics:
+
+```bash
+NODE_ENV=production NODE_DEBUG=esm,module node --cpu-prof --trace-warnings \
+  node_modules/@lomray/vite-ssr-boost/cli.js start
+```
+
+Send requests before stopping the server to include first-request rendering and manifest reads
+in the profile. `NODE_DEBUG` covers ESM and CommonJS; `process.moduleLoadList` alone lists Node's
+internal/native modules and does not count all application imports. Keep profiling runs separate
+from timing runs because tracing changes startup costs.
+
+For repeatable acceptance measurements, run `node scripts/test-template.mjs /path/to/vite-template`
+from the library checkout after `npm run build`. Its cold-start measurement includes the npm
+launcher and waits for a complete HTTP 200, with five fresh processes and 25 ms polling. It also
+samples `process.memoryUsage()` in the listening server after TTFB, without forced GC. Both are
+compared with a plain ESM Express + `renderToPipeableStream` process using the same installed
+dependencies. See [acceptance gates](/reference/acceptance-gates) for the enforced budgets.
 
 ## Preview mode
 
@@ -88,7 +133,8 @@ These are useful when deployment expects a plain Node file or a serverless wrapp
 
 ## Static assets base
 
-If Vite uses a custom `base`, reflect it in server static middleware as well:
+New builds use the recorded Vite `base` as the default static middleware basename. An explicit
+middleware basename still takes precedence. For example:
 
 ```ts
 export default entryServer(App, routes, {

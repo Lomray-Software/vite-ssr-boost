@@ -220,7 +220,9 @@ class PrepareServer {
         expressStatic !== false
           ? {
               ...expressStatic,
-              basename: expressStatic?.basename ?? '/',
+              basename:
+                expressStatic?.basename ??
+                new URL(this.config.getParams().base ?? '/', 'http://localhost').pathname,
             }
           : false,
     };

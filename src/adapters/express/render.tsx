@@ -4,6 +4,7 @@ import React from 'react';
 import type { RouterState, StaticHandlerContext, StaticHandler } from 'react-router';
 import createFetchRequest from '@adapters/express/create-request';
 import type { TApp } from '@adapters/express/entry';
+import getRouteAssets from '@adapters/express/route-assets';
 import StreamError from '@constants/stream-error';
 import type { IServerContext } from '@context/server';
 import emitEarlyHints from '@core/early-hints';
@@ -19,7 +20,6 @@ import writeEarlyHints from '@node/write-early-hints';
 import writeFetchResponse, { writeFetchHeaders } from '@node/write-fetch-response';
 import Diagnostics, { isDiagnosticsEnabled } from '@services/diagnostics';
 import type ServerConfig from '@services/server-config';
-import SsrManifest from '@services/ssr-manifest';
 
 export interface IRequestContext<TAppProps = Record<any, any>> {
   /** @deprecated Use request; planned for removal in 9.0. */
@@ -402,11 +402,8 @@ async function render(
          */
         prepare: async ({ context: updated, executionContext }) => {
           const legacyContext = syncContext(updated);
-          const manifest = SsrManifest.get(config);
           const { matches, isSpa } = updated;
-
-          await manifest.prepareDevAssets(matches, isSpa);
-
+          const manifest = await getRouteAssets(config, matches, isSpa);
           const hints = manifest.injectAssets(legacyContext);
 
           if (legacyContext.hasEarlyHints) {

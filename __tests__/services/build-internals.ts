@@ -153,6 +153,8 @@ describe('Build internals', () => {
 
   it('should spawn builds, wait latest and preview watch mode', async () => {
     const service = prepareService({ mode: 'development', onFinish: vi.fn() });
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
+    const writeFile = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
     const stdout = {
       pipe: vi.fn(),
       on: vi.fn(),
@@ -183,6 +185,30 @@ describe('Build internals', () => {
       listener(new TextEncoder().encode('built in 123ms')),
     );
     expect(createDevMarkerMock).toHaveBeenCalled();
+    expect(writeFile).toHaveBeenCalledWith('/root/dist/server/ssr-boost.json', expect.any(String));
+  });
+
+  it('writes resolved serving options without retaining source paths or executable plugin options', () => {
+    const service = prepareService();
+    service.pluginConfig.indexFile = 'shop.html';
+    service.pluginConfig.serverFile = 'entries/shop.tsx';
+    service.pluginConfig.customShortcuts = [{ action: () => undefined }];
+    service.viteConfig.base = '/shop/';
+    service.viteConfig.mode = 'staging';
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
+    const writeFile = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+
+    service.writeProductionConfig();
+
+    expect(JSON.parse(String(writeFile.mock.calls[0][1]))).toEqual({
+      version: 1,
+      root: '..',
+      base: '/shop/',
+      mode: 'staging',
+      publicDir: 'client',
+      indexFile: 'client/shop.html',
+      serverFile: 'server/shop.js',
+    });
   });
 
   it.each([
