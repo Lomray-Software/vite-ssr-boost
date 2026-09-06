@@ -518,8 +518,9 @@ const configureBasename = async () => {
   await edit('vite.config.ts', "root: 'src',", "root: 'src', base: '/acceptance/',");
   await edit(
     'src/client.ts',
-    'init: async ({ isSSRMode }) => {',
-    "routerOptions: { basename: '/acceptance' }, init: async ({ isSSRMode }) => {",
+    // Insert at the entry options, independently of the init callback's parameters.
+    'entryClient(App, routes, {',
+    "entryClient(App, routes, { routerOptions: { basename: '/acceptance' },",
   );
   await edit(
     'src/server.ts',

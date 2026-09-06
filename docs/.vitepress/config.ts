@@ -61,6 +61,7 @@ export default defineConfig({
           { text: 'Server Lifecycle', link: '/guide/server-lifecycle' },
           { text: 'Runtime Adapters', link: '/guide/runtime-adapters' },
           { text: 'Deployment', link: '/guide/deployment' },
+          { text: 'Caching', link: '/guide/caching' },
         ],
       },
       {

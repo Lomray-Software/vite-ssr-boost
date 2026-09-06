@@ -9,7 +9,7 @@ import type { IServerContext } from '@context/server';
 import emitEarlyHints from '@core/early-hints';
 import { getHeaderEntries, getSetCookieHeaders } from '@core/headers';
 import coreRender from '@core/render';
-import type { ISsrRequestContext } from '@core/render';
+import type { ICoreRenderOptions, ISsrRequestContext } from '@core/render';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import renderToStream from '@node/render-to-stream';
 import createRequestSignal from '@node/request-signal';
@@ -46,7 +46,10 @@ export interface IRenderParams<TAppProps = Record<string, any>> {
   handler: StaticHandler;
 }
 
-export interface IRenderOptions<TAppProps = Record<string, any>> {
+export interface IRenderOptions<TAppProps = Record<string, any>> extends Pick<
+  ICoreRenderOptions<TAppProps>,
+  'documentHeaders' | 'sessionCookie' | 'protectPrivate'
+> {
   hydration?: 'early' | 'footer';
   nonce?: string;
   bootstrapScriptContent?: string;
@@ -214,6 +217,9 @@ async function render(
     hydration,
     nonce,
     bootstrapScriptContent,
+    documentHeaders,
+    sessionCookie,
+    protectPrivate,
     abortDelay = 15000,
   }: IRenderOptions,
 ): Promise<void> {
@@ -289,6 +295,9 @@ async function render(
         hydration,
         nonce,
         bootstrapScriptContent,
+        documentHeaders,
+        sessionCookie,
+        protectPrivate,
 
         /**
          * Read custom state through the legacy request context.

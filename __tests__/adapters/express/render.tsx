@@ -390,6 +390,37 @@ describe('legacy Express render adapter', () => {
     },
   );
 
+  it.each([false, true])(
+    'passes managed document rules through to real core rendering (session=%s)',
+    async (authenticated) => {
+      const { default: coreRender } =
+        await vi.importActual<typeof import('@core/render')>('@core/render');
+      const { config, context } = createContext();
+      context.req.headers.cookie = authenticated ? 'session=secret' : 'theme=dark';
+      let headers: Headers;
+      coreRenderMock.mockImplementationOnce(coreRender);
+      writeFetchResponseMock.mockImplementationOnce(async (_, response: Response) => {
+        headers = response.headers;
+        await response.text();
+      });
+      await render(
+        {
+          App: App as never,
+          handler: createStaticHandler([{ path: '*', Component: () => 'Page' }]),
+        },
+        config as never,
+        context as never,
+        {
+          sessionCookie: 'session',
+          documentHeaders: [{ when: () => true, set: { 'Cache-Control': 'public, s-maxage=30' } }],
+        },
+      );
+      expect(headers!.get('Cache-Control')).toBe(
+        authenticated ? 'private, no-store' : 'public, s-maxage=30',
+      );
+    },
+  );
+
   it('keeps Express redirect behavior for legacy consumers', async () => {
     const { config, context, res } = createContext();
 

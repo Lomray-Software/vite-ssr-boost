@@ -168,6 +168,13 @@ try {
     const { default: createHandler } = await import('@lomray/vite-ssr-boost/core/handler');
     const { default: adapterEdge } = await import('@lomray/vite-ssr-boost/adapters/edge');
     const { default: adapterNode } = await import('@lomray/vite-ssr-boost/adapters/node');
+    const http = await import('@lomray/vite-ssr-boost/http');
+    const httpJs = await import('@lomray/vite-ssr-boost/http.js');
+    for (const name of ['cacheControl', 'documentHeaders', 'copyLoaderHeaders', 'conditionalRequest']) {
+      assert.equal(typeof http[name], 'function', name);
+      assert.equal(http[name], httpJs[name], name);
+    }
+    assert.equal(http.cacheControl({ private: true, noStore: true }), 'private, no-store');
     const production = await import('@lomray/vite-ssr-boost/node/production');
     const productionJs = await import('@lomray/vite-ssr-boost/node/production.js');
     for (const name of ['loadHtmlShell', 'createRouteAssetPreparer']) {
@@ -210,6 +217,13 @@ try {
     import type { IHtmlShell, ILoadHtmlShellOptions, IRouteAssetPreparerOptions } from '@lomray/vite-ssr-boost/node/production';
     import type { IHtmlShell as IHtmlShellJs } from '@lomray/vite-ssr-boost/node/production.js';
     import type { ICreateHandlerOptions } from '@lomray/vite-ssr-boost/core/handler';
+    import { cacheControl, documentHeaders, conditionalRequest } from '@lomray/vite-ssr-boost/http';
+    import type { IDocumentHeaderRule } from '@lomray/vite-ssr-boost/http.js';
+    const rules: IDocumentHeaderRule[] = [{ when: ({ hasCookie }) => !hasCookie('session'), set: { 'Cache-Control': cacheControl({ public: true, sMaxAge: 30 }) } }];
+    const headers: Headers = documentHeaders(rules, { sessionCookie: 'session' })({ request: new Request('https://example.com'), response: { headers: new Headers() } });
+    const conditional: Response | undefined = conditionalRequest(new Request('https://example.com'), { etag: '"v1"' });
+    // @ts-expect-error Cache durations are numeric seconds.
+    cacheControl({ maxAge: '30' });
 
     const shellOptions: ILoadHtmlShellOptions = { indexFile: '/app/build/client/index.html' };
     const assetOptions: IRouteAssetPreparerOptions = { buildDir: '/app/build', modulePreload: true };
@@ -263,7 +277,7 @@ try {
     }
   }
 
-  process.stdout.write('Packed exports (including node/production), NodeNext/Bundler declarations and optional-free core passed.\n');
+  process.stdout.write('Packed exports (including http and node/production), NodeNext/Bundler declarations and optional-free core passed.\n');
 } finally {
   await rm(directory, { force: true, recursive: true });
 }

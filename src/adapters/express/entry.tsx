@@ -31,6 +31,9 @@ export interface IEntrypointOptions<TAppProps = Record<string, any>> extends Pic
   | 'hydration'
   | 'nonce'
   | 'bootstrapScriptContent'
+  | 'documentHeaders'
+  | 'sessionCookie'
+  | 'protectPrivate'
 > {
   onServerCreated?: (app: Express, serverApi: ServerApi) => Promise<void> | void;
   onServerStarted?: (app: Express, serverApi: ServerApi, server: Server) => Promise<void> | void;

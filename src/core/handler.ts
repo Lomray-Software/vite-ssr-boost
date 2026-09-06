@@ -1,3 +1,4 @@
+import { hasCookie } from '@core/document-headers';
 import headResponse from '@core/head-response';
 import render from '@core/render';
 import type { ICoreRenderOptions, ICoreRenderParams, ISsrRequestContext } from '@core/render';
@@ -46,17 +47,23 @@ const createHandler = <TAppProps = Record<string, any>>(
    * Build fresh context for this request before invoking the renderer.
    */
   return async (request, executionContext) => {
+    const requestDiagnostics = isDiagnosticsEnabled(diagnostics)
+      ? new Diagnostics(new URL(request.url).pathname)
+      : undefined;
     const requestInit = await onRequest?.({ executionContext, request });
 
     if (requestInit instanceof Response) {
+      requestDiagnostics?.inspectCachePolicy(
+        requestInit.headers,
+        Boolean(options.sessionCookie && hasCookie(request, options.sessionCookie)),
+      );
+
       return headResponse(request, requestInit);
     }
 
     const context: ISsrRequestContext<TAppProps> = {
       appProps: (requestInit?.appProps ?? {}) as NonNullable<TAppProps>,
-      diagnostics: isDiagnosticsEnabled(diagnostics)
-        ? new Diagnostics(new URL(request.url).pathname)
-        : undefined,
+      diagnostics: requestDiagnostics,
       html: await getHtml(request),
       request,
       response: {
