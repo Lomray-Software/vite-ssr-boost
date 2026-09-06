@@ -83,6 +83,10 @@ Return:
 
 This is the place to switch between streaming and full-document rendering based on user agent, route match or any other request-level policy.
 
+## Promise streaming and hydration
+
+Loader/action promises stream by default. Set `hydration: 'early'` in the lifecycle configuration (or Fetch handler options) to hydrate the parsed shell while boundaries are pending. The early block contains `getState` custom state before router state, so custom state must be available at `onShellReady`. Default footer ordering remains custom state, router state, footer. `nonce` applies to React and all generated scripts; `bootstrapScriptContent` is forwarded with the early shell marker prepended when enabled. See [Stream loader data](/guide/data-streaming).
+
 ## `onShellReady`
 
 Replaces the template header or footer around the React stream. Generated hydration state is
@@ -147,6 +151,8 @@ The React render aborts when:
 - `abortDelay` is exceeded
 - the client disconnects before the response finishes
 - a source or destination stream fails
+
+Pending loader/action promises also reject on abort; connected browsers receive rejection scripts before closing. The timer remains active until both React and router promises finish, including unused data.
 
 The timer starts after loaders and `onRouterReady` finish. Use the loader's `request.signal` for
 outbound requests. Finishing the incoming request body does not cancel a response still streaming.

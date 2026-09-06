@@ -1,3 +1,4 @@
+import script from '@core/script';
 import htmlEscape from '@helpers/html-escape';
 import type Diagnostics from '@services/diagnostics';
 
@@ -7,6 +8,8 @@ import type Diagnostics from '@services/diagnostics';
 function buildCustomState(
   initState?: Record<string, Record<string, any>> | void,
   diagnostics?: Diagnostics,
+  nonce?: string,
+  isTemporary = false,
 ): string {
   diagnostics?.inspectState(initState);
 
@@ -20,7 +23,7 @@ function buildCustomState(
       ? `.${key}`
       : `[${htmlEscape(JSON.stringify(key))}]`;
 
-    return `<script async>window${property} = JSON.parse(${json});</script>`;
+    return script(`window${property} = JSON.parse(${json});`, nonce, isTemporary);
   });
 
   return stateScripts.join('').trim();

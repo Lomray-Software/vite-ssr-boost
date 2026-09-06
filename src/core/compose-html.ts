@@ -1,84 +1,147 @@
-/**
- * Stream the shell, React body and hydration footer under downstream backpressure.
- */
+import type DataStream from '@core/data-stream';
+import htmlBoundary from '@core/html-boundary';
+
+/** Stream shell, data frames, React bytes and footer only under downstream demand. */
 const composeHtml = (
   header: string,
   body: ReadableStream<Uint8Array>,
   footer: string,
   abort?: (reason?: unknown) => void,
   onComplete?: () => void,
+  data?: DataStream,
 ): ReadableStream<Uint8Array> => {
   const encoder = new TextEncoder();
   const reader = body.getReader();
   let phase: 'body' | 'footer' | 'header' = 'header';
+  let isStopped = false;
+  let isReleased = false;
+  let pendingRead: Promise<ReadableStreamReadResult<Uint8Array>> | undefined;
+  const observe = htmlBoundary();
+  let canInject = true;
+  let heldChunk: Uint8Array | undefined;
+
+  /** Release exactly once, including cancellation during an outstanding read. */
+  const release = (): void => {
+    if (!isReleased) {
+      isReleased = true;
+      reader.releaseLock();
+    }
+  };
 
   return new ReadableStream<Uint8Array>(
     {
-      /**
-       * Release the React reader when the response consumer cancels.
-       */
+      /** Cancel immediately; a disconnected consumer cannot receive abort scripts. */
       cancel: async (reason) => {
+        isStopped = true;
         abort?.(reason);
-
-        if (phase === 'footer') {
-          return;
-        }
+        data?.cancel();
 
         try {
-          await reader.cancel(reason);
+          if (!isReleased) {
+            await reader.cancel(reason);
+          }
         } finally {
-          reader.releaseLock();
+          release();
           onComplete?.();
         }
       },
 
-      /**
-       * Emit one available shell or React chunk per downstream pull.
-       */
+      /** Keep at most the one React read requested by the current downstream pull. */
       async pull(controller) {
-        if (phase === 'header') {
-          phase = 'body';
+        try {
+          if (phase === 'header') {
+            phase = 'body';
 
-          if (header) {
-            controller.enqueue(encoder.encode(header));
+            if (header) {
+              controller.enqueue(encoder.encode(header));
 
+              return;
+            }
+          }
+
+          while (!isStopped) {
+            const frames = canInject ? data?.take() : undefined;
+
+            if (isStopped) {
+              return;
+            }
+
+            if (frames) {
+              controller.enqueue(encoder.encode(frames));
+
+              return;
+            }
+
+            if (heldChunk) {
+              canInject = observe(heldChunk);
+              controller.enqueue(heldChunk);
+              heldChunk = undefined;
+
+              return;
+            }
+
+            if (phase === 'body') {
+              pendingRead ??= reader.read();
+              const chunk = await (data && !data.isDone && canInject
+                ? Promise.race([pendingRead, data.changed().then(() => undefined)])
+                : pendingRead);
+
+              if (isStopped) {
+                return;
+              }
+
+              if (!chunk) {
+                continue;
+              }
+
+              pendingRead = undefined;
+
+              if (!chunk.done) {
+                heldChunk = chunk.value;
+                // Settle data already resolved by this React boundary before its HTML.
+                continue;
+              }
+
+              phase = 'footer';
+              canInject = true;
+              release();
+              continue;
+            }
+
+            if (data && !data.isDone) {
+              await data.changed();
+              continue;
+            }
+
+            if (footer) {
+              controller.enqueue(encoder.encode(footer));
+            }
+
+            isStopped = true;
+            onComplete?.();
+            controller.close();
+          }
+        } catch (error) {
+          if (isStopped) {
             return;
           }
-        }
 
-        if (phase === 'body') {
-          let chunk: ReadableStreamReadResult<Uint8Array>;
+          isStopped = true;
+          abort?.(error);
+          data?.cancel();
+          controller.error(error);
 
           try {
-            chunk = await reader.read();
-          } catch (error) {
-            abort?.(error);
-            reader.releaseLock();
+            if (!isReleased) {
+              await reader.cancel(error).catch(() => undefined);
+            }
+          } finally {
+            release();
             onComplete?.();
-            controller.error(error);
-
-            return;
           }
-
-          if (!chunk.done) {
-            controller.enqueue(chunk.value);
-
-            return;
-          }
-
-          phase = 'footer';
-          reader.releaseLock();
-          onComplete?.();
         }
-
-        if (footer) {
-          controller.enqueue(encoder.encode(footer));
-        }
-
-        controller.close();
       },
     },
-    // Do not start reading React while a downstream wrapper is still delivering the header.
     { highWaterMark: 0 },
   );
 };

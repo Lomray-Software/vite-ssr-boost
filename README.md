@@ -52,6 +52,8 @@ npm create @lomray/ssr-app@latest my-app -- --template full
 
 Starting a new app? Choose one of the [template branches](./docs/examples/index.md) with the [`npm create` command](./docs/guide/getting-started.md#create-a-new-app) or clone the branch directly.
 
+To defer loader work, return `{ title, slow: fetchUsers() }` and render `slow` with Suspense and `<Await>`; see the [streaming guide](./docs/guide/data-streaming.md).
+
 ## Who this is for
 
 - Teams adding SSR to a Vite SPA with React Router route objects.
@@ -66,9 +68,13 @@ Starting a new app? Choose one of the [template branches](./docs/examples/index.
 - Your React version within the package's peer range: React and React DOM `>=18.2.0`.
 - Your hosting choice, provided it can run the selected SSR transport or serve SPA files.
 
+Loader and action promises support `<Await>` and React 19 `use()` during hydration by default. [Stream loader data](./docs/guide/data-streaming.md) shows the loader pattern and `hydration: 'early'` for shell interaction before slow boundaries finish.
+
 ## What you add
 
 Add `SsrBoost()` to the Vite plugins, wire `client.ts` and `server.ts`, and replace the Vite scripts with `ssr-boost` commands. The [migration guide](./docs/guide/migrate-existing-spa.md) includes these entries and the HTML outlet, copied from the minimal example.
+
+Deferred router data needs no additional state library. Keep footer hydration by default, or opt into early hydration with custom state available at `onShellReady`.
 
 ## Choose your server
 

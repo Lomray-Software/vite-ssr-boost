@@ -23,3 +23,7 @@ Choose [Next.js App Router](https://nextjs.org/docs/app) when you want its file-
 ## Does it work on Bun, Deno, Cloudflare?
 
 Yes, through the Fetch core, `@lomray/vite-ssr-boost/edge/render-to-stream` and `@lomray/vite-ssr-boost/adapters/edge`. Use the [runtime adapter integration](/guide/runtime-adapters#cloudflare-workers) with `Bun.serve`, `Deno.serve` or a Cloudflare Worker Fetch entry, and provide bundling, static assets and route-asset injection. Cloudflare bundles need the `workerd` and `worker` resolution conditions. The managed CLI and its Vercel/serverless output use Node and Express; they do not produce a Worker bundle.
+
+## Can `<Await>` and React 19 `use()` hydrate loader promises?
+
+Yes. Loader and action promises stream by default, including nested promises. The browser reconstructs them before creating the Data router. Enable `hydration: 'early'` to hydrate the shell while slow boundaries are pending; custom state must be ready at `onShellReady`. The default retains footer hydration. [Stream loader data](/guide/data-streaming) covers examples, errors and buffered crawler responses.

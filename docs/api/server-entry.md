@@ -46,6 +46,9 @@ The entry returns a render definition consumed by the runtime server. It include
 
 ```ts
 interface IEntrypointOptions<TAppProps> {
+  hydration?: 'footer' | 'early';
+  nonce?: string;
+  bootstrapScriptContent?: string;
   onServerCreated?;
   onServerStarted?;
   onRequest?;

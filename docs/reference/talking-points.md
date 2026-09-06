@@ -21,9 +21,9 @@ The managed Express CLI is the default path for Vite development, HMR, static as
 
 ## Data loading
 
-Loader results are serialized with `JSON.stringify` into `window.__staticRouterHydrationData`, so a loader must return plain data for the first paint. Nested promises become `{}`; `<Await>` or `use()` cannot hydrate those loader promises. For streamed or deferred data, follow the [prod branch pattern](https://github.com/Lomray-Software/vite-template/tree/prod): component-level Suspense with a request-scoped cache, `getState`, `@lomray/consistent-suspense` and `@lomray/react-mobx-manager`.
+Loader and action promises stream by default in Data mode. Return `{ fast, slow: fetchSlow() }` and consume `slow` inside Suspense with `<Await>` or React 19 `use()`. The browser reconstructs native promises before creating the router; client navigation loaders keep their native promises. See [Stream loader data](/guide/data-streaming) for the supported value matrix, errors and opt-in `hydration: 'early'`. Custom `getState` snapshots still use JSON.
 
-The browser entry waits for document readiness or the router state assignment, together with matched lazy route preloads, before creating the router. Custom state is written before router state in the footer; see [Hydration order and streaming](/reference/hydration-and-streaming) for the timing and the `onResponse` contract.
+The browser entry waits for document readiness or the router state assignment, together with matched lazy route preloads, before creating the router. Custom state is written before router state in the footer by default. `hydration: 'early'` publishes both at shell-ready and waits for React's parsed-shell marker; see [Hydration order and streaming](/reference/hydration-and-streaming) for the timing and the `onResponse` contract.
 
 ## Who this is for
 

@@ -19,7 +19,7 @@ The RSC implementations linked above have different release contracts: React Rou
 
 ## Loader data in vite-ssr-boost
 
-Loader results are serialized with `JSON.stringify` into `window.__staticRouterHydrationData`, so a loader must return plain data for the first paint. Nested promises become `{}`; `<Await>` or `use()` cannot hydrate those loader promises. For streamed or deferred data, follow the [prod branch pattern](https://github.com/Lomray-Software/vite-template/tree/prod): component-level Suspense with a request-scoped cache, `getState`, `@lomray/consistent-suspense` and `@lomray/react-mobx-manager`.
+Loader and action promises stream by default in Data mode. Use Suspense with `<Await>` or React 19 `use()` for slow fields, and opt into `hydration: 'early'` when the shell should become interactive before slow boundaries finish. See [Stream loader data](/guide/data-streaming) for the value matrix and custom-state constraint.
 
 ## Choose a project
 

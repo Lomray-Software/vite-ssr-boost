@@ -3,6 +3,7 @@ import Logger from '@services/logger';
 
 type TDiagnosticCode =
   | 'SSR_BOOST_LOADER_NOT_SERIALIZABLE'
+  | 'SSR_BOOST_STREAM_PROMISE_ABORTED'
   | 'SSR_BOOST_STATE_NOT_SERIALIZABLE'
   | 'SSR_BOOST_OUTLET_MISSING'
   | 'SSR_BOOST_HYDRATION_STATE_MISSING'
@@ -78,15 +79,27 @@ const valueType = (value: unknown): string => {
 };
 
 /**
- * Find values JSON cannot preserve, descending only into plain objects and arrays.
+ * Custom state uses JSON. Router state also supports promises, Date, RegExp, bigint,
+ * Map and Set through the stream codec; functions, symbols, classes and cycles warn.
  */
 const walkSerializable = (
   value: unknown,
   report: (issue: ISerializationIssue) => void,
   path = '$',
   ancestors = new Set<object>(),
+  streamed = false,
 ): void => {
   const type = typeof value;
+
+  if (
+    streamed &&
+    (value instanceof Promise ||
+      value instanceof Date ||
+      value instanceof RegExp ||
+      type === 'bigint')
+  ) {
+    return;
+  }
 
   if (type === 'function' || type === 'bigint' || type === 'symbol') {
     report({ path, reason: `${valueType(value)} is not JSON-serializable` });
@@ -102,6 +115,7 @@ const walkSerializable = (
   const prototype: unknown = Object.getPrototypeOf(object);
 
   if (
+    !(streamed && (object instanceof Map || object instanceof Set)) &&
     prototype !== Object.prototype &&
     prototype !== null &&
     !(Array.isArray(object) && prototype === Array.prototype)
@@ -124,7 +138,17 @@ const walkSerializable = (
 
   ancestors.add(object);
 
-  for (const [key, child] of Object.entries(object)) {
+  const entries =
+    streamed && object instanceof Map
+      ? [...(object as Map<unknown, unknown>)].flatMap(([key, child], index) => [
+          [`${index}.key`, key],
+          [`${index}.value`, child],
+        ])
+      : streamed && object instanceof Set
+        ? [...(object as Set<unknown>)].map((child, index) => [String(index), child])
+        : Object.entries(object);
+
+  for (const [key, child] of entries as [string, unknown][]) {
     const suffix =
       Array.isArray(object) && /^(0|[1-9]\d*)$/.test(key)
         ? `[${key}]`
@@ -132,7 +156,7 @@ const walkSerializable = (
           ? `.${key}`
           : `[${JSON.stringify(key)}]`;
 
-    walkSerializable(child, report, path + suffix, ancestors);
+    walkSerializable(child, report, path + suffix, ancestors, streamed);
   }
 
   ancestors.delete(object);
@@ -193,9 +217,34 @@ class Diagnostics {
               `Route ${JSON.stringify(route)} at ${path}: ${reason}.`,
             ),
           `${kind}[${JSON.stringify(route)}]`,
+          new Set(),
+          true,
         );
       }
     }
+  }
+
+  /** Report the request's pending loader/action promises at the render deadline. */
+  public streamAborted(count: number): void {
+    this.warn(
+      'SSR_BOOST_STREAM_PROMISE_ABORTED',
+      `Route ${JSON.stringify(this.route)} aborted with ${count} pending loader/action promise(s); the browser receives a rejection when connected.`,
+    );
+  }
+
+  /** Inspect streamed resolutions with the same supported value matrix as initial data. */
+  public inspectStreamValue(value: unknown, id: number): void {
+    walkSerializable(
+      value,
+      ({ path, reason }) =>
+        this.warn(
+          'SSR_BOOST_LOADER_NOT_SERIALIZABLE',
+          `Route ${JSON.stringify(this.route)} at ${path}: ${reason}.`,
+        ),
+      `promise[${id}]`,
+      new Set(),
+      true,
+    );
   }
 
   /**

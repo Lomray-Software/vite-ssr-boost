@@ -44,6 +44,9 @@ export interface IRenderParams<TAppProps = Record<string, any>> {
 }
 
 export interface IRenderOptions<TAppProps = Record<string, any>> {
+  hydration?: 'early' | 'footer';
+  nonce?: string;
+  bootstrapScriptContent?: string;
   abortDelay?: number;
   getBody?: (request: ExpressRequest) => BodyInit | null | undefined;
   onRouterReady?: (params: {
@@ -174,6 +177,9 @@ async function render(
     onError,
     getBody,
     getState,
+    hydration,
+    nonce,
+    bootstrapScriptContent,
     abortDelay = 15000,
   }: IRenderOptions,
 ): Promise<void> {
@@ -223,6 +229,9 @@ async function render(
       coreContext,
       {
         abortDelay,
+        hydration,
+        nonce,
+        bootstrapScriptContent,
 
         /**
          * Read custom state through the legacy request context.

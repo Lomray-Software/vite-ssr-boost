@@ -11,7 +11,10 @@ const getRenderer = async (): Promise<typeof ReactDOMServer.renderToReadableStre
 /**
  * Adapt React Web streams and settle readiness even when initialization is aborted.
  */
-const renderToStream: TRenderToStream = async (node, { onError, signal }) => {
+const renderToStream: TRenderToStream = async (
+  node,
+  { onError, signal, nonce, bootstrapScriptContent },
+) => {
   const controller = new AbortController();
   let rejectPending!: (reason: Error) => void;
 
@@ -46,7 +49,12 @@ const renderToStream: TRenderToStream = async (node, { onError, signal }) => {
   try {
     stream = await Promise.race([
       getRenderer().then((renderToReadableStream) =>
-        renderToReadableStream(node, { onError, signal: controller.signal }),
+        renderToReadableStream(node, {
+          onError,
+          signal: controller.signal,
+          nonce,
+          bootstrapScriptContent,
+        }),
       ),
       pendingAbort,
     ]);
