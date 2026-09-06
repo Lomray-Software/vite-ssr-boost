@@ -483,7 +483,11 @@ class Build {
     fs.mkdirSync(this.buildDir, { recursive: true });
     fs.writeFileSync(
       path.join(this.buildDir, 'ssr-boost-diagnostics.json'),
-      JSON.stringify({ codes: [...this.diagnosticCodes].sort() }, null, 2),
+      JSON.stringify(
+        { codes: [...this.diagnosticCodes].sort((a, b) => a.localeCompare(b)) },
+        null,
+        2,
+      ),
     );
     onFinish?.();
   }

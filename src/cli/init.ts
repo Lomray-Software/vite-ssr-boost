@@ -181,7 +181,7 @@ export const planInit = (options: IInitOptions = {}): IFileChange[] => {
 
   const src = html.attribute(html.entries[0], 'src')!;
 
-  if (/^(?:\w+:|\/\/)|[?#]/.test(src)) {
+  if (/(?:^(?:\w+:|\/\/))|[?#]/.test(src)) {
     throw sourceError(indexFile, undefined, 'non-local browser entry URL');
   }
 

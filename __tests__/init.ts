@@ -225,6 +225,31 @@ describe('init', () => {
     expect(() => planInit({ root })).toThrow(expected);
   });
 
+  it.each([
+    'https://example.com/main.tsx',
+    '//example.com/main.tsx',
+    '/src/main.tsx?import',
+    '/src/main.tsx#app',
+  ])(
+    'rejects non-local entry URLs, including query/fragment characters after the path: %s',
+    (src) => {
+      const root = fixture();
+      const file = path.join(root, 'index.html');
+      fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('/src/main.tsx', src));
+      expect(() => planInit({ root })).toThrow('non-local browser entry URL');
+    },
+  );
+
+  it('anchors the protocol-relative URL alternative to the start of the entry', () => {
+    const root = fixture();
+    const file = path.join(root, 'index.html');
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, 'utf8').replace('/src/main.tsx', '/src//main.tsx'),
+    );
+    expect(planInit({ root }).some((change) => change.file === 'src/main.tsx')).toBe(true);
+  });
+
   it('keeps CRLF, quotes, comments and plugins in untouched code', () => {
     const root = fixture();
     const file = path.join(root, 'vite.config.ts');

@@ -4,7 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { copyFixture, writeFixture } from '@__helpers__/project-fixture';
-import runDoctor, { inspectProject, reactCopies, supportBundle, TESTED_MATRIX } from '@cli/doctor';
+import runDoctor, {
+  inspectProject,
+  reactCopies,
+  resolveNpmCli,
+  supportBundle,
+  TESTED_MATRIX,
+} from '@cli/doctor';
 import runInit from '@cli/init';
 import { libraryPackage } from '@cli/project';
 
@@ -43,6 +49,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   directories
     .splice(0)
     .forEach((directory) => fs.rmSync(directory, { recursive: true, force: true }));
@@ -50,6 +57,56 @@ afterEach(() => {
 });
 
 describe('doctor', () => {
+  it.each([
+    { label: 'npm_execpath before either bundled layout', available: [0, 1, 2], selected: 0 },
+    { label: 'Unix runtime layout before Windows layout', available: [1, 2], selected: 1 },
+    { label: 'Windows runtime layout', available: [2], selected: 2 },
+    { label: 'bare npm only when no CLI exists', available: [], selected: undefined },
+  ])('resolves $label and preserves the React-copy result', ({ available, selected }) => {
+    const candidates = [
+      path.resolve('/npm-execpath/bin/npm-cli.js'),
+      path.join(
+        path.dirname(process.execPath),
+        '..',
+        'lib',
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      ),
+      path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    ];
+    vi.stubEnv('npm_execpath', candidates[0]);
+    vi.spyOn(fs, 'existsSync').mockImplementation((file) =>
+      available.some((index) => file === candidates[index]),
+    );
+    const npmCli = selected === undefined ? undefined : candidates[selected];
+    expect(resolveNpmCli()).toBe(npmCli);
+    const root = path.resolve('/app');
+    expect(reactCopies(root)).toEqual({ react: 1, 'react-dom': 1 });
+    const args = ['ls', 'react', 'react-dom', '--json', '--all', '--long'];
+    expect(childProcess.execFileSync).toHaveBeenCalledWith(
+      npmCli ? process.execPath : 'npm',
+      npmCli ? [npmCli, ...args] : args,
+      expect.objectContaining({ cwd: root, shell: false }),
+    );
+  });
+
+  it('uses the runtime npm when npm_execpath is unset', () => {
+    vi.stubEnv('npm_execpath', undefined);
+    const npmCli = path.join(
+      path.dirname(process.execPath),
+      '..',
+      'lib',
+      'node_modules',
+      'npm',
+      'bin',
+      'npm-cli.js',
+    );
+    vi.spyOn(fs, 'existsSync').mockImplementation((file) => file === npmCli);
+    expect(resolveNpmCli()).toBe(npmCli);
+  });
+
   it('keeps the published matrix synchronized with the actual CI matrix', () => {
     const workflow = fs.readFileSync('.github/workflows/react-compatibility.yml', 'utf8');
     const rows = [

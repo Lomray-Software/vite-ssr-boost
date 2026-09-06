@@ -55,16 +55,32 @@ interface INpmTree {
   dependencies?: Record<string, INpmTree>;
 }
 
+/** Prefer npm's own CLI, then the npm bundled beside the current Node runtime. */
+export const resolveNpmCli = (): string | undefined => {
+  const directory = path.dirname(process.execPath);
+  const candidates = [
+    process.env.npm_execpath,
+    path.join(directory, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(directory, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+
+  return candidates.find((candidate) => candidate && fs.existsSync(candidate));
+};
+
 /** Inspect npm's dependency tree, counting physical copies rather than dependants. */
 export const reactCopies = (root: string): { react: number; 'react-dom': number } => {
   let output: string;
 
   try {
+    const npmCli = resolveNpmCli();
+    const args = ['ls', 'react', 'react-dom', '--json', '--all', '--long'];
+
     output = childProcess.execFileSync(
-      'npm',
-      ['ls', 'react', 'react-dom', '--json', '--all', '--long'],
+      npmCli ? process.execPath : 'npm',
+      npmCli ? [npmCli, ...args] : args,
       {
         cwd: root,
+        shell: false,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 20_000,
