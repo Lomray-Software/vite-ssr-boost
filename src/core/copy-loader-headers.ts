@@ -6,7 +6,11 @@ import { getHeaderEntries, getSetCookieHeaders } from '@core/headers';
  * The first ordinary value wins (including Cache-Control); all cookies are appended.
  */
 const copyLoaderHeaders = (
-  routerContext: Pick<StaticHandlerContext, 'matches' | 'loaderHeaders' | 'actionHeaders'>,
+  {
+    matches,
+    loaderHeaders,
+    actionHeaders,
+  }: Pick<StaticHandlerContext, 'matches' | 'loaderHeaders' | 'actionHeaders'>,
   { allow }: { allow: readonly string[] },
 ): Headers => {
   const headers = new Headers();
@@ -14,15 +18,17 @@ const copyLoaderHeaders = (
 
   allowed.delete('content-type');
 
-  for (const { route } of routerContext.matches) {
-    for (const source of [
-      routerContext.loaderHeaders[route.id],
-      routerContext.actionHeaders[route.id],
-    ]) {
+  for (const {
+    route: { id },
+  } of matches) {
+    for (const source of [loaderHeaders[id], actionHeaders[id]]) {
       if (!source) {
         continue;
       }
 
+      /**
+       * Keep the first allowed ordinary header across matched loaders and actions.
+       */
       getHeaderEntries(source).forEach(([name, value]) => {
         if (allowed.has(name.toLowerCase()) && !headers.has(name)) {
           headers.set(name, value);

@@ -1,5 +1,7 @@
 interface IBrowserTimelineEvent {
   stage: 'shell' | 'router.ready' | 'init' | 'resolve' | 'reject' | 'response.end';
+
+  /** Monotonic milliseconds since the browser's time origin. */
   at: number;
   id?: number;
 }
@@ -8,12 +10,26 @@ interface IBrowserObservation {
   events: IBrowserTimelineEvent[];
   errors: string[];
   roots: Record<string, string>;
+
+  /** First visible observation of each element, in monotonic milliseconds. */
   seen: WeakMap<Element, number>;
+
+  /** First visible shell observation, in monotonic milliseconds. */
   shellAt?: number;
 }
 
+interface IHydrationInspection {
+  ready: boolean;
+  consumed: boolean;
+  pending: number;
+  duplicates: string[];
+  errors: string[];
+}
+
 declare global {
-  // Browser global augmentation keeps the platform interface name.
+  /**
+   * Browser global augmentation keeps the platform interface name.
+   */
   // eslint-disable-next-line @typescript-eslint/naming-convention
   interface Window {
     __ssrBoostTest?: IBrowserObservation;
@@ -32,22 +48,30 @@ const installBrowserObserver = (): void => {
     roots: {},
     seen: new WeakMap(),
   };
+  const { events, errors, roots, seen } = state;
 
   window.__ssrBoostTest = state;
 
+  /**
+   * Record browser milestones on the same monotonic clock.
+   */
   const record = (stage: IBrowserTimelineEvent['stage'], id?: number): void => {
-    state.events.push({ stage, at: performance.now(), ...(id === undefined ? {} : { id }) });
+    events.push({ stage, at: performance.now(), ...(id === undefined ? {} : { id }) });
   };
+
+  /**
+   * Observe the first visible shell and the first appearance of each element.
+   */
   const scan = (): void => {
     const at = performance.now();
 
     for (const element of document.querySelectorAll('body *')) {
-      const rect = element.getBoundingClientRect();
+      const { width, height } = element.getBoundingClientRect();
 
       if (
         !element.closest('script, style, template, [hidden]') &&
-        rect.width > 0 &&
-        rect.height > 0 &&
+        width > 0 &&
+        height > 0 &&
         getComputedStyle(element).visibility !== 'hidden'
       ) {
         if (state.shellAt === undefined) {
@@ -55,8 +79,8 @@ const installBrowserObserver = (): void => {
           record('shell');
         }
 
-        if (!state.seen.has(element)) {
-          state.seen.set(element, at);
+        if (!seen.has(element)) {
+          seen.set(element, at);
         }
       }
     }
@@ -67,25 +91,44 @@ const installBrowserObserver = (): void => {
 
   const originalError = console.error;
 
+  /**
+   * Retain console failures while preserving normal browser logging.
+   */
   console.error = (...args: unknown[]): void => {
-    state.errors.push(args.map(String).join(' '));
+    errors.push(args.map(String).join(' '));
     originalError(...args);
   };
-  window.addEventListener('error', (event) => state.errors.push(event.message));
+
+  /**
+   * Collect uncaught browser errors for hydration assertions.
+   */
+  window.addEventListener('error', (event) => errors.push(event.message));
+
+  /**
+   * Collect unhandled promise failures for hydration assertions.
+   */
   window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) =>
-    state.errors.push(String(event.reason)),
+    errors.push(String(event.reason)),
   );
+
+  /**
+   * Snapshot the server root before the router begins hydration.
+   */
   window.addEventListener('ssr-boost:router-ready', (event) => {
     const { rootId } = (event as CustomEvent<{ rootId: string }>).detail;
     const root = document.getElementById(rootId);
 
     if (root) {
-      state.roots[rootId] = root.innerHTML;
+      roots[rootId] = root.innerHTML;
     }
 
     scan();
     record('router.ready');
   });
+
+  /**
+   * Mark completion of the browser's document load.
+   */
   window.addEventListener('load', () => record('response.end'), { once: true });
 
   const queue: unknown[][] = [];
@@ -95,6 +138,10 @@ const installBrowserObserver = (): void => {
   // The browser receiver replaces push; retain observation around that replacement.
   Object.defineProperty(queue, 'push', {
     configurable: true,
+
+    /**
+     * Observe each transport frame once before forwarding it to the receiver.
+     */
     get:
       () =>
       (...frames: unknown[][]): number => {
@@ -113,20 +160,16 @@ const installBrowserObserver = (): void => {
 
         return downstream.apply(queue, frames) as number;
       },
+
+    /**
+     * Retain the browser receiver when it replaces queue delivery.
+     */
     set: (replacement: typeof downstream) => {
       downstream = replacement;
     },
   });
   Reflect.set(window, '__ssrBoostStream', queue);
 };
-
-interface IHydrationInspection {
-  ready: boolean;
-  consumed: boolean;
-  pending: number;
-  duplicates: string[];
-  errors: string[];
-}
 
 /** Compare server text multiplicities to the hydrated root, allowing existing repeats. */
 const inspectHydration = (selector: string): IHydrationInspection => {
@@ -137,6 +180,9 @@ const inspectHydration = (selector: string): IHydrationInspection => {
 
   server.innerHTML = html ?? '';
 
+  /**
+   * Count visible text fragments without including scripts or hidden boundaries.
+   */
   const texts = (element: Element): Map<string, number> => {
     const counts = new Map<string, number>();
 
@@ -161,12 +207,18 @@ const inspectHydration = (selector: string): IHydrationInspection => {
   };
   const before = texts(server);
   const after = root ? texts(root) : new Map<string, number>();
+
+  /**
+   * Count exact and concatenated copies of one server text fragment.
+   */
   const multiplicity = (counts: Map<string, number>, text: string): number => {
     let total = 0;
 
     for (const [candidate, count] of counts) {
-      // Also catch concatenated copies in a single text node, without matching
-      // short labels inside unrelated deferred content (for example 1 inside 100).
+      /**
+       * Also catch concatenated copies in a single text node, without matching
+       * short labels inside unrelated deferred content (for example 1 inside 100).
+       */
       const copies = candidate.length / text.length;
 
       if (Number.isInteger(copies) && text.repeat(copies) === candidate) {
@@ -193,6 +245,10 @@ const inspectHydration = (selector: string): IHydrationInspection => {
     consumed: Reflect.get(window, '__staticRouterHydrationData') === undefined,
     pending,
     duplicates,
+
+    /**
+     * Select React hydration failures from the collected browser errors.
+     */
     errors:
       state?.errors.filter((error) =>
         /(?:#|errors\/)(418|423|425)\b|hydrat(?:ion|ing|e|ed)|server rendered HTML|did not match/i.test(

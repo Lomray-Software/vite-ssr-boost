@@ -10,7 +10,7 @@ interface ILoadHtmlShellOptions {
   outlet?: string;
 }
 
-type IRouteAssetPreparerOptions = (
+type TRouteAssetPreparerOptions = (
   { buildDir: string; manifest?: never } | { manifest: TRouteAssetsManifest; buildDir?: never }
 ) & { modulePreload?: boolean };
 
@@ -34,10 +34,15 @@ const createRouteAssetPreparer = <TAppProps = Record<string, any>>({
   buildDir,
   manifest,
   modulePreload = false,
-}: IRouteAssetPreparerOptions): NonNullable<ICreateHandlerOptions<TAppProps>['prepare']> => {
+}: TRouteAssetPreparerOptions): NonNullable<ICreateHandlerOptions<TAppProps>['prepare']> => {
   return createAssetPreparer(new RouteAssets(manifest ?? buildDir, modulePreload));
 };
 
 export { createRouteAssetPreparer, loadHtmlShell };
 
-export type { IHtmlShell, ILoadHtmlShellOptions, IRouteAssetPreparerOptions, TRouteAssetsManifest };
+export type {
+  IHtmlShell,
+  ILoadHtmlShellOptions,
+  TRouteAssetPreparerOptions as IRouteAssetPreparerOptions,
+  TRouteAssetsManifest,
+};

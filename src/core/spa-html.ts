@@ -4,6 +4,10 @@
  */
 const createSpaHtml = (html: string, rootId = 'root'): string => {
   let isMarked = false;
+
+  /**
+   * Mark the configured mount element without changing its other attributes.
+   */
   const result = html.replace(/<[^!/>][^>]*>/g, (tag) => {
     const id = /\sid\s*=\s*(["'])(.*?)\1/.exec(tag)?.[2];
 
@@ -18,6 +22,9 @@ const createSpaHtml = (html: string, rootId = 'root'): string => {
       : tag.replace(/(\sid\s*=\s*(["']).*?\2)/, '$1 data-force-spa="1"');
   });
 
+  /**
+   * Mark the document when the configured mount element is absent.
+   */
   return isMarked
     ? result
     : result.replace(/<html\b[^>]*>/i, (tag) =>

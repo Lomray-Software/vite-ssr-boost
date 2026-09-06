@@ -35,6 +35,7 @@ export interface ISsrRequestContext<TAppProps = Record<string, any>> {
   html: { footer: string; header: string };
   isStream?: boolean;
   isSpa?: boolean;
+
   /** Structural route matches are available to prepare even when loaders are skipped. */
   matches?: RouterState['matches'];
   request: Request;
@@ -98,6 +99,7 @@ export interface ICoreRenderOptions<
 > extends IDocumentHeadersOptions {
   /** Opt in to document policies after onShellReady; redirects keep their header contract. */
   documentHeaders?: readonly IDocumentHeaderRule[];
+
   /** Hydrate the parsed shell while deferred boundaries are still pending. */
   hydration?: 'early' | 'footer';
   nonce?: string;
@@ -523,10 +525,11 @@ const render = async <TAppProps,>(
 
   try {
     const response = await renderResponse(params, context, options, executionContext);
+    const { sessionCookie } = options;
 
     context.diagnostics?.inspectCachePolicy(
       response.headers,
-      Boolean(options.sessionCookie && hasCookie(context.request, options.sessionCookie)),
+      Boolean(sessionCookie && hasCookie(context.request, sessionCookie)),
     );
 
     return timeline?.response(response) ?? response;

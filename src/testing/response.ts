@@ -5,17 +5,21 @@ import type { IRouterState, TStreamFrame } from './parse-response';
 
 interface ITestChunk {
   text: string;
+
+  /** Milliseconds since request start when the decoded text became available. */
   at: number;
 }
 
 interface ITestCookie {
   name: string;
   value: string;
+
   /** Lowercase attribute names; flags are true, other values remain strings. */
   attributes: Record<string, string | true>;
 }
 
 interface ITestResponseOptions {
+  /** Monotonic request start in milliseconds; defaults to construction time. */
   started?: number;
   timeline?: RequestTimeline;
   signal?: AbortSignal;
@@ -24,12 +28,33 @@ interface ITestResponseOptions {
 
 /** A single eager stream reader with repeatable, order-independent assertions. */
 class TestResponse {
+  /**
+   * Retain decoded chunks and their arrival offsets for repeatable assertions.
+   */
   protected readonly parts: ITestChunk[] = [];
+
+  /**
+   * Share one body-consumption result across all asynchronous assertions.
+   */
   protected readonly completed: Promise<void>;
+
+  /**
+   * Anchor chunk timing to the start of the request.
+   */
   protected readonly started: number;
 
+  /**
+   * Begin consuming the response once and retain failures for later assertions.
+   */
   public constructor(
+    /**
+     * Expose the original response and its metadata.
+     */
     public readonly response: Response,
+
+    /**
+     * Retain request timing, cancellation and completion hooks.
+     */
     protected readonly options: ITestResponseOptions = {},
   ) {
     this.started = options.started ?? performance.now();
@@ -37,57 +62,23 @@ class TestResponse {
     void this.completed.catch(() => undefined);
   }
 
+  /**
+   * Expose the committed HTTP status.
+   */
   public get status(): number {
     return this.response.status;
   }
 
+  /**
+   * Expose the committed response headers.
+   */
   public get headers(): Headers {
     return this.response.headers;
   }
 
-  /** Decode incrementally so multibyte characters survive arbitrary transport cuts. */
-  protected async read(): Promise<void> {
-    const reader = this.response.body?.getReader();
-    const decoder = new TextDecoder();
-    const { signal, onComplete } = this.options;
-    const onAbort = (): void => {
-      void reader?.cancel(signal?.reason).catch(() => undefined);
-    };
-
-    signal?.addEventListener('abort', onAbort, { once: true });
-
-    try {
-      signal?.throwIfAborted();
-
-      if (reader) {
-        while (true) {
-          const chunk = await reader.read();
-
-          signal?.throwIfAborted();
-
-          const text = chunk.done
-            ? decoder.decode()
-            : decoder.decode(chunk.value, { stream: true });
-
-          if (text) {
-            this.parts.push({ text, at: performance.now() - this.started });
-          }
-
-          if (chunk.done) {
-            break;
-          }
-        }
-      }
-    } catch (error) {
-      await reader?.cancel(error).catch(() => undefined);
-      throw error;
-    } finally {
-      reader?.releaseLock();
-      signal?.removeEventListener('abort', onAbort);
-      onComplete?.();
-    }
-  }
-
+  /**
+   * Join the fully consumed response body for repeatable assertions.
+   */
   public async text(): Promise<string> {
     await this.completed;
 
@@ -99,12 +90,18 @@ class TestResponse {
     return this.text();
   }
 
+  /**
+   * Return isolated chunk observations after body consumption completes.
+   */
   public async chunks(): Promise<ITestChunk[]> {
     await this.completed;
 
     return this.parts.map((chunk) => ({ ...chunk }));
   }
 
+  /**
+   * Reconstruct the loader and action state emitted in the document.
+   */
   public async routerState(): Promise<IRouterState | undefined> {
     return routerState(await this.text());
   }
@@ -114,6 +111,9 @@ class TestResponse {
     return (await this.text()).split('<!--$?-->').length - 1;
   }
 
+  /**
+   * Read validated SSR Boost transport frames in emission order.
+   */
   public async streamFrames(): Promise<TStreamFrame[]> {
     return streamFrames(await this.text());
   }
@@ -131,6 +131,9 @@ class TestResponse {
     const values =
       headers.getSetCookie?.() ?? headers.get('set-cookie')?.split(/,(?=\s*[^=;,\s]+=)/) ?? [];
 
+    /**
+     * Split each cookie into its value and normalized attributes.
+     */
     return values.map((cookie) => {
       const [pair, ...attributes] = cookie.split(';');
       const separator = pair.indexOf('=');
@@ -138,6 +141,10 @@ class TestResponse {
       return {
         name: pair.slice(0, separator).trim(),
         value: pair.slice(separator + 1).trim(),
+
+        /**
+         * Preserve attribute values and represent valueless flags as true.
+         */
         attributes: Object.fromEntries(
           attributes.map((attribute): [string, string | true] => {
             const index = attribute.indexOf('=');
@@ -149,6 +156,51 @@ class TestResponse {
         ),
       };
     });
+  }
+
+  /** Decode incrementally so multibyte characters survive arbitrary transport cuts. */
+  protected async read(): Promise<void> {
+    const reader = this.response.body?.getReader();
+    const decoder = new TextDecoder();
+    const { signal, onComplete } = this.options;
+
+    /**
+     * Cancel the active reader when the request signal aborts.
+     */
+    const onAbort = (): void => {
+      void reader?.cancel(signal?.reason).catch(() => undefined);
+    };
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    try {
+      signal?.throwIfAborted();
+
+      if (reader) {
+        while (true) {
+          const { done: isDone, value } = await reader.read();
+
+          signal?.throwIfAborted();
+
+          const text = isDone ? decoder.decode() : decoder.decode(value, { stream: true });
+
+          if (text) {
+            this.parts.push({ text, at: performance.now() - this.started });
+          }
+
+          if (isDone) {
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      await reader?.cancel(error).catch(() => undefined);
+      throw error;
+    } finally {
+      reader?.releaseLock();
+      signal?.removeEventListener('abort', onAbort);
+      onComplete?.();
+    }
   }
 }
 

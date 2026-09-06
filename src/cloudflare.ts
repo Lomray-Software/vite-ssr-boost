@@ -49,17 +49,22 @@ type TWorkerHtml<TEnv> =
     }
   | { indexHtml: string; getHtml?: never };
 
-export type IWorkerHandlerOptions<
-  TEnv = Record<string, unknown>,
-  TAppProps = Record<string, any>,
-> = Omit<ICreateHandlerOptions<TAppProps>, 'getHtml' | 'onRequest'> &
+type TWorkerHandlerOptions<TEnv = Record<string, unknown>, TAppProps = Record<string, any>> = Omit<
+  ICreateHandlerOptions<TAppProps>,
+  'getHtml' | 'onRequest'
+> &
   TWorkerHtml<TEnv> & {
     routes: TRouteObject[];
     App: FC<PropsWithChildren<{ server: TAppProps }>>;
     manifest: TRouteAssetsManifest;
+
     /** Assets binding name, or false to delegate static delivery elsewhere. Default: ASSETS. */
     assets?: string | false;
+
+    /** Emit module preload hints when enabled; defaults to false. */
     modulePreload?: boolean;
+
+    /** HTML insertion marker; defaults to <!--ssr-outlet-->. */
     outlet?: string;
     routerOptions?: Parameters<typeof createStaticHandler>[1];
     onRequest?: (params: {
@@ -68,8 +73,14 @@ export type IWorkerHandlerOptions<
     }) => ReturnType<NonNullable<ICreateHandlerOptions<TAppProps>['onRequest']>>;
   };
 
+/**
+ * Share the cache policy field name across static and streamed responses.
+ */
 const CACHE_CONTROL = 'Cache-Control';
 
+/**
+ * Reuse HTML loads within a binding without retaining expired bindings.
+ */
 const htmlCache = new WeakMap<object, Map<string, Promise<() => IHtmlShell>>>();
 
 /**
@@ -107,21 +118,30 @@ export const getHtmlFromAssets = async (
   let pending = cache.get(key);
 
   if (!pending) {
+    /**
+     * Fetch the source document and retain its reusable shell factory.
+     */
     pending = (async () => {
       const response = await binding.fetch(new Request(new URL(indexPath, 'https://assets.local')));
+      const { ok: isOk, body, status } = response;
 
-      if (!response.ok) {
-        await response.body?.cancel();
-        throw new Error(
-          `[ssr-boost] Failed to load "${indexPath}" from assets: ${response.status}.`,
-        );
+      if (!isOk) {
+        await body?.cancel();
+        throw new Error(`[ssr-boost] Failed to load "${indexPath}" from assets: ${status}.`);
       }
 
       const [header, footer] = splitHtmlShell(await response.text(), indexPath, outlet);
 
+      /**
+       * Isolate mutable shell values for each request.
+       */
       return () => ({ header, footer });
     })();
     cache.set(key, pending);
+
+    /**
+     * Allow a later request to retry a failed asset load.
+     */
     void pending.catch(() => cache.delete(key));
   }
 
@@ -140,46 +160,48 @@ export const createWorkerHandler = <
   manifest,
   getHtml,
   indexHtml,
-  assets = 'ASSETS',
-  modulePreload = false,
-  outlet = '<!--ssr-outlet-->',
   routerOptions,
   onRequest,
   onRouterReady,
   onShellReady,
   prepare,
+  assets = 'ASSETS',
+  modulePreload = false,
+  outlet = '<!--ssr-outlet-->',
   ...options
-}: IWorkerHandlerOptions<TEnv, TAppProps>): TWorkerHandler<TEnv> => {
+}: TWorkerHandlerOptions<TEnv, TAppProps>): TWorkerHandler<TEnv> => {
   const handler = createStaticHandler(routes as RouteObject[], routerOptions);
   const prepareAssets = createAssetPreparer<TAppProps>(new RouteAssets(manifest, modulePreload));
   const shell =
     indexHtml === undefined ? undefined : splitHtmlShell(indexHtml, 'indexHtml', outlet);
 
+  /**
+   * Serve static assets or render the matched application request.
+   */
   return async (request, env, ctx) => {
-    const { pathname } = new URL(request.url);
+    const { url, method, headers: requestHeaders } = request;
+    const { pathname } = new URL(url);
 
     if (
       assets !== false &&
-      ['GET', 'HEAD'].includes(request.method) &&
+      ['GET', 'HEAD'].includes(method) &&
       pathname !== '/' &&
       pathname !== '/index.html'
     ) {
       const response = await getAssetsBinding(env, assets).fetch(request);
+      const { status, ok: isOk, headers: responseHeaders, body, statusText } = response;
 
-      if (response.status !== 404) {
-        if (
-          (response.ok || response.status === 304) &&
-          /\/assets\/[^/]+-[\w-]{8,}\.[^/]+$/.test(pathname)
-        ) {
-          const headers = new Headers(response.headers);
+      if (status !== 404) {
+        if ((isOk || status === 304) && /\/assets\/[^/]+-[\w-]{8,}\.[^/]+$/.test(pathname)) {
+          const headers = new Headers(responseHeaders);
 
           headers.set(CACHE_CONTROL, 'public, max-age=31536000, immutable');
 
           return headResponse(
             request,
-            new Response(response.body, {
-              status: response.status,
-              statusText: response.statusText,
+            new Response(body, {
+              status,
+              statusText,
               headers,
             }),
           );
@@ -188,7 +210,7 @@ export const createWorkerHandler = <
         return headResponse(request, response);
       }
 
-      await response.body?.cancel();
+      await body?.cancel();
     }
 
     const executionContext: IWorkerExecutionContext<TEnv> = {
@@ -198,6 +220,10 @@ export const createWorkerHandler = <
     const render = createHandler<TAppProps>(
       {
         handler,
+
+        /**
+         * Supply request props to the application's server wrapper.
+         */
         createApp: (children, context) =>
           createElement(App, { server: context.appProps }, children),
         renderToStream,
@@ -205,30 +231,52 @@ export const createWorkerHandler = <
       {
         diagnostics: false,
         ...options,
+
+        /**
+         * Resolve a request shell from the configured source.
+         */
         getHtml: () =>
           getHtml ? getHtml(request, env, ctx) : { header: shell![0], footer: shell![1] },
+
+        /**
+         * Expose Worker bindings and lifetime hooks to request initialization.
+         */
         onRequest: onRequest ? () => onRequest({ request, executionContext }) : undefined,
+
+        /**
+         * Inject route assets before running application preparation.
+         */
         prepare: async (params) => {
           await prepareAssets(params);
           await prepare?.(params);
         },
+
+        /**
+         * Keep the pending shell flushable before applying the application hook.
+         */
         onShellReady: (params) => {
           const { context } = params;
+          const { isStream, response } = context;
+          const { headers } = response;
 
           // workerd's automatic gzip can buffer a small pending shell until allReady.
-          if (context.isStream && !context.response.headers.has('Content-Encoding')) {
-            context.response.headers.set('Content-Encoding', 'identity');
+          if (isStream && !headers.has('Content-Encoding')) {
+            headers.set('Content-Encoding', 'identity');
 
-            if (!context.response.headers.get(CACHE_CONTROL)?.includes('no-transform')) {
-              context.response.headers.append(CACHE_CONTROL, 'no-transform');
+            if (!headers.get(CACHE_CONTROL)?.includes('no-transform')) {
+              headers.append(CACHE_CONTROL, 'no-transform');
             }
           }
 
           return onShellReady?.(params) ?? {};
         },
+
+        /**
+         * Default crawlers to buffered rendering while allowing an application override.
+         */
         onRouterReady: async (params) => ({
           isStream: !/bot|crawler|spider|slurp|bingpreview/i.test(
-            request.headers.get('User-Agent') ?? '',
+            requestHeaders.get('User-Agent') ?? '',
           ),
           ...(await onRouterReady?.(params)),
         }),
@@ -241,4 +289,4 @@ export const createWorkerHandler = <
 
 export { RouteAssets };
 
-export type { TRouteAssetsManifest, IHtmlShell };
+export type { TWorkerHandlerOptions as IWorkerHandlerOptions, TRouteAssetsManifest, IHtmlShell };

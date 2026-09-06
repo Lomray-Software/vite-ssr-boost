@@ -3,6 +3,7 @@ import { parse } from 'parse5';
 import type { DefaultTreeAdapterTypes } from 'parse5';
 
 type TStreamFrame = ['init', string, boolean] | ['resolve' | 'reject', number, string] | ['shell'];
+
 interface IRouterState {
   loaderData: Record<string, any>;
   actionData: Record<string, any> | null;
@@ -12,6 +13,10 @@ interface IRouterState {
 /** Parse only actual inline script nodes; never execute application JavaScript. */
 const scripts = (html: string): string[] => {
   const result: string[] = [];
+
+  /**
+   * Collect script text while traversing parsed document nodes.
+   */
   const visit = (node: DefaultTreeAdapterTypes.Node): void => {
     if ('tagName' in node && node.tagName === 'script') {
       result.push(node.childNodes.map((child) => ('value' in child ? child.value : '')).join(''));
@@ -62,14 +67,33 @@ const streamFrames = (html: string): TStreamFrame[] => {
 
 /** Distinguish transport placeholders from application objects containing an id. */
 class Placeholder {
-  public constructor(public readonly id: number) {}
+  /**
+   * Preserve the streamed promise identity until its settlement is decoded.
+   */
+  public constructor(
+    /**
+     * Link this placeholder to its stream settlement.
+     */
+    public readonly id: number,
+  ) {}
 }
 
 /** Decode the same value vocabulary as the browser receiver, without a DOM or eval. */
 const value = (payload: string): unknown =>
   decode(payload, {
+    /**
+     * Retain promise references until their settlements can be resolved.
+     */
     SSRBPromise: ([id]: [number]) => new Placeholder(id),
+
+    /**
+     * Restore own application object entries.
+     */
     SSRBObject: (entries: [string, unknown][]) => Object.fromEntries(entries),
+
+    /**
+     * Restore rejection properties without inventing a server stack.
+     */
     SSRBError: (entries: [string, unknown][]) => {
       const properties = Object.fromEntries(entries);
       const error = Object.assign(new Error('Streamed loader/action rejection'), properties);
@@ -80,6 +104,10 @@ const value = (payload: string): unknown =>
 
       return error;
     },
+
+    /**
+     * Restore explicit undefined values from the transport vocabulary.
+     */
     SSRBUndefined: () => undefined,
   });
 
@@ -126,6 +154,10 @@ const routerState = (html: string): IRouterState | undefined => {
   const visited = new WeakSet<object>();
   const resolving = new Set<number>();
   const resolved = new Map<number, unknown>();
+
+  /**
+   * Replace placeholders recursively while preserving shared and circular values.
+   */
   const resolve = (item: unknown): unknown => {
     if (item instanceof Placeholder) {
       const { id } = item;
@@ -161,11 +193,19 @@ const routerState = (html: string): IRouterState | undefined => {
       const entries = [...(item as Map<unknown, unknown>)];
 
       item.clear();
+
+      /**
+       * Resolve both keys and values while retaining the original map identity.
+       */
       entries.forEach(([key, child]) => item.set(resolve(key), resolve(child)));
     } else if (item instanceof Set) {
       const entries = [...(item as Set<unknown>)];
 
       item.clear();
+
+      /**
+       * Resolve members while retaining the original set identity.
+       */
       entries.forEach((child) => item.add(resolve(child)));
     } else {
       for (const key of Object.keys(item)) {

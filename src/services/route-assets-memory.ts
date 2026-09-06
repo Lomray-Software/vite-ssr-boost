@@ -10,7 +10,11 @@ enum AssetType {
 interface IAsset {
   type: string;
   url: string;
+
+  /** Lower weights are injected first. */
   weight: number;
+
+  /** Nested assets follow top-level assets with the same weight. */
   isNested: boolean;
   isPreload: boolean;
   content?: string;
@@ -34,10 +38,19 @@ interface IInjectAssetsContext {
  * Load and inject route assets with an independent cache for one build.
  */
 class RouteAssets {
+  /**
+   * Control module preload hints for matched scripts.
+   */
   protected readonly modulePreload: boolean;
 
+  /**
+   * Keep the build's route assets isolated from other handler instances.
+   */
   protected routesAssets: TRouteAssetsManifest | null;
 
+  /**
+   * Retain the supplied manifest and preload preference.
+   */
   constructor(manifest: TRouteAssetsManifest, modulePreload = false) {
     this.routesAssets = manifest;
     this.modulePreload = modulePreload;
@@ -51,49 +64,14 @@ class RouteAssets {
   }
 
   /**
-   * Read the manifest without requiring a filesystem.
-   */
-  protected loadAssetsManifest(): TRouteAssetsManifest {
-    return this.routesAssets ?? {};
-  }
-
-  /**
-   * Sort assets
-   */
-  protected sortAssets(assets: IAsset[]): IAsset[] {
-    return assets.sort((a, b) =>
-      a.weight === b.weight ? Number(a.isNested) - Number(b.isNested) : a.weight - b.weight,
-    );
-  }
-
-  /**
-   * Get route assets
-   */
-  // The development manifest uses the SPA flag to preload unqueried lazy routes.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected getAssets(routes?: RouterState['matches'], _isSpa?: boolean): IAsset[] {
-    const routeIds = routes?.map(({ route }) => route.id).filter(Boolean) ?? [];
-
-    if (!routeIds.length) {
-      return [];
-    }
-
-    const routesAssets = this.loadAssetsManifest();
-
-    return this.sortAssets(
-      routeIds
-        .map((routeId) => routesAssets[routeId])
-        .flat()
-        .filter(Boolean),
-    );
-  }
-
-  /**
    * Build preload hints without depending on a particular HTTP transport.
    */
   public getEarlyHints(assets: IAsset[]): Headers {
     const headers = new Headers();
 
+    /**
+     * Advertise only styles and scripts as HTTP preload hints.
+     */
     assets.forEach(({ type, url }) => {
       if (!type || !['style', 'script'].includes(type)) {
         return;
@@ -113,6 +91,10 @@ class RouteAssets {
     earlyHints = true,
   ): Headers {
     const assets = this.getAssets(matches ?? routerContext?.matches, isSpa);
+
+    /**
+     * Render each matched style or script using the current runtime's asset mode.
+     */
     const htmlAssets = assets
       .map(({ type, url, isPreload, content = '' }) => {
         switch (type) {
@@ -137,6 +119,44 @@ class RouteAssets {
     html.header = html.header.replace('</head>', `${htmlAssets.join('\n')}</head>`);
 
     return earlyHints ? this.getEarlyHints(assets) : new Headers();
+  }
+
+  /**
+   * Read the manifest without requiring a filesystem.
+   */
+  protected loadAssetsManifest(): TRouteAssetsManifest {
+    return this.routesAssets ?? {};
+  }
+
+  /**
+   * Sort assets
+   */
+  protected sortAssets(assets: IAsset[]): IAsset[] {
+    return assets.sort(({ weight, isNested }, { weight: nextWeight, isNested: isNextNested }) =>
+      weight === nextWeight ? Number(isNested) - Number(isNextNested) : weight - nextWeight,
+    );
+  }
+
+  /**
+   * Get route assets
+   * The development manifest uses the SPA flag to preload unqueried lazy routes.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected getAssets(routes?: RouterState['matches'], _isSpa?: boolean): IAsset[] {
+    const routeIds = routes?.map(({ route }) => route.id).filter(Boolean) ?? [];
+
+    if (!routeIds.length) {
+      return [];
+    }
+
+    const routesAssets = this.loadAssetsManifest();
+
+    return this.sortAssets(
+      routeIds
+        .map((routeId) => routesAssets[routeId])
+        .flat()
+        .filter(Boolean),
+    );
   }
 }
 
