@@ -34,7 +34,10 @@ page in Chromium in all three SSR modes. This checks shell interactivity, both A
 init/resolve frames and hydration/console errors. Browser failures fail this opt-in gate.
 
 PR and release CI run the full suite on React/React DOM 18.2.0 and 19.2.8. The release waits for
-both versions. Template TTFB comparisons are advisory; early-stream checks retry up to three times
+both versions. Template TTFB comparisons are advisory, including the streamed/home ratio.
+The ratio compares 11 alternating pairs after three warm-up pairs, using the first decoded
+HTML chunk with the same browser user agent and identity encoding. A ratio above 1.5 is printed
+without failing acceptance; early-stream checks retry up to three times
 to tolerate shared-runner scheduling. Crawler rendering is checked through Suspense completion
 markers instead of comparing timings between separate requests.
 
@@ -80,14 +83,15 @@ Each entry is bundled and minified with esbuild as browser ESM. React, React DOM
 `react-dom/client` and `react/jsx-runtime`) and React Router stay external. All other dependencies,
 including the client HOCs' `hoist-non-react-statics`, count toward size. The combined bundle imports
 and re-exports every entry's namespace to retain all public APIs while sharing dependencies.
-Any import of `node:`, `express`, `chalk`, `commander` or `json5` (including package subpaths) fails
+Any import of `node:`, `express`, `compression`, `isbot`, `chalk`, `commander` or `json5` (including package subpaths) fails
 the gate, even when the size is within budget.
 
 All sizes below use gzip level 9 and **KB = 1024 bytes**. Comparisons use unrounded byte counts.
 
 | Browser entry | Measured gzip KB | Budget KB |
 | --- | ---: | ---: |
-| `browser/entry` | 0.669 | 1.00 |
+| `browser/entry` | 3.125 | 3.669 |
+| `browser/stream` | 2.469 | 3.25 |
 | `components/navigate` | 0.334 | 0.50 |
 | `components/only-client` | 0.324 | 0.50 |
 | `components/render-client` | 1.705 | 2.25 |
@@ -99,8 +103,8 @@ All sizes below use gzip level 9 and **KB = 1024 bytes**. Comparisons use unroun
 | `helpers/get-server-state` | 0.101 | 0.25 |
 | `helpers/import-route` | 1.937 | 2.50 |
 | `interfaces/fc-route` | 0.091 | 0.25 |
-| Combined | 3.307 (3386 bytes) | 4.307 (4410 bytes) |
-| Template client total | 141.770 | 154 |
+| Combined | 5.727 (5864 bytes) | 6.657 (6817 bytes) |
+| Template client total | 141.839 | 154 |
 
 The template gate sums the gzip size of each `build/client/assets/*.js` file after the candidate's
 production SSR build, including lazy chunks and framework/application dependencies. It excludes

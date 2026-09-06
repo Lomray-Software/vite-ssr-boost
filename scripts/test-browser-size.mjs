@@ -80,7 +80,7 @@ const options = {
   plugins: [{
     name: 'reject-server-dependencies',
     setup(builder) {
-      builder.onResolve({ filter: /^(?:node:|(?:express|chalk|commander|json5)(?:\/|$))/ }, ({ path, importer }) => ({
+      builder.onResolve({ filter: /^(?:node:|(?:express|compression|isbot|chalk|commander|json5)(?:\/|$))/ }, ({ path, importer }) => ({
         errors: [{ text: `Forbidden browser dependency ${path} imported by ${importer}` }],
       }));
     },

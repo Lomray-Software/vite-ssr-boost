@@ -2,7 +2,7 @@ import type DataStream from '@core/data-stream';
 import htmlBoundary from '@core/html-boundary';
 import type RequestTimeline from '@services/request-timeline';
 
-/** Stream shell, data frames, React bytes and footer only under downstream demand. */
+/** Queue the prepared shell immediately and pull later bytes only under downstream demand. */
 const composeHtml = (
   header: string,
   body: ReadableStream<Uint8Array>,
@@ -15,11 +15,11 @@ const composeHtml = (
 ): ReadableStream<Uint8Array> => {
   const encoder = new TextEncoder();
   const reader = body.getReader();
-  let phase: 'body' | 'footer' | 'header' = 'header';
+  let phase: 'body' | 'footer' = 'body';
   let isStopped = false;
   let isReleased = false;
   let pendingRead: Promise<ReadableStreamReadResult<Uint8Array>> | undefined;
-  const observe = htmlBoundary();
+  let observe = data && !data.isDone ? htmlBoundary() : undefined;
   let canInject = true;
   let heldChunk: Uint8Array | undefined;
 
@@ -33,6 +33,17 @@ const composeHtml = (
 
   return new ReadableStream<Uint8Array>(
     {
+      /** Make the already-rendered shell available without reading any React bytes. */
+      start(controller) {
+        if (header) {
+          if (isEarly) {
+            timeline?.record('state.emitted', { placement: 'early' });
+          }
+
+          controller.enqueue(encoder.encode(header));
+        }
+      },
+
       /** Cancel immediately; a disconnected consumer cannot receive abort scripts. */
       cancel: async (reason) => {
         isStopped = true;
@@ -52,22 +63,12 @@ const composeHtml = (
       /** Keep at most the one React read requested by the current downstream pull. */
       async pull(controller) {
         try {
-          if (phase === 'header') {
-            phase = 'body';
-
-            if (header) {
-              if (isEarly) {
-                timeline?.record('state.emitted', { placement: 'early' });
-              }
-
-              controller.enqueue(encoder.encode(header));
-
-              return;
-            }
-          }
-
           while (!isStopped) {
             const frames = canInject ? data?.take() : undefined;
+
+            if (canInject && data?.isDone) {
+              observe = undefined;
+            }
 
             if (isStopped) {
               return;
@@ -80,7 +81,7 @@ const composeHtml = (
             }
 
             if (heldChunk) {
-              canInject = observe(heldChunk);
+              canInject = observe?.(heldChunk) ?? true;
               controller.enqueue(heldChunk);
               heldChunk = undefined;
 

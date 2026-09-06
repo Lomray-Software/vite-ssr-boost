@@ -8,6 +8,8 @@ import renderToStream from '@node/render-to-stream';
 const fixture = vi.hoisted(() => ({ written: 0 }));
 
 vi.mock('react-dom/server', () => ({
+  /** Exercise the React 18 bridge independently of the installed React version. */
+  renderToReadableStream: undefined,
   renderToPipeableStream: vi.fn((_, callbacks) => ({
     abort: vi.fn(),
     pipe: (destination: Writable) => {

@@ -99,6 +99,17 @@ describe('PrepareServer', () => {
     expect(footer).toContain('<footer');
   });
 
+  it('reuses the production shell while keeping returned tuples isolated', async () => {
+    const config = createConfig(true);
+    const read = vi.spyOn(fs, 'readFileSync').mockReturnValue('header<!--ssr-outlet-->footer');
+    const service = PrepareServer.init(config as never);
+    const first = await service.loadHtml({ originalUrl: '/' } as never);
+    first[0] = 'request-specific';
+
+    expect(await service.loadHtml({ originalUrl: '/items' } as never)).toEqual(['header', 'footer']);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
   it('should call app created hook', async () => {
     const config = createConfig(false);
     const onServerCreated = vi.fn();
