@@ -4,6 +4,12 @@ on:
   push:
     branches: [ prod, staging ]
 
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
 env:
   NODE_VERSION: 22.23.2
   ENABLE_CACHE: yes
@@ -96,6 +102,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+  refresh-context7:
+    needs: [release]
+    if: ${{ github.ref == 'refs/heads/prod' }}
+    uses: ./.github/workflows/context7-refresh.yml
+    secrets:
+      CONTEXT7_API_KEY: ${{ secrets.CONTEXT7_API_KEY }}
 
   sonarcube:
     runs-on: ubuntu-latest

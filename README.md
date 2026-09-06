@@ -20,18 +20,6 @@
 
 ## Quick start
 
-**Start a new app** with the `minimal` template (default):
-
-```bash
-npm create @lomray/ssr-app@latest my-app
-```
-
-Choose the `full` template by passing the flag after `--`:
-
-```bash
-npm create @lomray/ssr-app@latest my-app -- --template full
-```
-
 **Add to an existing app:**
 
 ```bash
@@ -49,6 +37,18 @@ The [migration guide](./docs/guide/migrate-existing-spa.md) walks through the fi
 | `src/client.ts`  | Use the browser entry for hydration or SPA mounting. |
 | `src/server.ts`  | Add the server entry and request-scoped setup.       |
 | `package.json`   | Use the `ssr-boost` dev, build and start commands.   |
+
+**Start a new app** with the `minimal` template (default):
+
+```bash
+npm create @lomray/ssr-app@latest my-app
+```
+
+Choose the `full` template by passing the flag after `--`:
+
+```bash
+npm create @lomray/ssr-app@latest my-app -- --template full
+```
 
 Starting a new app? Choose one of the [template branches](./docs/examples/index.md) with the [`npm create` command](./docs/guide/getting-started.md#create-a-new-app) or clone the branch directly.
 
@@ -84,7 +84,7 @@ Add `SsrBoost()` to the Vite plugins, wire `client.ts` and `server.ts`, and repl
 
 ## Install and template quick start
 
-The package declares `engines.node: ">=22.12.0"`. The example uses Node 22.23.2; React Router and build tools can raise the required Node version.
+See [Compatibility](#compatibility) for the package Node requirement. The example uses Node 22.23.2; React Router and build tools can raise the required Node version.
 
 Start with the [minimal template](https://github.com/Lomray-Software/vite-template/tree/example/minimal):
 
@@ -110,6 +110,8 @@ For production, run `npm run build` and `npm run start:ssr`. For a SPA build, ru
 Already running this in production? Point our [free performance audit](https://audit.lomray.com/?utm_source=github&utm_medium=readme-vite-ssr-boost&utm_campaign=owned-surface-github) at the URL. It reports Core Web Vitals, JavaScript bundle weight and whether the HTML really arrives server-rendered. No signup.
 
 ## Compatibility
+
+See the [support policy](./SUPPORT.md) for version lifetimes, response targets and breaking-change commitments, and [Upgrade from 7 to 8](./docs/guide/upgrade-v8.md) for migration instructions.
 
 The package is tested against the current and previous major of React, React Router and Vite, with an additional Vite 6 row. The [compatibility workflow](./.github/workflows/react-compatibility.yml) runs the full test suite and a built Worker check on Node 22.23.2 with these exact combinations:
 

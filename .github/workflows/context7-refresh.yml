@@ -1,0 +1,30 @@
+name: Refresh Context7 Docs
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  # GITHUB_TOKEN-created releases do not trigger another release workflow.
+  workflow_call:
+    secrets:
+      CONTEXT7_API_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      CONTEXT7_API_KEY: ${{ secrets.CONTEXT7_API_KEY }}
+    steps:
+      - name: Trigger Context7 refresh
+        # GitHub requires an env indirection for optional secrets in step conditions.
+        if: ${{ env.CONTEXT7_API_KEY != '' }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            -X POST https://context7.com/api/v1/refresh \
+            -H 'Content-Type: application/json' \
+            -H "Authorization: Bearer $CONTEXT7_API_KEY" \
+            -d '{"libraryName":"/lomray-software/vite-ssr-boost"}'
