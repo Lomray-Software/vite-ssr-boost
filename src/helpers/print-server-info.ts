@@ -23,7 +23,7 @@ async function printServerInfo(
   { server, version = 'unknown' }: IPrintServerInfoParams = {},
 ): Promise<void> {
   const { action } = config.getPluginConfig() ?? {};
-  const { isProd, host, root, isSPA } = config.getParams();
+  const { isProd, host, root, isSPA, base } = config.getParams();
   const devMarker = getMarkerFile(root);
 
   const Logger = config.getLogger();
@@ -45,7 +45,7 @@ async function printServerInfo(
     ? await resolveServerUrls(server, {
         host,
         isHttps: Boolean(viteConfig?.server.https),
-        rawBase: viteConfig?.rawBase,
+        rawBase: viteConfig?.rawBase ?? new URL(base ?? '/', 'http://localhost').pathname,
       })
     : null;
   const mode =

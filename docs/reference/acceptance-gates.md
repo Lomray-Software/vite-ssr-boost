@@ -9,9 +9,10 @@ Run these before a release. The same checks run in PR and release CI.
 | `npm run build` | Published JavaScript and declaration output |
 | `npm run test:size` | Browser public-entry and combined gzip budgets; rejects server dependencies in browser bundles (requires `lib/`) |
 | `npm run test:edge:packed` | Built edge output running in Miniflare/workerd |
+| `npm run test:worker:packed` | Packed Worker template, Cloudflare types and static/lazy route assets |
 | `npm run test:bun` | Built Fetch SSR served by Bun, including cookies, HEAD, redirects and POST (requires Bun) |
 | `npm run test:core:no-optional` | Packed installation with `--omit=optional`; core and edge run without Express or compression |
-| `npm run test:template` | Template SSR in dev/production, cold styles, SSR module reload, streamed and crawler HTML, gzip, static JS/CSS, redirects, HEAD, 404, subpath deployment, standalone SPA, client gzip budget and baseline TTFB comparison |
+| `npm run test:template` | Template SSR in dev/production, cold styles, SSR module reload, streamed and crawler HTML, gzip, static JS/CSS, redirects, HEAD, 404, subpath deployment, standalone SPA, client gzip budget, production cold-start/RSS budgets and baseline TTFB comparison |
 | `npm run docs:build` | Documentation build and links |
 
 CI pins `vite-template` to `d15557c1d03a16a97521d38432a22cd8fe2b95c3`. Locally, install its dependencies
@@ -36,6 +37,35 @@ PR and release CI run the full suite on React/React DOM 18.2.0 and 19.2.8. The r
 both versions. Template TTFB comparisons are advisory; early-stream checks retry up to three times
 to tolerate shared-runner scheduling. Crawler rendering is checked through Suspense completion
 markers instead of comparing timings between separate requests.
+
+## Production startup and memory budgets
+
+Both pinned and `SSR_BOOST_TEMPLATE_CURRENT=1` acceptance enforce these limits in the same run:
+
+| Metric | Failure threshold |
+| --- | --- |
+| Production cold start | At most **2 ×** the plain baseline median measured in the same run |
+| Production server RSS after TTFB | At most **1.6 ×** the plain baseline RSS measured in the same run |
+
+The plain baseline is an ESM Express server rendering one React element with
+`react-dom/server`'s `renderToPipeableStream`, using the template's installed Express/React versions.
+Both servers run with `NODE_ENV=production` and the same memory preload. Cold-start samples use npm; cold start
+is npm process spawn to the first **complete HTTP 200 on `/`**, polling every 25 ms. Five fresh
+processes per implementation are interleaved; the median is compared without rounding. Filesystem
+caches stay warm, matching the public benchmark's process-cold methodology.
+
+RSS comes from `process.memoryUsage()` in the listening Node process, immediately after the
+existing TTFB run (two warm-up requests and seven samples). The candidate also exercises the
+existing production HTTP checks before TTFB. The runner records the listening PID and requests a
+sample by signal; it does not measure npm's RSS, add an application endpoint or force GC.
+
+The step summary prints both candidate/baseline cold-start medians and RSS values alongside the
+existing advisory **Production server ready** line, which retains the direct CLI spawn and its
+100 ms readiness polling. Readiness and TTFB remain advisory; the new
+cold-start and RSS comparisons fail acceptance. A separate untimed production probe rejects
+tooling imports and makes Vite config evaluation fail, while checking the root and a lazy route.
+The missing-build error is also checked. See [deployment](/guide/deployment#production-startup)
+for the serving import path and profiling commands.
 
 ## Size budgets
 
@@ -79,7 +109,7 @@ is larger than the minimal example's bundle. Both pinned and current dependency 
 use the same 154 KB limit.
 
 The browser table is printed and appended to `GITHUB_STEP_SUMMARY` when set. Template acceptance
-also prints and appends its client size/budget, production server readiness (process start through
+also prints and appends its client size/budget, production cold-start/RSS budgets, server readiness (process start through
 the first successful HTTP response, including readiness polling), baseline/candidate median TTFB,
 and development/production/subpath chunk counts and deferred settle delays. Decoded gzip chunks count HTML payload rather
 than gzip headers. Available measurements are reported even if a later acceptance check fails;

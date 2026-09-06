@@ -1,5 +1,51 @@
 import { test, expect } from '@playwright/test';
 
+/**
+ * Exercise hydrated navigation and lazy assets served through the production build settings.
+ */
+test('template navigation loads lazy route assets without hydration errors', async ({ page }) => {
+  const errors = [];
+  let documentRequests = 0;
+
+  /** Record browser failures across the initial document and client navigation. */
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  /** Capture console failures emitted during hydration or lazy loading; failed loads are named below. */
+  page.on('console', (message) => {
+    if (message.type() === 'error' && !message.text().startsWith('Failed to load resource')) {
+      errors.push(message.text());
+    }
+  });
+
+  /** Name failing documents, scripts, styles and data requests; template images are not under test. */
+  page.on('response', (response) => {
+    if (response.status() >= 400 && response.request().resourceType() !== 'image') {
+      errors.push(`${response.status()} ${response.url()}`);
+    }
+  });
+
+  /** Verify that the hydrated link uses client navigation. */
+  page.on('request', (request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequests += 1;
+  });
+  await page.goto('./');
+  const link = page.getByRole('link', { name: 'Deferred data', exact: true });
+
+  /** Wait for React to attach the navigation handler before clicking. */
+  await page.waitForFunction(
+    (anchor) => Object.keys(anchor).some((key) => key.startsWith('__reactProps')),
+    await link.elementHandle(),
+  );
+  await link.click();
+  await expect(page).toHaveURL(/\/deferred$/);
+  await expect(page).toHaveTitle('Deferred data');
+  await expect(page.getByRole('region', { name: 'Users with Await', exact: true }).getByRole('listitem')).toHaveCount(3);
+  expect(documentRequests).toBe(1);
+  await page.goBack();
+  await expect(page.getByRole('link', { name: 'Deferred data', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('pinned template deferred shell hydrates and both user lists settle without errors', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));

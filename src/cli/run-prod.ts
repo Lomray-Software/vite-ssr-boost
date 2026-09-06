@@ -3,6 +3,7 @@ import { performance } from 'node:perf_hooks';
 import createServer from '@adapters/express/server';
 import createFocusOnly from '@helpers/create-focus-only';
 import type { IBuildParams } from '@services/build';
+import loadProductionConfig from '@services/production-config';
 import ServerConfig from '@services/server-config';
 
 interface IRunProdParams {
@@ -37,14 +38,21 @@ async function runProd({
     global.viteBoostStartTime = performance.now();
   }
 
+  const { root, base, publicDir, indexFile, serverFile, mode } =
+    loadProductionConfig(buildDir) ?? {};
   const config = ServerConfig.init(
     {
       isHost,
       isProd: true,
       isOnlyClient: createFocusOnly(focusOnly).isOnlyClient(),
       isModulePreload: modulePreload,
+      mode,
     },
-    { port, root: buildDir },
+    {
+      port,
+      root: root ?? buildDir,
+      ...(base === undefined ? {} : { base, publicDir, indexFile, serverFile }),
+    },
   );
   const { run } = await createServer(config);
 
