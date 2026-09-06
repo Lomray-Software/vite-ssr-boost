@@ -96,7 +96,8 @@
     "prepare": "husky",
     "test:browser": "playwright test --config playwright.config.mjs",
     "test:worker:packed": "node scripts/test-packed-worker.mjs",
-    "test:worker:browser": "playwright test --config playwright.worker.config.mjs"
+    "test:worker:browser": "playwright test --config playwright.worker.config.mjs",
+    "test:skills": "node scripts/test-skills.mjs"
   },
   "dependencies": {
     "chalk": "^6.0.0",
@@ -169,7 +170,8 @@
     "vite": "^8.2.2",
     "vitepress": "^1.6.4",
     "vitest": "^5.0.0",
-    "wrangler": "^4.129.0"
+    "wrangler": "^4.129.0",
+    "yaml": "^2.9.0"
   },
   "peerDependencies": {
     "@babel/generator": ">=7.23.0",

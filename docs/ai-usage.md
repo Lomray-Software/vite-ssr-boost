@@ -2,6 +2,57 @@
 
 Use this page as a grounding reference for tools working with the package.
 
+## AI agents
+
+Two [Agent Skills](https://agentskills.io/specification) are available: `ssr-boost-migrate` for an existing Vite SPA and `ssr-boost-new-app` for a new application. They include entry/data references and verification scripts.
+
+**Claude Code** — install the [plugin](https://code.claude.com/docs/en/plugins):
+
+```sh
+claude plugin marketplace add Lomray-Software/vite-ssr-boost
+claude plugin install ssr-boost@lomray
+```
+
+Invoke `/ssr-boost:ssr-boost-migrate` or `/ssr-boost:ssr-boost-new-app`. The GitHub install uses the repository's default branch; it requires the skill files to be present there. To try a checkout before release, run `claude --plugin-dir /absolute/path/to/vite-ssr-boost`.
+
+**Codex CLI** — from a clone of this repository, copy the complete folders (including references/scripts) into the personal skill directory:
+
+```sh
+mkdir -p ~/.codex/skills
+cp -R skills/ssr-boost-migrate skills/ssr-boost-new-app ~/.codex/skills/
+```
+
+Or copy them into the target repository:
+
+```sh
+mkdir -p /path/to/app/.codex/skills
+cp -R skills/ssr-boost-migrate skills/ssr-boost-new-app /path/to/app/.codex/skills/
+```
+
+The [current Codex documentation](https://developers.openai.com/codex/skills) specifies `.agents/skills` for discovery. For those versions, copy into `~/.agents/skills` or the application's `.agents/skills` instead, or expose the personal copies above with per-skill symlinks:
+
+```sh
+mkdir -p ~/.agents/skills
+ln -s ~/.codex/skills/ssr-boost-migrate ~/.agents/skills/ssr-boost-migrate
+ln -s ~/.codex/skills/ssr-boost-new-app ~/.agents/skills/ssr-boost-new-app
+```
+
+Use one discovered copy of each skill. For repository copies, use the equivalent symlinks from `.agents/skills/<name>` to `../../.codex/skills/<name>`. Invoke `$ssr-boost-migrate` or `$ssr-boost-new-app`; check `/skills` and restart Codex if the skills do not appear. Review existing folders before copying updates.
+
+**Cursor** — copy the skill folders into the app's `skills/` directory, then add a [project rule](https://cursor.com/docs/context/rules) at `.cursor/rules/ssr-boost.mdc`:
+
+```md
+---
+description: SSR Boost migration and new application workflows
+alwaysApply: false
+---
+For a Vite SPA migration, read @skills/ssr-boost-migrate/SKILL.md.
+For a new SSR Boost app, read @skills/ssr-boost-new-app/SKILL.md.
+Follow the selected skill's references and verification procedure.
+```
+
+**Other agents** — start with [llms.txt](https://lomray-software.github.io/vite-ssr-boost/llms.txt), or use [llms-full.txt](https://lomray-software.github.io/vite-ssr-boost/llms-full.txt) for the documentation and both skill procedures. The [benchmark reference](/reference/benchmarks) points to current measurements without embedding result numbers.
+
 ## Package identity
 
 `@lomray/vite-ssr-boost` adds SSR to React Router apps in Data mode, without moving to Framework mode and without rewriting the app. Keep the Vite configuration, route objects and components; use the same application for SSR or SPA output.
@@ -60,7 +111,7 @@ For an existing Vite + React Router app, run `ssr-boost init --dry-run` first an
 
 ## Machine-readable documentation
 
-The docs build generates [llms.txt](https://lomray-software.github.io/vite-ssr-boost/llms.txt) and [llms-full.txt](https://lomray-software.github.io/vite-ssr-boost/llms-full.txt) from the Markdown sources. The short file includes the package identity, the resolved release version when available, the public entrypoints and data-loading contract from this page, and an absolute URL for every documentation page. The full file concatenates those pages with their source URLs.
+The docs build generates [llms.txt](https://lomray-software.github.io/vite-ssr-boost/llms.txt) and [llms-full.txt](https://lomray-software.github.io/vite-ssr-boost/llms-full.txt) from the Markdown sources. The short file includes the package identity, the resolved release version when available, the public entrypoints and data-loading contract from this page, and an absolute URL for every documentation page. The full file concatenates those pages and both `skills/*/SKILL.md` procedures with their source URLs; relative skill links become absolute repository links.
 
 Run `npm run docs:build` to regenerate both files in `docs/.vitepress/dist`. The version comes from `git describe --tags --match 'v*' --abbrev=0`, with the leading `v` removed. If tags are unavailable, the build falls back to `npm view @lomray/vite-ssr-boost version`; if that also fails, it omits the version line. The build reports which source it used. The docs workflow fetches full Git history and tags so CI can use the tag path. The source manifest's placeholder version is never used; semantic-release assigns the published package version in `lib/package.json` separately.
 
