@@ -217,7 +217,7 @@ class DataStream {
 
   /** Drain completed value frames before delivering a React boundary chunk. */
   public take(): string {
-    return this.frames.splice(0).join('');
+    return this.frames.length ? this.frames.splice(0).join('') : '';
   }
 
   /** Publish initialization in the selected shell/footer block to unblock hydration. */

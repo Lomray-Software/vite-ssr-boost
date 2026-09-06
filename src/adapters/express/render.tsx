@@ -404,7 +404,7 @@ async function render(
           const legacyContext = syncContext(updated);
           const { matches, isSpa } = updated;
           const manifest = await getRouteAssets(config, matches, isSpa);
-          const hints = manifest.injectAssets(legacyContext);
+          const hints = manifest.injectAssets(legacyContext, Boolean(legacyContext.hasEarlyHints));
 
           if (legacyContext.hasEarlyHints) {
             await emitEarlyHints(executionContext, hints);

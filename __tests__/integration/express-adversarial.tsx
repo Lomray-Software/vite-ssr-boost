@@ -87,6 +87,9 @@ const fixture = vi.hoisted(() => ({
 
 vi.mock('react-dom/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-dom/server')>()),
+
+  /** Keep these injected pipe failures on the React 18 bridge. */
+  renderToReadableStream: undefined,
   renderToPipeableStream: fixture.renderToPipeableStream,
 }));
 

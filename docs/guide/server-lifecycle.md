@@ -89,6 +89,14 @@ This is the place to switch between streaming and full-document rendering based 
 
 Loader/action promises stream by default. Set `hydration: 'early'` in the lifecycle configuration (or Fetch handler options) to hydrate the parsed shell while boundaries are pending. The early block contains `getState` custom state before router state, so custom state must be available at `onShellReady`. Default footer ordering remains custom state, router state, footer. `nonce` applies to React and all generated scripts; `bootstrapScriptContent` is forwarded with the early shell marker prepended when enabled. See [Stream loader data](/guide/data-streaming).
 
+Default footer responses without loader/action data or errors use ordinary router hydration
+state. The stream decoder remains part of the browser entry for streamed responses.
+
+The prepared document header is available immediately after shell hooks and response metadata
+are finalized. Later React/data chunks remain pull-based, including with `onResponse` and
+diagnostics. Managed Express flushes each compressed chunk; see
+[streamed HTML and compression](/guide/deployment#streamed-html-and-compression).
+
 ## `onShellReady`
 
 Replaces the template header or footer around the React stream. Generated hydration state is

@@ -7,6 +7,7 @@ import type { Express } from 'express';
 import express from 'express';
 import PrepareServer from '@adapters/express/prepare-server';
 import type { TRender } from '@adapters/express/render';
+import staticFiles from '@adapters/express/static-files';
 import printServerInfo from '@helpers/print-server-info';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
@@ -96,7 +97,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
 
       app.use(
         basename!,
-        express.static(path.resolve(`${root}/${publicDir}`), {
+        (isSPA ? express.static : staticFiles)(path.resolve(`${root}/${publicDir}`), {
           ...expressStaticOpts,
           index: isSPA ? undefined : false,
         }),
@@ -116,7 +117,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
             prepareServer.loadHtml(req),
           ]);
           const { appProps, hasEarlyHints, shouldSkip, shouldCancel } =
-            (await onRequest?.(req, res)) ?? {};
+            (onRequest ? await onRequest(req, res) : undefined) ?? {};
           const [header, footer] = clientHtml;
 
           if (shouldCancel || res.writableEnded || res.headersSent) {

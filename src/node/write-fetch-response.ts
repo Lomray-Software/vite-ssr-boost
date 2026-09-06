@@ -115,14 +115,16 @@ const writeFetchResponse = async (res: TServerResponse, response: Response): Pro
         return;
       }
 
-      if (!res.write(chunk.value)) {
-        await waitForDrain(res);
-      }
+      const hasCapacity = res.write(chunk.value);
 
       /**
        * Express compression buffers otherwise: a gzip header alone is not a usable SSR shell.
        */
       (res as TServerResponse & { flush?: () => void }).flush?.();
+
+      if (!hasCapacity) {
+        await waitForDrain(res);
+      }
     }
 
     if (!res.destroyed && !res.writableEnded) {

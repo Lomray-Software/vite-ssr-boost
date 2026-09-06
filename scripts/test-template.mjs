@@ -15,6 +15,7 @@ import { createProductionMemoryProbe, configureProductionMeasurements, startProd
 // set this to Math.ceil(measured gzip KB * 1.05); document the reason and new size.
 const TEMPLATE_CLIENT_GZIP_BUDGET_KB = 154;
 const TEMPLATE_HOME_MARKER = 'SPA, SSR, Mobx, Consistent Suspense, Meta tags';
+const BROWSER_USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 
 const projectRoot = process.cwd();
 const source = resolve(process.argv[2] ?? join(projectRoot, '..', 'vite-template'));
@@ -29,6 +30,8 @@ const acceptance = {
   candidateRss: undefined,
   baselineTtfb: undefined,
   candidateTtfb: undefined,
+  baselineDeferredTtfb: undefined,
+  candidateDeferredTtfb: undefined,
   chunks: [],
   deferred: [],
   policyInfo: 0,
@@ -180,19 +183,28 @@ const inspectStream = (origin, pathname, headers = {}) =>
     request.on('error', reject);
   });
 
+/** Compare warmed routes in alternating order with the same browser headers and socket policy. */
 const measureTtfb = async (origin) => {
-  await inspectStream(origin, '/');
-  await inspectStream(origin, '/');
+  const samples = { '/': [], '/deferred': [] };
+  const headers = { 'User-Agent': BROWSER_USER_AGENT, 'Accept-Encoding': 'identity' };
 
-  const samples = [];
+  for (let sample = -3; sample < 11; sample += 1) {
+    const paths = sample % 2 === 0 ? ['/', '/deferred'] : ['/deferred', '/'];
 
-  for (let sample = 0; sample < 7; sample += 1) {
-    samples.push((await inspectStream(origin, '/')).firstChunkMs);
+    for (const pathname of paths) {
+      const { status, firstChunkMs } = await inspectStream(origin, pathname, headers);
+
+      assert.equal(status, 200, `TTFB ${pathname} status`);
+      assert.ok(Number.isFinite(firstChunkMs), `TTFB ${pathname} must contain HTML`);
+
+      if (sample >= 0) samples[pathname].push(firstChunkMs);
+    }
   }
 
-  samples.sort((left, right) => left - right);
+  /** Keep unrounded medians for the advisory latency comparison. */
+  const median = (values) => values.sort((left, right) => left - right)[Math.floor(values.length / 2)];
 
-  return samples[Math.floor(samples.length / 2)];
+  return { home: median(samples['/']), deferred: median(samples['/deferred']) };
 };
 
 const inspectEarlyStream = async (origin, pathname, mode, headers = {}) => {
@@ -341,7 +353,7 @@ const measureClientGzip = async () => {
 };
 
 const reportAcceptance = async () => {
-  const milliseconds = (value) => value === undefined ? 'not measured' : `${Math.round(value)} ms`;
+  const milliseconds = (value) => value === undefined ? 'not measured' : `${value.toFixed(3)} ms`;
 
   /** Format resident memory independently of heap size. */
   const memory = (value) => value === undefined ? 'not measured' : `${(value / 1024 ** 2).toFixed(2)} MiB`;
@@ -358,6 +370,8 @@ const reportAcceptance = async () => {
     `| Production server RSS after TTFB | ${memory(acceptance.candidateRss)} | ≤ 1.6 × baseline |`,
     `| Baseline median TTFB | ${milliseconds(acceptance.baselineTtfb)} | advisory |`,
     `| Candidate median TTFB | ${milliseconds(acceptance.candidateTtfb)} | advisory |`,
+    `| Baseline /deferred median HTML TTFB | ${milliseconds(acceptance.baselineDeferredTtfb)} | advisory |`,
+    `| Candidate /deferred median HTML TTFB | ${milliseconds(acceptance.candidateDeferredTtfb)} | advisory: <= 1.5 × candidate / |`,
     ...acceptance.chunks.map(({ mode, streamed, buffered, gzip }) =>
       `| ${mode} chunks (streamed / buffered / decoded gzip) | ${streamed} / ${buffered} / ${gzip ?? 'n/a'} | — |`),
     ...acceptance.deferred.map(({ mode, settleMs }) =>
@@ -734,8 +748,9 @@ try {
 
     await waitUntilReady(origin, baseline);
     baselineTtfb = await measureTtfb(origin);
-    acceptance.baselineTtfb = baselineTtfb;
-    console.info(`baseline production median TTFB: ${Math.round(baselineTtfb)}ms`);
+    acceptance.baselineTtfb = baselineTtfb.home;
+    acceptance.baselineDeferredTtfb = baselineTtfb.deferred;
+    console.info(`baseline production median HTML TTFB: / ${baselineTtfb.home.toFixed(3)}ms; /deferred ${baselineTtfb.deferred.toFixed(3)}ms`);
   } finally {
     await stop(baseline);
   }
@@ -779,16 +794,18 @@ try {
     await verify(origin, 'production');
 
     const candidateTtfb = await measureTtfb(origin);
-    acceptance.candidateTtfb = candidateTtfb;
+    acceptance.candidateTtfb = candidateTtfb.home;
+    acceptance.candidateDeferredTtfb = candidateTtfb.deferred;
     acceptance.candidateRss = (await memory()).rss;
-    const allowedTtfb = baselineTtfb + Math.max(35, baselineTtfb * 0.5);
+    const allowedTtfb = baselineTtfb.home + Math.max(35, baselineTtfb.home * 0.5);
 
-    if (candidateTtfb > allowedTtfb) {
+    if (candidateTtfb.home > allowedTtfb) {
       console.warn(`Advisory: production TTFB exceeded ${Math.round(allowedTtfb)}ms; shared-runner timing does not block release.`);
     }
     console.info(
-      `production median TTFB: ${Math.round(baselineTtfb)}ms -> ${Math.round(candidateTtfb)}ms`,
+      `production median HTML TTFB: / ${baselineTtfb.home.toFixed(3)}ms -> ${candidateTtfb.home.toFixed(3)}ms; /deferred ${baselineTtfb.deferred.toFixed(3)}ms -> ${candidateTtfb.deferred.toFixed(3)}ms`,
     );
+    console.info(`Advisory: streamed shell ratio: ${(candidateTtfb.deferred / candidateTtfb.home).toFixed(3)}x / 1.5x target`);
   } finally {
     await stop(prod);
     await dispose();

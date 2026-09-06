@@ -64,6 +64,28 @@ const chunks = async (response: Response) => {
 
 const testDataStream = (name: string, renderer: TRenderToStream): void => {
   describe(`real React loader/action streaming (${name})`, () => {
+    it('uses ordinary footer hydration when the route has no data', async () => {
+      const handler = createHandler(
+        {
+          createApp: (children) => children,
+          handler: createStaticHandler([{ path: '/', Component: () => <p>Static home</p> }]),
+          renderToStream: renderer,
+        },
+        {
+          diagnostics: false,
+          nonce: 'static-nonce',
+          getHtml: () => ({ header: '<main>', footer: '</main>' }),
+        },
+      );
+      const html = await (await handler(new Request('http://test/'))).text();
+
+      expect(html).toContain('<p>Static home</p>');
+      expect(html).toContain('window.__staticRouterHydrationData = JSON.parse(');
+      expect(html).toContain('nonce="static-nonce"');
+      expect(html).not.toContain('__ssrBoostStream');
+      expect(html.indexOf('__staticRouterHydrationData')).toBeGreaterThan(html.indexOf('Static home'));
+    });
+
     it.each(['GET', 'POST'])(
       'streams fallback and settlements before footer initialization for %s',
       async (method) => {

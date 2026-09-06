@@ -16,6 +16,7 @@ import type SsrPolicy from '@core/ssr-policy';
 import transformHtml from '@core/transform-html';
 import type { ISsrExecutionContext } from '@core/types';
 import buildCustomState from '@helpers/build-custom-state';
+import buildRouterState from '@helpers/build-router-state';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import obtainStreamError from '@helpers/obtain-stream-error';
 import type Diagnostics from '@services/diagnostics';
@@ -191,7 +192,7 @@ const prepareHtmlResponse = <TAppProps,>(
     sessionCookie,
     protectPrivate,
   }: ICoreRenderOptions<TAppProps>,
-  dataStream: DataStream,
+  dataStream?: DataStream,
 ): IHtmlResponse => {
   const serverResponse = context.serverContext!.response;
 
@@ -220,9 +221,13 @@ const prepareHtmlResponse = <TAppProps,>(
   let footer = shellFooter;
 
   if (isEarly) {
-    header += customState + dataStream.state(true);
+    header += customState + dataStream!.state(true);
   } else {
-    footer = customState + dataStream.state(false) + dataStream.take() + footer;
+    const state = dataStream
+      ? dataStream.state(false) + dataStream.take()
+      : buildRouterState(context.routerContext!, undefined, nonce);
+
+    footer = customState + state + footer;
   }
 
   if (rules) {
@@ -272,7 +277,9 @@ const renderResponse = async <TAppProps,>(
       matchRoutes(handler.dataRoutes, new URL(context.request.url), policy?.basename) ?? [];
     context.html = spaShell!(context.html);
 
-    await prepare?.({ context, executionContext });
+    if (prepare) {
+      await prepare({ context, executionContext });
+    }
 
     // Document policies apply to SPA shells too; the no-store default above is their baseline.
     if (rules) {
@@ -300,17 +307,26 @@ const renderResponse = async <TAppProps,>(
 
   context.routerContext = queried;
   context.matches = queried.matches;
-  const dataStream = new DataStream(queried, context.diagnostics, nonce, context.timeline);
+  const { loaderData, actionData, errors } = queried;
+  const hasRouterData =
+    Object.keys(loaderData).length > 0 || actionData !== null || errors !== null;
+  const dataStream =
+    hydration === 'early' || hasRouterData
+      ? new DataStream(queried, context.diagnostics, nonce, context.timeline)
+      : undefined;
 
   try {
-    await prepare?.({ context, executionContext });
+    if (prepare) {
+      await prepare({ context, executionContext });
+    }
+
     context.timeline?.record('prepare');
   } catch (error) {
-    dataStream.cancel();
+    dataStream?.cancel();
     throw error;
   }
 
-  const { isStream = true } = (await onRouterReady?.({ context })) ?? {};
+  const { isStream = true } = (onRouterReady ? await onRouterReady({ context }) : undefined) ?? {};
 
   context.isStream = isStream;
   context.serverContext = {
@@ -368,7 +384,7 @@ const renderResponse = async <TAppProps,>(
     context.timeline?.abort(reason);
     cleanup();
     context.didError ??= StreamError.RenderCancel;
-    dataStream.abort();
+    dataStream?.abort();
     renderController.abort(reason);
     output?.abort(reason);
   };
@@ -424,13 +440,13 @@ const renderResponse = async <TAppProps,>(
       output.abort(abortReason);
     }
 
-    void Promise.all([output.allReady, dataStream.done]).then(clearAbortTimer, clearAbortTimer);
+    void Promise.all([output.allReady, dataStream?.done]).then(clearAbortTimer, clearAbortTimer);
 
     await output.shellReady;
     context.timeline?.record('shell.ready');
 
     if (!isStream) {
-      await Promise.all([output.allReady, dataStream.done]);
+      await Promise.all([output.allReady, dataStream?.done]);
     }
   } catch (error) {
     abort(error);

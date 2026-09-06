@@ -32,6 +32,7 @@ describe('writeFetchResponse', () => {
       setHeader: vi.fn(),
       statusCode: 0,
       writableEnded: false,
+      flush: vi.fn(),
       write: vi.fn((chunk: Uint8Array) => {
         chunks.push(chunk);
 
@@ -42,6 +43,7 @@ describe('writeFetchResponse', () => {
 
     await vi.waitFor(() => expect(res.write).toHaveBeenCalledOnce());
     expect(pullCount).toBe(1);
+    expect(res.flush).toHaveBeenCalledOnce();
 
     res.emit('drain');
     await pending;

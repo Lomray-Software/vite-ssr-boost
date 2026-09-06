@@ -73,6 +73,75 @@ samples `process.memoryUsage()` in the listening server after TTFB, without forc
 compared with a plain ESM Express + `renderToPipeableStream` process using the same installed
 dependencies. See [acceptance gates](/reference/acceptance-gates) for the enforced budgets.
 
+## Streamed HTML and compression
+
+In production, the managed Express server records the built client directory's top-level
+file and directory names at startup. URLs outside those prefixes go straight to SSR without
+a filesystem lookup. Built assets and public files retain Express's validators, ranges, HEAD
+responses and directory redirects. Add new top-level public files before starting the server;
+restart after changing the build. Custom extension fallbacks and `fallthrough: false` retain
+the unrestricted static middleware.
+
+On React versions that expose `renderToReadableStream`, the Node renderer uses that native
+Web stream directly. React 18 retains the pipeable renderer and its bounded Node-to-Web bridge.
+Both paths preserve cancellation, shell hooks and downstream demand.
+
+The managed Express server keeps gzip enabled for HTML. The response writer flushes compression
+after each HTML chunk, before waiting for transport capacity. This delivers the shell while
+Suspense data is pending and preserves backpressure for later chunks. Buffered responses remain
+compressible. The Fetch core queues the prepared document header once React's shell is ready;
+it does not read later React chunks until the consumer requests them.
+
+Compression's default threshold is 1 KB, but a response without a known length is treated as
+exceeding that threshold. Flushing headers alone does not flush compressed HTML. If you add
+another compression layer or a reverse proxy, preserve incremental delivery and measure the
+first decoded HTML byte. See the [compression middleware documentation](https://expressjs.com/en/resources/middleware/compression/).
+
+To compare the managed adapter, Node/edge Fetch renderers and raw React on a local checkout, run:
+
+```bash
+npm run build
+NODE_ENV=production SSR_BOOST_TIMELINE=1 CONCURRENCY=1 node scripts/profile-stream.mjs
+```
+
+The in-process report includes router-query completion, preparation, shell readiness, the first
+adapter write, the first socket write, headers received and decoded HTML received. Times are p50
+milliseconds from Express middleware entry. These are elapsed stages, not CPU measurements.
+`SAMPLES`, `WARMUP`, `WARMUP_CONCURRENCY`, `CONCURRENCY`, `RUNTIMES=raw,managed,node,edge` and
+`ENCODINGS=identity,gzip` control the run.
+
+For service cost, run the actual production application in a separate process with the local
+profiling preload. It handles the profiler's control requests and records process CPU usage
+between measured batches. Run the client separately with one connection:
+
+```bash
+NODE_ENV=production node --import /path/to/vite-ssr-boost/scripts/profile-server.mjs server.mjs
+PROFILE_URL=http://127.0.0.1:3000 CONCURRENCY=1 SAMPLES=50 WARMUP=100 WARMUP_CONCURRENCY=10 ENCODINGS=identity \
+  node scripts/profile-stream.mjs > service.jsonl
+```
+
+The warm-up can use ten connections to exercise the same hot paths as a throughput run;
+measured requests still use the requested concurrency. `ROUTES=/,/items,/items/1` selects the production paths. Every measured response must return 200.
+The report separates client TTFB from mean CPU microseconds per complete response. On Node
+22.19 and newer, `mainThreadCpuUsPerRequest` uses `process.threadCpuUsage()` to measure the
+event-loop thread independently of background workers. `cpuUsPerRequest` also includes those
+workers. Loader timers contribute elapsed time but do not count as CPU. See the
+[Node CPU accounting API](https://nodejs.org/api/process.html#processthreadcpuusagepreviousvalue). Keep the server isolated from
+other traffic, builds and tests.
+
+For stage attribution, add `--cpu-prof --cpu-prof-interval=100 --cpu-prof-name=server.cpuprofile`
+to the server command, then run the client and stop the server with SIGTERM. The preload exits
+normally so Node writes the profile. Summarize only the marked measurement windows:
+
+```bash
+node scripts/summarize-cpu.mjs server.cpuprofile service.jsonl
+```
+
+The summary reports time-weighted active samples in microseconds per request, excluding idle,
+startup and warm-up. These are sampling estimates. The process CPU counter in a profiled run
+also includes profiler overhead, so use a separate run without `--cpu-prof` for that counter.
+Gzip's first socket write can contain only its header; decoded HTML arrival is reported separately.
+
 ## Preview mode
 
 `ssr-boost preview` runs watch builds and starts the production server after the output is ready.

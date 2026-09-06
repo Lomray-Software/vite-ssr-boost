@@ -75,7 +75,7 @@ const createHandler = <TAppProps = Record<string, any>>(
     const timeline = createTimeline(request, isEnabled);
 
     try {
-      const requestInit = await onRequest?.({ executionContext, request });
+      const requestInit = onRequest ? await onRequest({ executionContext, request }) : undefined;
       const isBypass = requestInit instanceof Response;
       const metadata = isBypass ? undefined : requestInit;
       const context: ISsrRequestContext<TAppProps> = {
