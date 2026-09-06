@@ -108,6 +108,11 @@ Typical uses:
 - state container tags
 - request-specific metadata
 
+For final document policies, prefer the `documentHeaders` lifecycle option: it runs
+after this hook, including its cookie mutations. Configure `sessionCookie` to make
+authenticated documents private by default. Loader/action headers remain explicit;
+use `copyLoaderHeaders` with an allowlist. See [Document headers and caching](/guide/caching).
+
 ## `onResponse`
 
 Receives `{ context, html, isEnd }` for HTML chunks as they are written, with `isEnd: false`.

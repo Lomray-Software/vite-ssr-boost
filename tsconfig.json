@@ -35,6 +35,7 @@
     "useDefineForClassFields": true,
     "jsx": "react",
     "paths": {
+      "@lomray/vite-ssr-boost/*": ["./src/*"],
       "@__helpers__/*": ["./__helpers__/*"],
       "@__mocks__/*": ["./__mocks__/*"],
       "@adapters/*": ["./src/adapters/*"],
@@ -55,6 +56,7 @@
   "include": [
     "src",
     "__tests__",
+    "__fixtures__/caching",
     "__mocks__",
     "__helpers__",
     "types",

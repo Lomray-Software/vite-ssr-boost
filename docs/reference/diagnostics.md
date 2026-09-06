@@ -18,6 +18,15 @@ the response finishes, without delaying streamed chunks. When disabled, they nei
 accumulate HTML. Completed-output checks skip cancelled or failed streams, redirects, and bodyless
 responses; invalid file-backed shells always throw, even with diagnostics disabled.
 
+## SSR_BOOST_CACHE_PRIVATE_LEAK {#ssr_boost_cache_private_leak}
+
+A final response is explicitly public while carrying Set-Cookie or while the request
+contains the configured `sessionCookie`. Use `documentHeaders` with its default
+credential protection and bypass shared cache reads and writes for that cookie.
+The warning is deduplicated and never prints cookie values. Like other development
+checks, it is disabled in production unless diagnostics are explicitly enabled.
+See [Document headers and caching](/guide/caching) for the helpers and tested recipes.
+
 ## SSR_BOOST_DEPRECATED_REQ_RES {#ssr_boost_deprecated_req_res}
 
 A managed Express hook or loader reads `context.req` or `context.res`. These fields still return

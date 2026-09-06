@@ -291,6 +291,10 @@ that ran before the redirect. Redirect headers override matching hook headers; `
 from both are appended separately. For rendered routes,
 React Router exposes loader/action headers on `context.routerContext`; copy the headers your HTML
 document needs in `onRouterReady`. A JSON loader's `Content-Type` is not the document's content type.
+The server-side [HTTP helpers](/guide/caching) provide explicit `copyLoaderHeaders`
+allowlists and ordered `documentHeaders` policies. Both `createHandler` and the managed
+entry's `init` result accept `documentHeaders`, `sessionCookie` and `protectPrivate`.
+Document rules run after `onShellReady`; redirects retain the precedence above.
 
 ## Streaming and cancellation
 

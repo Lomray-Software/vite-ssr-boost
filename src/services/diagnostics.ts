@@ -2,6 +2,7 @@ import type { StaticHandlerContext } from 'react-router';
 import Logger from '@services/logger';
 
 type TDiagnosticCode =
+  | 'SSR_BOOST_CACHE_PRIVATE_LEAK'
   | 'SSR_BOOST_DEPRECATED_REQ_RES'
   | 'SSR_BOOST_LOADER_NOT_SERIALIZABLE'
   | 'SSR_BOOST_STREAM_PROMISE_ABORTED'
@@ -208,6 +209,19 @@ class Diagnostics {
       this.warn(
         'SSR_BOOST_OUTLET_MISSING',
         `HTML shell for route ${JSON.stringify(this.route)} must supply both header and footer around exactly one ${OUTLET} outlet, with no outlet left in either half.`,
+      );
+    }
+  }
+
+  /** Warn about explicitly public documents carrying credentials without logging their values. */
+  public inspectCachePolicy(headers: Headers, hasSessionCookie: boolean): void {
+    if (
+      /(?:^|,)\s*public\s*(?:,|$)/i.test(headers.get('Cache-Control') ?? '') &&
+      (headers.has('Set-Cookie') || hasSessionCookie)
+    ) {
+      this.warn(
+        'SSR_BOOST_CACHE_PRIVATE_LEAK',
+        `Response for route ${JSON.stringify(this.route)} is public with Set-Cookie or a session cookie. Use private, no-store and bypass the shared cache for authenticated requests.`,
       );
     }
   }

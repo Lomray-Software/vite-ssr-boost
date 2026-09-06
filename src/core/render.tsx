@@ -7,6 +7,8 @@ import { ServerProvider } from '@context/server';
 import type { IServerContext } from '@context/server';
 import composeHtml from '@core/compose-html';
 import DataStream from '@core/data-stream';
+import documentHeaders, { hasCookie } from '@core/document-headers';
+import type { IDocumentHeaderRule, IDocumentHeadersOptions } from '@core/document-headers';
 import headResponse from '@core/head-response';
 import { mergeResponseHeaders } from '@core/headers';
 import transformHtml from '@core/transform-html';
@@ -80,7 +82,11 @@ export interface ICoreRenderParams<TAppProps = Record<string, any>> {
   renderToStream: TRenderToStream;
 }
 
-export interface ICoreRenderOptions<TAppProps = Record<string, any>> {
+export interface ICoreRenderOptions<
+  TAppProps = Record<string, any>,
+> extends IDocumentHeadersOptions {
+  /** Opt in to document policies after onShellReady; redirects keep their header contract. */
+  documentHeaders?: readonly IDocumentHeaderRule[];
   /** Hydrate the parsed shell while deferred boundaries are still pending. */
   hydration?: 'early' | 'footer';
   nonce?: string;
@@ -163,7 +169,15 @@ const createShellErrorResponse = <TAppProps,>(
  */
 const prepareHtmlResponse = <TAppProps,>(
   context: ISsrRequestContext<TAppProps>,
-  { getState, onShellReady, hydration, nonce }: ICoreRenderOptions<TAppProps>,
+  {
+    getState,
+    onShellReady,
+    hydration,
+    nonce,
+    documentHeaders: rules,
+    sessionCookie,
+    protectPrivate,
+  }: ICoreRenderOptions<TAppProps>,
   dataStream: DataStream,
 ): IHtmlResponse => {
   const serverResponse = context.serverContext!.response;
@@ -176,6 +190,7 @@ const prepareHtmlResponse = <TAppProps,>(
   }
 
   const shell = onShellReady?.({ context }) ?? {};
+
   const isEarly = hydration === 'early' && context.isStream;
   const customState = buildCustomState(
     getState?.({ context }),
@@ -197,6 +212,10 @@ const prepareHtmlResponse = <TAppProps,>(
     footer = customState + dataStream.state(false) + dataStream.take() + footer;
   }
 
+  if (rules) {
+    context.response.headers = documentHeaders(rules, { sessionCookie, protectPrivate })(context);
+  }
+
   const headers = new Headers(context.response.headers);
 
   return { header, footer, headers, status: context.response.status };
@@ -205,7 +224,7 @@ const prepareHtmlResponse = <TAppProps,>(
 /**
  * Coordinate router queries, React rendering and the final Fetch response.
  */
-const render = async <TAppProps,>(
+const renderResponse = async <TAppProps,>(
   { createApp, handler, renderToStream }: ICoreRenderParams<TAppProps>,
   context: ISsrRequestContext<TAppProps>,
   {
@@ -221,6 +240,9 @@ const render = async <TAppProps,>(
     onShellReady,
     prepare,
     routerRequestContext,
+    documentHeaders: rules,
+    sessionCookie,
+    protectPrivate,
   }: ICoreRenderOptions<TAppProps>,
   executionContext?: ISsrExecutionContext,
 ): Promise<Response> => {
@@ -384,6 +406,9 @@ const render = async <TAppProps,>(
         onShellReady,
         hydration,
         nonce,
+        documentHeaders: rules,
+        sessionCookie,
+        protectPrivate,
       },
       dataStream,
     );
@@ -420,6 +445,23 @@ const render = async <TAppProps,>(
 
     throw error;
   }
+};
+
+/** Inspect the committed metadata, including redirect and shell-error responses. */
+const render = async <TAppProps,>(
+  params: ICoreRenderParams<TAppProps>,
+  context: ISsrRequestContext<TAppProps>,
+  options: ICoreRenderOptions<TAppProps>,
+  executionContext?: ISsrExecutionContext,
+): Promise<Response> => {
+  const response = await renderResponse(params, context, options, executionContext);
+
+  context.diagnostics?.inspectCachePolicy(
+    response.headers,
+    Boolean(options.sessionCookie && hasCookie(context.request, options.sessionCookie)),
+  );
+
+  return response;
 };
 
 export default render;

@@ -33,6 +33,8 @@ const { exports: publicExports } = JSON.parse(await readFile(resolve(projectRoot
 // context/server and helpers/get-server-state ARE browser entries despite their names.
 // Everything else is covered automatically; a new entry needs an explicit budget.
 const excludedPaths = [
+  // The HTTP policy entry is server-side, even though it also supports edge runtimes.
+  /^http\.js$/,
   /^(?:server|core|edge|node|adapters?|cli|plugins?|services|workflow)(?:\/|\.js$)/,
   /^constants\/(?:cli-|plugin-|stream-error\.js$)/,
   /^helpers\/(?:build-(?:custom|router)-state|create-focus-only|dev-marker|html-escape|is-route-file|obtain-stream-error|plugin-config|print-server-(?:info|urls)|process-stop|resolve-server-urls|serialize-errors|vite-aliases)\.js$/,
