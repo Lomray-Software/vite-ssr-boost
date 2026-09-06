@@ -56,6 +56,10 @@ An include/exclude pattern has no match among known route ids' declared URL path
 
 Check spelling, include the URL basename, and use path patterns rather than component filenames or generated numeric route ids. The check is advisory and compares declared paths, so a RegExp restricted to particular dynamic parameter values may need manual verification. Invalid path-to-regexp string syntax instead throws during entry/handler creation, even with diagnostics disabled.
 
+## SSR_BOOST_TIMELINE {#ssr_boost_timeline}
+
+Set `SSR_BOOST_TIMELINE=1` to record request stages even when diagnostics are disabled and print one JSON line per completed or cancelled request in development. The line includes the method, pathname and millisecond offsets for routing, preparation, shell readiness, state emission, deferred settlements (with promise ids), body/response completion and abort reasons. Recording is also enabled by diagnostics; logging requires the timeline environment flag and stays off in production. Hooks can inspect `context.timeline?.events`, and the testing kit exposes `await response.timeline()`. When diagnostics are off and the flag is unset, no timeline instance or event array is allocated. See [Request timeline](/guide/testing#request-timeline) for stage definitions; `response.end` measures consumption of the Fetch body, not delivery over a socket.
+
 ## SSR_BOOST_LOADER_NOT_SERIALIZABLE {#ssr_boost_loader_not_serializable}
 
 ### When it appears

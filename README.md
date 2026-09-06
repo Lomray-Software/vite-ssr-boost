@@ -155,6 +155,8 @@ The [example projects guide](./docs/examples/index.md) explains the wiring in ea
 
 ## Documentation
 
+Test SSR routes without a server with `@lomray/vite-ssr-boost/testing`; see the [Vitest and Playwright guide](https://lomray-software.github.io/vite-ssr-boost/guide/testing).
+
 - [Documentation site](https://lomray-software.github.io/vite-ssr-boost/), [comparison guide](./docs/guide/choosing.md) and [FAQ](./docs/reference/faq.md).
 - [Hydration order and streaming](./docs/reference/hydration-and-streaming.md).
 - API: [Plugin](./docs/api/plugin.md), [Browser entry](./docs/api/browser-entry.md), [Server entry](./docs/api/server-entry.md), [Node production](./docs/api/node-production.md), [Components and helpers](./docs/api/components-and-helpers.md) and [CLI](./docs/api/cli.md).

@@ -20,6 +20,7 @@ The package declares `engines.node: ">=22.12.0"` and peers for Vite `>=5`, React
 - Fetch core: default export `createHandler` from `@lomray/vite-ssr-boost/core/handler`.
 - Transport adapters: `@lomray/vite-ssr-boost/adapters/node`, `adapters/express`, `adapters/fastify`, `adapters/hono` and `adapters/edge`, all under the package prefix.
 - Renderers: `@lomray/vite-ssr-boost/node/render-to-stream` and `@lomray/vite-ssr-boost/edge/render-to-stream`.
+- SSR route testing: `@lomray/vite-ssr-boost/testing`; optional browser assertions: `@lomray/vite-ssr-boost/testing/playwright`. See [Testing](/guide/testing).
 - Node production helpers: `@lomray/vite-ssr-boost/node/production`.
 - CLI binary: `ssr-boost`.
 

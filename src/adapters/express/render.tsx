@@ -37,6 +37,7 @@ export interface IRequestContext<TAppProps = Record<any, any>> {
   matches?: RouterState['matches'];
   hasEarlyHints?: boolean;
   didError?: StreamError;
+  timeline?: ISsrRequestContext<TAppProps>['timeline'];
 }
 
 export type TRender<TAppProps = Record<any, any>> = (
@@ -292,6 +293,7 @@ async function render(
       context.matches = updated.matches;
       context.routerContext = updated.routerContext;
       context.serverContext = updated.serverContext;
+      context.timeline = updated.timeline;
 
       return context;
     };

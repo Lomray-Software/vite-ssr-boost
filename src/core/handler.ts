@@ -7,6 +7,7 @@ import SsrPolicy from '@core/ssr-policy';
 import type { ISsrPolicy } from '@core/ssr-policy';
 import type { ISsrExecutionContext, TSsrHandler } from '@core/types';
 import Diagnostics, { isDiagnosticsEnabled } from '@services/diagnostics';
+import { createTimeline } from '@services/request-timeline';
 
 interface IHtmlShell {
   footer: string;
@@ -36,6 +37,9 @@ interface ICreateHandlerOptions<TAppProps> extends ICoreRenderOptions<TAppProps>
    */
   getHtml: (request: Request) => IHtmlShell | Promise<IHtmlShell>;
 
+  /** Observe the initialized context, including bypass responses, before rendering. */
+  onContext?: (params: { context: ISsrRequestContext<TAppProps> }) => void;
+
   /**
    * Initialize request metadata or return a Response to bypass rendering.
    */
@@ -50,7 +54,15 @@ interface ICreateHandlerOptions<TAppProps> extends ICoreRenderOptions<TAppProps>
  */
 const createHandler = <TAppProps = Record<string, any>>(
   params: ICoreRenderParams<TAppProps>,
-  { diagnostics, getHtml, onRequest, ssr, basename, ...options }: ICreateHandlerOptions<TAppProps>,
+  {
+    diagnostics,
+    getHtml,
+    onContext,
+    onRequest,
+    ssr,
+    basename,
+    ...options
+  }: ICreateHandlerOptions<TAppProps>,
 ): TSsrHandler => {
   const policy = new SsrPolicy(ssr, params.handler.dataRoutes, basename);
   const spaShell = createSpaShell();
@@ -59,32 +71,44 @@ const createHandler = <TAppProps = Record<string, any>>(
    * Build fresh context for this request before invoking the renderer.
    */
   return async (request, executionContext) => {
-    const requestDiagnostics = isDiagnosticsEnabled(diagnostics)
-      ? new Diagnostics(new URL(request.url).pathname)
-      : undefined;
-    const requestInit = await onRequest?.({ executionContext, request });
+    const isEnabled = isDiagnosticsEnabled(diagnostics);
+    const timeline = createTimeline(request, isEnabled);
 
-    if (requestInit instanceof Response) {
-      requestDiagnostics?.inspectCachePolicy(
-        requestInit.headers,
-        Boolean(options.sessionCookie && hasCookie(request, options.sessionCookie)),
-      );
+    try {
+      const requestInit = await onRequest?.({ executionContext, request });
+      const isBypass = requestInit instanceof Response;
+      const metadata = isBypass ? undefined : requestInit;
+      const context: ISsrRequestContext<TAppProps> = {
+        appProps: (metadata?.appProps ?? {}) as NonNullable<TAppProps>,
+        diagnostics: isEnabled ? new Diagnostics(new URL(request.url).pathname) : undefined,
+        html: isBypass ? { header: '', footer: '' } : await getHtml(request),
+        request,
+        response: {
+          headers: new Headers(metadata?.headers),
+          status: metadata?.status,
+        },
+        ...(timeline ? { timeline } : {}),
+      };
 
-      return headResponse(request, requestInit);
+      onContext?.({ context });
+
+      if (isBypass) {
+        context.diagnostics?.inspectCachePolicy(
+          requestInit.headers,
+          Boolean(options.sessionCookie && hasCookie(request, options.sessionCookie)),
+        );
+
+        const response = await headResponse(request, requestInit);
+
+        return timeline?.response(response) ?? response;
+      }
+
+      return await render({ ...params, policy, spaShell }, context, options, executionContext);
+    } catch (error) {
+      timeline?.abort(error);
+      timeline?.end();
+      throw error;
     }
-
-    const context: ISsrRequestContext<TAppProps> = {
-      appProps: (requestInit?.appProps ?? {}) as NonNullable<TAppProps>,
-      diagnostics: requestDiagnostics,
-      html: await getHtml(request),
-      request,
-      response: {
-        headers: new Headers(requestInit?.headers),
-        status: requestInit?.status,
-      },
-    };
-
-    return render({ ...params, policy, spaShell }, context, options, executionContext);
   };
 };
 

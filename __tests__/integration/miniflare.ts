@@ -15,7 +15,9 @@ describe('Miniflare edge app', () => {
       bundle: true,
       conditions: ['workerd', 'worker', 'browser'],
       define: { 'process.env.NODE_ENV': '"production"' },
-      entryPoints: [fileURLToPath(new URL('../../__fixtures__/edge-app.tsx', import.meta.url))],
+      entryPoints: [
+        fileURLToPath(new URL('../../__fixtures__/edge-app.tsx', import.meta.url)),
+      ],
       format: 'esm',
       outfile: 'worker.mjs',
       platform: 'browser',
@@ -26,14 +28,18 @@ describe('Miniflare edge app', () => {
               setup(buildContext) {
                 buildContext.onResolve(
                   {
-                    filter: /^\.\.\/src\/(?:adapters\/edge|core\/handler|edge\/render-to-stream)$/,
+                    filter:
+                      /^\.\.\/src\/(?:adapters\/edge|core\/handler|edge\/render-to-stream|testing\/edge)$/,
                   },
                   ({ path }) => {
                     buildOutputImports += 1;
 
                     return {
                       path: fileURLToPath(
-                        new URL(`../../lib/${path.slice('../src/'.length)}.js`, import.meta.url),
+                        new URL(
+                          `../../lib/${path.slice('../src/'.length)}.js`,
+                          import.meta.url,
+                        ),
                       ),
                     };
                   },
@@ -48,8 +54,8 @@ describe('Miniflare edge app', () => {
       write: false,
     });
 
-    if (useBuildOutput && buildOutputImports !== 3) {
-      throw new Error(`Expected 3 build-output imports, resolved ${buildOutputImports}.`);
+    if (useBuildOutput && buildOutputImports !== 4) {
+      throw new Error(`Expected 4 build-output imports, resolved ${buildOutputImports}.`);
     }
 
     miniflare = new Miniflare({
@@ -148,6 +154,18 @@ describe('Miniflare edge app', () => {
     ]);
     expect(inspected.html).toContain('<main>Edge runtime</main>');
     expect(inspected.html).toContain('</div></body></html>');
+  });
+
+  it('runs the testing kit and resolves deferred values in workerd without Node shims', async () => {
+    const response = await miniflare.dispatchFetch('https://edge.example/testing');
+    const result = (await response.json()) as {
+      html: string;
+      state: { loaderData: { test: { deferred: { users: number } } } };
+      timeline: { stage: string }[];
+    };
+    expect(result.html).toContain('Edge test kit');
+    expect(result.state.loaderData.test.deferred).toEqual({ users: 3 });
+    expect(result.timeline.at(-1)?.stage).toBe('response.end');
   });
 
   it.each([

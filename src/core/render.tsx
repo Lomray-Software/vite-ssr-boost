@@ -19,10 +19,13 @@ import buildCustomState from '@helpers/build-custom-state';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import obtainStreamError from '@helpers/obtain-stream-error';
 import type Diagnostics from '@services/diagnostics';
+import type RequestTimeline from '@services/request-timeline';
+import { createTimeline } from '@services/request-timeline';
 
 export interface ISsrRequestContext<TAppProps = Record<string, any>> {
   appProps: NonNullable<TAppProps>;
   diagnostics?: Diagnostics;
+  timeline?: RequestTimeline;
 
   /**
    * First render failure, or the explicit timeout/cancellation classification.
@@ -286,16 +289,19 @@ const renderResponse = async <TAppProps,>(
     requestContext: routerRequestContext ?? context,
   });
 
+  context.timeline?.record('router.query');
+
   if (queried instanceof Response) {
     return headResponse(context.request, mergeResponseHeaders(queried, context.response.headers));
   }
 
   context.routerContext = queried;
   context.matches = queried.matches;
-  const dataStream = new DataStream(queried, context.diagnostics, nonce);
+  const dataStream = new DataStream(queried, context.diagnostics, nonce, context.timeline);
 
   try {
     await prepare?.({ context, executionContext });
+    context.timeline?.record('prepare');
   } catch (error) {
     dataStream.cancel();
     throw error;
@@ -356,6 +362,7 @@ const renderResponse = async <TAppProps,>(
 
     hasAborted = true;
     abortReason = reason;
+    context.timeline?.abort(reason);
     cleanup();
     context.didError ??= StreamError.RenderCancel;
     dataStream.abort();
@@ -368,6 +375,7 @@ const renderResponse = async <TAppProps,>(
    */
   const abortTimer = setTimeout(() => {
     context.didError = StreamError.RenderTimeout;
+    context.timeline?.abort(new Error(`SSR render timed out after ${abortDelay}ms`));
     abort();
   }, abortDelay);
 
@@ -415,7 +423,12 @@ const renderResponse = async <TAppProps,>(
 
     void Promise.all([output.allReady, dataStream.done]).then(clearAbortTimer, clearAbortTimer);
 
-    await (isStream ? output.shellReady : Promise.all([output.allReady, dataStream.done]));
+    await output.shellReady;
+    context.timeline?.record('shell.ready');
+
+    if (!isStream) {
+      await Promise.all([output.allReady, dataStream.done]);
+    }
   } catch (error) {
     abort(error);
     await output?.stream.cancel(error).catch(() => undefined);
@@ -460,7 +473,16 @@ const renderResponse = async <TAppProps,>(
       });
     }
 
-    const body = composeHtml(header, output.stream, footer, abort, cleanup, dataStream);
+    const body = composeHtml(
+      header,
+      output.stream,
+      footer,
+      abort,
+      cleanup,
+      dataStream,
+      context.timeline,
+      hydration === 'early' && isStream,
+    );
     const transformed = transformHtml(
       body,
       onResponse ? (html, isEnd) => onResponse({ context, html, isEnd }) : undefined,
@@ -484,21 +506,34 @@ const renderResponse = async <TAppProps,>(
   }
 };
 
-/** Inspect the committed metadata, including redirect and shell-error responses. */
+/** Record the timeline and inspect the committed metadata, including redirect and shell-error responses, for every core consumer. */
 const render = async <TAppProps,>(
   params: ICoreRenderParams<TAppProps>,
   context: ISsrRequestContext<TAppProps>,
   options: ICoreRenderOptions<TAppProps>,
   executionContext?: ISsrExecutionContext,
 ): Promise<Response> => {
-  const response = await renderResponse(params, context, options, executionContext);
+  const timeline =
+    context.timeline ?? createTimeline(context.request, Boolean(context.diagnostics));
 
-  context.diagnostics?.inspectCachePolicy(
-    response.headers,
-    Boolean(options.sessionCookie && hasCookie(context.request, options.sessionCookie)),
-  );
+  if (timeline) {
+    context.timeline = timeline;
+  }
 
-  return response;
+  try {
+    const response = await renderResponse(params, context, options, executionContext);
+
+    context.diagnostics?.inspectCachePolicy(
+      response.headers,
+      Boolean(options.sessionCookie && hasCookie(context.request, options.sessionCookie)),
+    );
+
+    return timeline?.response(response) ?? response;
+  } catch (error) {
+    timeline?.abort(error);
+    timeline?.end();
+    throw error;
+  }
 };
 
 export default render;

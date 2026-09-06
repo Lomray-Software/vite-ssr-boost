@@ -3,6 +3,7 @@ import { createStaticHandler } from 'react-router';
 import adapterEdge from '../src/adapters/edge';
 import createHandler from '../src/core/handler';
 import renderToStream from '../src/edge/render-to-stream';
+import { createTestHandler, createDeferred } from '../src/testing/edge';
 
 const handler = createHandler(
   {
@@ -40,6 +41,29 @@ const fetchHandler = adapterEdge(handler, { compression: true });
 
 export default {
   fetch: async (request: Request) => {
+    if (new URL(request.url).pathname === '/testing') {
+      const deferred = createDeferred<{ users: number }>();
+      const app = createTestHandler({
+        routes: [
+          {
+            id: 'test',
+            path: '/',
+            Component: () => <p>Edge test kit</p>,
+            loader: () => ({ deferred: deferred.promise }),
+          },
+        ],
+        diagnostics: true,
+      });
+      const result = await app.fetch('/');
+      deferred.resolve({ users: 3 });
+
+      return Response.json({
+        html: await result.html(),
+        state: await result.routerState(),
+        timeline: await result.timeline(),
+      });
+    }
+
     const response = await fetchHandler(request);
 
     if (new URL(request.url).searchParams.has('inspect-compression')) {

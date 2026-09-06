@@ -1,4 +1,9 @@
 import { test, expect, chromium } from '@playwright/test';
+import {
+  collectStreamTimeline,
+  expectHydrated,
+  expectStreamed,
+} from '../lib/testing/playwright.js';
 
 for (const mode of ['Await', 'use']) {
   test(`early shell is interactive within 300ms; ${mode} hydrates once and client loaders stay native`, async () => {
@@ -15,20 +20,7 @@ for (const mode of ['Await', 'use']) {
     }
     try {
       const page = await browser.newPage();
-      const errors = [];
-      page.on('pageerror', (error) => errors.push(error.message));
-      page.on('console', (message) => {
-        if (message.type() === 'error') errors.push(message.text());
-      });
-      await page.addInitScript(() => {
-        const observer = new MutationObserver(() => {
-          if (document.querySelector('button')) {
-            window.shellAt = performance.now();
-            observer.disconnect();
-          }
-        });
-        observer.observe(document, { childList: true, subtree: true });
-      });
+      const timeline = await collectStreamTimeline(page);
       // Warm the built entry, matching the cached async-entry timing regression.
       await page.goto('http://127.0.0.1:4179/');
       await page.getByRole('button', { name: 'Count 0' }).click();
@@ -37,19 +29,23 @@ for (const mode of ['Await', 'use']) {
         waitUntil: 'commit',
       });
       await page.getByRole('button', { name: 'Count 0' }).click({ timeout: 300 });
-      await expect(page.getByRole('button', { name: 'Count 1' })).toBeVisible({ timeout: 300 });
-      const interactiveMs = await page.evaluate(() => performance.now() - window.shellAt);
+      await expect(page.getByRole('button', { name: 'Count 1' })).toBeVisible({
+        timeout: 300,
+      });
+      const shellAt = (await timeline.read()).find((event) => event.stage === 'shell').at;
+      const interactiveMs = await page.evaluate((at) => performance.now() - at, shellAt);
       expect(interactiveMs).toBeLessThanOrEqual(300);
       await expect(page.locator('[data-fallback]')).toBeVisible();
+      await expectStreamed(page, '[data-resolved]');
       await expect(page.locator('[data-resolved]')).toHaveText('Users: 3');
       await expect(page.locator('[data-resolved]')).toHaveCount(1);
       await expect(page.locator('[data-fallback]')).toHaveCount(0);
-      expect(errors).toEqual([]);
+      await expectHydrated(page);
       await page.getByRole('link', { name: 'Home', exact: true }).click();
       await page.getByRole('link', { name: 'Deferred', exact: true }).click();
       await expect(page.locator('[data-resolved]')).toHaveText('Users: 3');
       await expect(page.locator('[data-resolved]')).toHaveCount(1);
-      expect(errors).toEqual([]);
+      await expectHydrated(page);
       console.info(
         `${mode}: shell interactive after ${Math.round(interactiveMs)}ms; no hydration errors or duplicates`,
       );
