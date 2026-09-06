@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import React from 'react';
-import type { StaticHandler, StaticHandlerContext } from 'react-router';
-import { createStaticRouter, StaticRouterProvider } from 'react-router';
+import type { RouterState, StaticHandler, StaticHandlerContext } from 'react-router';
+import { createStaticRouter, matchRoutes, StaticRouterProvider } from 'react-router';
 import StreamError from '@constants/stream-error';
 import { ServerProvider } from '@context/server';
 import type { IServerContext } from '@context/server';
@@ -11,6 +11,8 @@ import documentHeaders, { hasCookie } from '@core/document-headers';
 import type { IDocumentHeaderRule, IDocumentHeadersOptions } from '@core/document-headers';
 import headResponse from '@core/head-response';
 import { mergeResponseHeaders } from '@core/headers';
+import type createSpaShell from '@core/spa-shell';
+import type SsrPolicy from '@core/ssr-policy';
 import transformHtml from '@core/transform-html';
 import type { ISsrExecutionContext } from '@core/types';
 import buildCustomState from '@helpers/build-custom-state';
@@ -28,6 +30,9 @@ export interface ISsrRequestContext<TAppProps = Record<string, any>> {
   didError?: StreamError;
   html: { footer: string; header: string };
   isStream?: boolean;
+  isSpa?: boolean;
+  /** Structural route matches are available to prepare even when loaders are skipped. */
+  matches?: RouterState['matches'];
   request: Request;
 
   /**
@@ -80,6 +85,8 @@ export interface ICoreRenderParams<TAppProps = Record<string, any>> {
   createApp: (children: ReactNode, context: ISsrRequestContext<TAppProps>) => ReactNode;
   handler: StaticHandler;
   renderToStream: TRenderToStream;
+  policy?: SsrPolicy;
+  spaShell?: ReturnType<typeof createSpaShell>;
 }
 
 export interface ICoreRenderOptions<
@@ -225,7 +232,7 @@ const prepareHtmlResponse = <TAppProps,>(
  * Coordinate router queries, React rendering and the final Fetch response.
  */
 const renderResponse = async <TAppProps,>(
-  { createApp, handler, renderToStream }: ICoreRenderParams<TAppProps>,
+  { createApp, handler, renderToStream, policy, spaShell }: ICoreRenderParams<TAppProps>,
   context: ISsrRequestContext<TAppProps>,
   {
     abortDelay = 15_000,
@@ -246,6 +253,35 @@ const renderResponse = async <TAppProps,>(
   }: ICoreRenderOptions<TAppProps>,
   executionContext?: ISsrExecutionContext,
 ): Promise<Response> => {
+  const mode = policy?.select(context.request, context.diagnostics) ?? 'ssr';
+
+  if (policy?.active && !context.response.headers.has('Cache-Control')) {
+    context.response.headers.set('Cache-Control', 'no-store');
+  }
+
+  if (mode === 'spa') {
+    context.isSpa = true;
+    context.isStream = false;
+    context.matches =
+      matchRoutes(handler.dataRoutes, new URL(context.request.url), policy?.basename) ?? [];
+    context.html = spaShell!(context.html);
+
+    await prepare?.({ context, executionContext });
+
+    // Document policies apply to SPA shells too; the no-store default above is their baseline.
+    if (rules) {
+      context.response.headers = documentHeaders(rules, { sessionCookie, protectPrivate })(context);
+    }
+
+    context.response.status = 200;
+    context.response.headers.set(CONTENT_TYPE, 'text/html; charset=utf-8');
+
+    return new Response(
+      context.request.method === 'HEAD' ? null : context.html.header + context.html.footer,
+      { headers: context.response.headers, status: 200 },
+    );
+  }
+
   const queried = await handler.query(context.request, {
     requestContext: routerRequestContext ?? context,
   });
@@ -255,6 +291,7 @@ const renderResponse = async <TAppProps,>(
   }
 
   context.routerContext = queried;
+  context.matches = queried.matches;
   const dataStream = new DataStream(queried, context.diagnostics, nonce);
 
   try {

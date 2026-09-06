@@ -78,8 +78,10 @@
     "devalue": "^5.9.2",
     "diff": "^9.0.0",
     "hoist-non-react-statics": "^3.3.2",
+    "isbot": "^5.2.2",
     "json5": "^2.2.3",
     "parse5": "^8.0.1",
+    "path-to-regexp": "^8.4.2",
     "semver": "^7.8.5"
   },
   "optionalDependencies": {

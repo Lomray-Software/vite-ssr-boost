@@ -25,6 +25,8 @@ interface IInjectAssetsContext {
     header: string;
   };
   routerContext?: StaticHandlerContext;
+  matches?: RouterState['matches'];
+  isSpa?: boolean;
 }
 
 /**
@@ -90,7 +92,9 @@ class RouteAssets {
   /**
    * Get route assets
    */
-  protected getAssets(routes?: RouterState['matches']): IAsset[] {
+  // The development manifest uses the SPA flag to preload unqueried lazy routes.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected getAssets(routes?: RouterState['matches'], _isSpa?: boolean): IAsset[] {
     const routeIds = routes?.map(({ route }) => route.id).filter(Boolean) ?? [];
 
     if (!routeIds.length) {
@@ -127,8 +131,8 @@ class RouteAssets {
   /**
    * Inject route assets to head html
    */
-  public injectAssets({ routerContext, html }: IInjectAssetsContext): Headers {
-    const assets = this.getAssets(routerContext?.matches);
+  public injectAssets({ routerContext, matches, html, isSpa }: IInjectAssetsContext): Headers {
+    const assets = this.getAssets(matches ?? routerContext?.matches, isSpa);
     const htmlAssets = assets
       .map(({ type, url, isPreload, content = '' }) => {
         switch (type) {
@@ -139,7 +143,7 @@ class RouteAssets {
 
           case AssetType.script:
             return isPreload
-              ? this.modulePreload
+              ? this.modulePreload || isSpa
                 ? // can reduce lighthouse performance
                   `<link rel="modulepreload" as="script" crossorigin href="${url}">`
                 : null

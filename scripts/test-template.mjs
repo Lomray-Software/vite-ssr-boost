@@ -27,6 +27,8 @@ const acceptance = {
   candidateTtfb: undefined,
   chunks: [],
   deferred: [],
+  policyInfo: 0,
+  diagnosticsWarnings: 0,
 };
 const cli = join(directory, 'node_modules', '@lomray', 'vite-ssr-boost', 'cli.js');
 const runtimePath = [
@@ -55,30 +57,42 @@ const getPort = async () => {
   return address.port;
 };
 
-const run = async (args) => {
+const recordDiagnostics = (output) => {
+  for (const [, code] of stripVTControlCharacters(output).matchAll(/\b(SSR_BOOST_[A-Z_]+)(?=:|\])/g)) {
+    if (code === 'SSR_BOOST_SSR_POLICY') acceptance.policyInfo += 1;
+    else acceptance.diagnosticsWarnings += 1;
+  }
+};
+
+const start = (args, env = {}) => {
   const child = spawn(process.execPath, [cli, ...args], {
     cwd: directory,
-    env: { ...process.env, PATH: runtimePath },
-    stdio: 'inherit',
+    env: { ...process.env, PATH: runtimePath, ...env },
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const [code] = await once(child, 'exit');
+  let output = '';
+  child.stdout.on('data', (chunk) => { output += chunk; process.stdout.write(chunk); });
+  child.stderr.on('data', (chunk) => { output += chunk; process.stderr.write(chunk); });
+  child.closed = once(child, 'close').then((result) => {
+    recordDiagnostics(output);
+    return result;
+  });
+  return child;
+};
+
+const run = async (args) => {
+  const [code] = await start(args).closed;
 
   if (code !== 0) {
     throw new Error(`ssr-boost ${args[0]} exited with code ${code}.`);
   }
 };
 
-const start = (args) =>
-  spawn(process.execPath, [cli, ...args], {
-    cwd: directory,
-    env: { ...process.env, PATH: runtimePath },
-    stdio: 'inherit',
-  });
-
 const hasExited = (child) => child.exitCode !== null || child.signalCode !== null;
 
 const stop = async (child) => {
   if (hasExited(child)) {
+    await child.closed;
     return;
   }
 
@@ -99,6 +113,7 @@ const stop = async (child) => {
     child.kill('SIGKILL');
     await killed;
   }
+  await child.closed;
 };
 
 const waitUntilReady = async (origin, child) => {
@@ -336,6 +351,8 @@ const reportAcceptance = async () => {
       `| ${mode} chunks (streamed / buffered / decoded gzip) | ${streamed} / ${buffered} / ${gzip ?? 'n/a'} | — |`),
     ...acceptance.deferred.map(({ mode, settleMs }) =>
       `| ${mode} deferred settle delay (first HTML to resolve frame) | ${milliseconds(settleMs)} | > 100 ms |`),
+    `| SSR_BOOST_SSR_POLICY info lines | ${acceptance.policyInfo} | informational |`,
+    `| Other SSR_BOOST_ diagnostics | ${acceptance.diagnosticsWarnings} | 0 |`,
     '',
   ].join('\n');
   console.info(markdown);
@@ -447,6 +464,7 @@ const verifyColdStart = async () => {
     await closed;
     output = stripVTControlCharacters(output);
     console.info(output);
+    recordDiagnostics(output);
   }
 
   assert.doesNotMatch(
@@ -473,6 +491,52 @@ const verifySpa = async (origin) => {
     await script.arrayBuffer();
   }
   console.info('SPA: root, deep links, fallback and client assets passed');
+};
+
+const verifyIncremental = async (origin, mode) => {
+  const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+  const details = await fetch(`${origin}/details`, { headers: { 'User-Agent': userAgent } });
+  const shell = await details.text();
+  assert.equal(details.status, 200, `${mode} SPA /details`);
+  assert.match(details.headers.get('content-type'), /text\/html/);
+  assert.equal(details.headers.get('cache-control'), 'no-store');
+  assert.match(shell, /data-force-spa="1"/);
+  assert.doesNotMatch(shell, /__staticRouterHydrationData|Welcome to demo app/);
+  assert.match(shell, /rel="modulepreload"/, `${mode} SPA route chunk preload`);
+  assert.match(shell, /<style\b|rel="stylesheet"/, `${mode} SPA styles`);
+  for (const [, asset] of shell.matchAll(/(?:src|href)="([^"]+\.(?:js|css|tsx?))"/g)) {
+    const response = await fetch(new URL(asset, origin));
+    assert.equal(response.status, 200, `${mode} SPA asset ${asset}`);
+    await response.arrayBuffer();
+  }
+  const home = await fetch(origin, { headers: { 'User-Agent': userAgent } });
+  assert.equal(home.status, 200);
+  assert.match(await home.text(), /window\.__staticRouterHydrationData/);
+  const bot = await fetch(`${origin}/details`, { headers: { 'User-Agent': 'Googlebot' } });
+  assert.equal(bot.status, 200);
+  const botHtml = await bot.text();
+  assert.match(botHtml, /window\.__staticRouterHydrationData/);
+  assert.doesNotMatch(botHtml, /data-force-spa="1"/);
+  const head = await fetch(`${origin}/details`, { method: 'HEAD', headers: { 'User-Agent': userAgent } });
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), '');
+  console.info(`${mode} incremental SSR: /details SPA shell + assets, / SSR, Googlebot /details SSR, HEAD passed`);
+};
+
+const verifyIncrementalServer = async (command) => {
+  const port = await getPort();
+  if (command === 'dev') await writeFile(join(directory, '.env.development.local'), `VITE_PORT=${port}\n`);
+  const server = start([command, '--port', String(port)], {
+    SSR_BOOST_SSR_ROUTES: '!/details',
+    SSR_BOOST_DIAGNOSTICS: '1',
+  });
+  try {
+    const origin = `http://127.0.0.1:${port}`;
+    await waitUntilReady(origin, server);
+    await verifyIncremental(origin, command === 'dev' ? 'development' : 'production');
+  } finally {
+    await stop(server);
+  }
 };
 
 // Install the publishable package with its dependencies after measuring the original baseline.
@@ -626,6 +690,7 @@ try {
   }
 
   await verifyColdStart();
+  await verifyIncrementalServer('dev');
 
   await run(['build']);
   await measureClientGzip();
@@ -654,6 +719,8 @@ try {
   } finally {
     await stop(prod);
   }
+
+  await verifyIncrementalServer('start');
 
   if (keepTemplate) {
     await cp(join(directory, 'build'), join(directory, 'build-ssr'), { recursive: true });
@@ -689,6 +756,8 @@ try {
   } finally {
     await stop(spa);
   }
+  assert.ok(acceptance.policyInfo > 0, 'Incremental SSR must emit policy information with diagnostics enabled.');
+  assert.equal(acceptance.diagnosticsWarnings, 0, 'Template emitted unexpected SSR_BOOST_ diagnostics.');
 } finally {
   if (keepTemplate) {
     console.info(`Template retained for browser checks: ${directory}`);

@@ -53,6 +53,7 @@ export default defineConfig({
           { text: 'Introduction', link: '/' },
           { text: 'Getting Started', link: '/guide/getting-started' },
           { text: 'Migrate an Existing SPA', link: '/guide/migrate-existing-spa' },
+          { text: 'Incremental SSR', link: '/guide/incremental-ssr' },
           { text: 'Upgrade from 7 to 8', link: '/guide/upgrade-v8' },
           { text: 'Choosing an SSR Approach', link: '/guide/choosing' },
           { text: 'Rendering Modes', link: '/guide/rendering-modes' },

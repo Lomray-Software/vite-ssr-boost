@@ -26,6 +26,8 @@ The package uses `data-force-spa="1"` on the generated SPA index to tell the bro
 
 ## Switching between SSR and SPA
 
+For per-request selection inside one build, use the [incremental SSR policy](/guide/incremental-ssr): include public URLs, keep other pages on the SPA shell, and roll URLs back with a process environment override.
+
 This is one of the practical strengths of the package.
 
 - During normal SSR, `entryClient` hydrates.

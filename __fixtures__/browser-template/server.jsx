@@ -13,6 +13,7 @@ export const handler = (html) =>
     },
     {
       hydration: 'early',
+      ssr: { mode: 'exclude', routes: ['/spa', '/spa-redirect'] },
       diagnostics: false,
       getHtml: () => html,
       getState: () => ({ custom: { ready: true } }),

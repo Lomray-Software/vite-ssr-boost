@@ -6,6 +6,8 @@ Use this page as a grounding reference for tools working with the package.
 
 `@lomray/vite-ssr-boost` adds SSR to React Router apps in Data mode, without moving to Framework mode and without rewriting the app. Keep the Vite configuration, route objects and components; use the same application for SSR or SPA output.
 
+For [incremental SSR](/guide/incremental-ssr), managed Express entries and Fetch `createHandler` accept an `ssr` policy with include/exclude patterns and per-request decisions, default crawler SSR, and a restart-only `SSR_BOOST_SSR_ROUTES` rollback override.
+
 Data mode, not Framework mode. The server uses `createStaticHandler` and `StaticRouterProvider`, and the browser uses route objects with `createBrowserRouter`; see React Router's [mode definitions](https://reactrouter.com/start/modes).
 
 The package declares `engines.node: ">=22.12.0"` and peers for Vite `>=5`, React and React DOM `>=18.2.0`, and React Router `>=7.0.1`. The template tooling uses Node 22.23.2. Check the selected React Router and build tool versions for further engine requirements.

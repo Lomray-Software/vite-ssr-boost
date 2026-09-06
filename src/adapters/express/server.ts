@@ -119,7 +119,7 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
             (await onRequest?.(req, res)) ?? {};
           const [header, footer] = clientHtml;
 
-          if (shouldCancel) {
+          if (shouldCancel || res.writableEnded || res.headersSent) {
             return;
           }
 
