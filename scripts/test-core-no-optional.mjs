@@ -73,7 +73,7 @@ try {
 
   runNpm([
     'install',
-    '--offline',
+    '--prefer-offline',
     '--omit=optional',
     '--legacy-peer-deps',
     '--ignore-scripts',
