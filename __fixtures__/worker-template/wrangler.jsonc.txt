@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ssr-boost-worker-template",
+  "main": "build/worker/worker.js",
+  "compatibility_date": "2026-07-30",
+  "assets": {
+    "directory": "build/client",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+  "kv_namespaces": [{ "binding": "MESSAGES", "id": "00000000000000000000000000000000" }]
+}

@@ -34,6 +34,11 @@ When server output is built, the package also generates an SSR manifest for rout
 
 This is useful when you want production-like behavior locally without switching to a manual build plus start sequence.
 
+## Cloudflare Workers
+
+See [Cloudflare Workers](/guide/cloudflare) for the Worker entry, Static Assets binding,
+`ssr-boost build --focus-only all`, Wrangler preview and deployment.
+
 ## Docker
 
 ```bash

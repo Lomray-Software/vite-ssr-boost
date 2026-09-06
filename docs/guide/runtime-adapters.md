@@ -9,8 +9,9 @@ type SsrHandler = (
 ) => Promise<Response>;
 ```
 
-`SsrExecutionContext` is optional and only carries capabilities that cannot fit in a final
-`Response`, currently `onEarlyHints`.
+`SsrExecutionContext` is optional and carries `onEarlyHints`, adapter-specific `platform` data
+and `waitUntil`. Hooks and default loader context can also access it as `context.executionContext`.
+See [Cloudflare Workers](/guide/cloudflare) for a complete Worker build and Static Assets path.
 
 Choose the managed CLI server for Vite development, HMR, asset manifests and production static
 files. It still uses Express. Choose a Fetch handler when your application or hosting platform

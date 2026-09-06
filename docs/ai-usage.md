@@ -15,6 +15,7 @@ The package declares `engines.node: ">=22.12.0"` and peers for Vite `>=5`, React
 ## Public entrypoints
 
 - Vite plugin: `@lomray/vite-ssr-boost/plugin`.
+- Cloudflare Workers: `@lomray/vite-ssr-boost/cloudflare` (`createWorkerHandler`, `getHtmlFromAssets`, `RouteAssets`, `TRouteAssetsManifest`); see [Cloudflare Workers](/guide/cloudflare).
 - Browser entry: `@lomray/vite-ssr-boost/browser/entry`.
 - Managed CLI server entry: `@lomray/vite-ssr-boost/adapters/express/entry`.
 - Fetch core: default export `createHandler` from `@lomray/vite-ssr-boost/core/handler`.
