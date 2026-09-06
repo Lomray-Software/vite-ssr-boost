@@ -4,8 +4,10 @@ import { readFileSync } from 'fs';
 import chalk from 'chalk';
 import { Command, Option } from 'commander';
 import runBuild from '@cli/build';
+import runDoctor from '@cli/doctor';
 import onKeyPress from '@cli/helpers/keyboard-input';
 import viteResetCache from '@cli/helpers/vite-reset-cache';
+import runInit from '@cli/init';
 import type {
   IBuildActionParams,
   IBuildAmplifyActionParams,
@@ -331,5 +333,23 @@ program
       isOptimize,
     });
   });
+
+program
+  .command('doctor')
+  .description('Inspect SSR setup and report actionable checks.')
+  .option('--json', 'Print machine-readable JSON.')
+  .option('--root <dir>', 'Project directory.')
+  .option('--bundle <file>', 'Write an allowlisted support bundle JSON.')
+  .action(runDoctor);
+
+program
+  .command('init')
+  .description('Add SSR to an existing Vite + React Router app (dry run by default).')
+  .option('--dry-run', 'Print every change without writing files.')
+  .option('--apply', 'Write the proposed changes.')
+  .option('--root <dir>', 'Project directory.')
+  .option('--entry <file>', 'Browser entry relative to the project directory.')
+  .option('--routes <file>', 'Module exporting the route array.')
+  .action(runInit);
 
 program.parse();

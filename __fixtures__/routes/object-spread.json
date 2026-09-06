@@ -1,0 +1,6 @@
+{
+  "routes": "import { shared as defaults } from './shared';\nexport default [{ ...defaults, id: 'about', path: '/about' }];\n",
+  "files": {
+    "shared.ts": "export const shared = { lazy: () => import('./About'), handle: { title: 'Do not include app data in a bundle' } };\n"
+  }
+}

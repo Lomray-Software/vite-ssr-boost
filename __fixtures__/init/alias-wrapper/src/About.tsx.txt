@@ -1,0 +1,2 @@
+import './about.css'
+export function Component() { return <h1 className="about-page">About route rendered on server</h1> }

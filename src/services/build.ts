@@ -4,6 +4,7 @@ import path from 'node:path';
 import chalk from 'chalk';
 import type { ResolvedConfig } from 'vite';
 import { resolveConfig } from 'vite';
+import DIAGNOSTIC_CODES from '@cli/diagnostic-codes';
 import viteResetCache from '@cli/helpers/vite-reset-cache';
 import createFocusOnly from '@helpers/create-focus-only';
 import { createDevMarker } from '@helpers/dev-marker';
@@ -110,6 +111,8 @@ class Build {
    */
   protected hasPreviewModeExitListener = false;
 
+  protected diagnosticCodes = new Set<string>();
+
   /**
    * @constructor
    */
@@ -194,6 +197,20 @@ class Build {
 
     command.stdout?.pipe(process.stdout);
     command.stderr?.pipe(process.stderr);
+
+    // Keep only known codes. Payloads can contain request state or source snippets.
+    for (const stream of [command.stdout, command.stderr]) {
+      let tail = '';
+
+      stream?.on('data', (chunk: Uint8Array) => {
+        const text = tail + Buffer.from(chunk).toString();
+
+        DIAGNOSTIC_CODES.filter((code) => text.includes(code)).forEach((code) =>
+          this.diagnosticCodes.add(code),
+        );
+        tail = text.slice(-80);
+      });
+    }
 
     return { promise, command };
   }
@@ -378,6 +395,7 @@ class Build {
     // this is required step - build with different env may cause problems
     await viteResetCache();
     this.clearBuildFolder();
+    this.diagnosticCodes.clear();
 
     const {
       clientOptions,
@@ -462,6 +480,11 @@ class Build {
     }
 
     createDevMarker(this.isProd, this.viteConfig);
+    fs.mkdirSync(this.buildDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(this.buildDir, 'ssr-boost-diagnostics.json'),
+      JSON.stringify({ codes: [...this.diagnosticCodes].sort() }, null, 2),
+    );
     onFinish?.();
   }
 }

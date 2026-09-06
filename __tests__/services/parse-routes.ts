@@ -1,370 +1,127 @@
-import fs from 'fs';
+// @vitest-environment node
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { parse } from '@babel/parser';
-import sinon from 'sinon';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  routesCode1Before,
-  routesCode2Before,
-  routesCode4Before,
-  routesDetailsCode,
-} from '@__mocks__/route-file';
-import { viteAliases } from '@__mocks__/vite-aliases';
+import { routeFixtures, writeFixture, writeRouteFixture } from '@__helpers__/project-fixture';
 import ParseRoutes from '@services/parse-routes';
 import ServerConfig from '@services/server-config';
+import SsrManifest from '@services/ssr-manifest';
 
-const clientEntrypoint = (hasAlias = false, isNamedImport = false) => `
-import entryClient from '@lomray/vite-ssr-boost/browser/entry';
-import ${isNamedImport ? '{ routes }' : 'routes'} from '${hasAlias ? '@' : './'}routes/index';
+const directories: string[] = [];
+const setup = () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ssr-boost-routes-test-'));
+  directories.push(root);
+  const config = ServerConfig.init({}, { root, clientFile: 'client.ts' });
+  const parser = new ParseRoutes(config);
+  return { root, parser, config };
+};
 
-void entryClient(App, routes, {});
-`;
-const notLazyImport = '@pages/not-lazy';
-const rootDir = '/src';
-const clientFile = 'client.tsx';
-const arrayWrappers = [
-  ['plain array', '', ''],
-  ['satisfies', '', ' satisfies TRouteObject[]'],
-  ['as', '', ' as TRouteObject[]'],
-  ['as const', '', ' as const'],
-  ['parentheses', '(', ')'],
-  ['non-null assertion', '(', ')!'],
-  ['combined wrappers', '((', ' as const) satisfies TRouteObject[])!'],
-];
-const routeImports = `
-import type { TRouteObject } from '@lomray/vite-ssr-boost/interfaces/route-object';
-import NotLazyPage from '@pages/not-lazy';
-`;
-const childRoutes = `[
-  { Component: NotLazyPage },
-  { lazy: () => import('@pages/home') },
-]`;
+afterEach(() => {
+  directories.splice(0).forEach((root) => fs.rmSync(root, { force: true, recursive: true }));
+  (SsrManifest as unknown as { instance: unknown }).instance = null;
+});
 
-describe('parse-routes', () => {
-  const sandbox = sinon.createSandbox();
-  const serverConfig = ServerConfig.init(
-    { isProd: true, mode: 'production' },
-    { root: rootDir, clientFile },
-  );
-  const routesService = new ParseRoutes(serverConfig, viteAliases);
-
-  /**
-   * Helper to stub exist route file
-   */
-  const stubExistFiles = (): void => {
-    sandbox.stub(fs, 'existsSync').returns(true);
-    // @ts-expect-error no need implement all methods
-    sandbox.stub(fs, 'statSync').callsFake((filename) => {
-      // noinspection JSUnusedGlobalSymbols
-      return { isFile: () => Boolean(path.extname(filename as string)) };
-    });
-  };
-
-  afterEach(() => {
-    sandbox.restore();
-  });
-
-  it('should not find client entrypoint and throw error', () => {
-    expect(() => routesService.parse()).toThrow('Unable to find routes file');
-  });
-
-  it('should not find routes import in client entrypoint and throw error', () => {
-    sandbox.stub(fs, 'readFileSync').returns(`
-    import entryClient from '@lomray/vite-ssr-boost/browser/entry';
-
-    void entryClient(App, routes, {});
-    `);
-
-    expect(() => routesService.parse()).toThrow('Unable to find routes file');
-  });
-
-  it('should parse ssr boost client entrypoint and find routes import', () => {
-    stubExistFiles();
-
-    const readFileSyncStub = sandbox.stub(fs, 'readFileSync').returns(clientEntrypoint(true));
-
-    const tree = routesService.parse();
-    const entrypointFile = readFileSyncStub.firstCall.firstArg as string;
-    const routeFile = readFileSyncStub.secondCall.firstArg as string;
-
-    expect(tree).to.deep.equal([]);
-    expect(entrypointFile).to.deep.equal(`${rootDir}/${clientFile}`);
-    expect(routeFile).to.deep.equal(`${rootDir}/routes/index.js`);
-  });
-
-  it('should parse route file', () => {
-    stubExistFiles();
-
-    sandbox
-      .stub(fs, 'readFileSync')
-      .onFirstCall()
-      .returns(clientEntrypoint())
-      .onSecondCall()
-      .returns(routesCode4Before);
-
-    const tree = routesService.parse();
-
-    expect(tree).to.deep.equal([
-      {
-        index: 0,
-        import: '@components/layouts/app',
-        children: [
-          {
-            index: 0,
-            import: '',
-            children: [{ index: 0, import: '@pages/sign-in', children: [] }],
-          },
-        ],
-      },
-    ]);
-  });
-
-  it('should parse multiple route files with async and static imports', () => {
-    stubExistFiles();
-
-    sandbox
-      .stub(fs, 'readFileSync')
-      .onFirstCall()
-      .returns(clientEntrypoint())
-      .onSecondCall()
-      .returns(routesCode1Before)
-      .onThirdCall()
-      .returns(routesDetailsCode);
-
-    const tree = routesService.parse();
-
-    expect(tree).to.deep.equal([
-      {
-        index: 0,
-        import: '@components/layouts/app',
-        children: [
-          { index: 0, import: '@pages/home', children: [] },
-          {
-            index: 1,
-            import: '',
-            children: [
-              { index: 0, import: '@pages/details/index', children: [] },
-              { index: 1, import: '@pages/details/user', children: [] },
-            ],
-          },
-          { index: 2, import: '@pages/error-boundary', children: [] },
-          { index: 3, import: '@pages/nested-suspense', children: [] },
-          { index: 4, import: '@pages/redirect', children: [] },
-          { index: 5, import: '@pages/redirect', children: [] },
-          { index: 6, import: notLazyImport, children: [] },
-          { index: 7, import: notLazyImport, children: [] },
-          { index: 8, import: notLazyImport, children: [] },
-          { index: 9, import: notLazyImport, children: [] },
-          { index: 10, import: notLazyImport, children: [] },
-        ],
-      },
-    ]);
-  });
-
-  it('should parse route files with static imports: element', () => {
-    stubExistFiles();
-
-    sandbox
-      .stub(fs, 'readFileSync')
-      .onFirstCall()
-      .returns(clientEntrypoint())
-      .onSecondCall()
-      .returns(routesCode2Before);
-
-    const tree = routesService.parse();
-
-    expect(tree).to.deep.equal([
-      { index: 0, import: notLazyImport, children: [] },
-      { index: 1, import: notLazyImport, children: [] },
-      { index: 2, import: notLazyImport, children: [] },
-      { index: 3, import: notLazyImport, children: [] },
-      { index: 4, import: notLazyImport, children: [] },
-    ]);
-  });
-
-  it('should parse route files with named imports', () => {
-    stubExistFiles();
-
-    sandbox
-      .stub(fs, 'readFileSync')
-      .onFirstCall()
-      .returns(clientEntrypoint(true, true))
-      .onSecondCall().returns(`
-        import NotLazyPage from '@pages/not-lazy';
-
-        const routes: TRouteObject[] = [
-          {
-            element: <NotLazyPage />,
-          },
-        ];
-        const anotherRoutes = [];
-
-        export { routes, anotherRoutes };
-      `);
-
-    const tree = routesService.parse();
-
-    expect(tree).to.deep.equal([{ index: 0, import: '@pages/not-lazy', children: [] }]);
-  });
-
-  describe.each(arrayWrappers)('%s', (_name, prefix, suffix) => {
-    it.each(['variable', 'named', 'default'])(
-      'should parse a %s export and nested children',
-      (kind) => {
-        stubExistFiles();
-        const array = `${prefix}[
-        { Component: NotLazyPage },
-        { children: ${prefix}${childRoutes}${suffix} },
-      ]${suffix}`;
-        const declaration =
-          kind === 'default'
-            ? `export default ${array};`
-            : `const routes = ${array}; export ${kind === 'named' ? '{ routes }' : 'default routes'};`;
-        sandbox
-          .stub(fs, 'readFileSync')
-          .onFirstCall()
-          .returns(clientEntrypoint(false, kind === 'named'))
-          .onSecondCall()
-          .returns(`${routeImports}${declaration}`);
-
-        expect(JSON.stringify(routesService.parse())).toBe(
-          JSON.stringify([
-            { index: 0, import: notLazyImport, children: [] },
-            {
-              index: 1,
-              import: '',
-              children: [
-                { index: 0, import: notLazyImport, children: [] },
-                { index: 1, import: '@pages/home', children: [] },
-              ],
-            },
-          ]),
-        );
-      },
-    );
-
-    it.each([true, false])(
-      'should preserve route transforms with path IDs enabled: %s',
-      (withPathId) => {
-        const plain = `${routeImports}const routes = [{ children: ${childRoutes} }];`;
-        const wrapped = `${routeImports}const routes = ${prefix}[
-        { children: ${prefix}${childRoutes}${suffix} }
-      ]${suffix};`;
-        const expected = ParseRoutes.handleRoutes(plain, withPathId);
-        const actual = ParseRoutes.handleRoutes(wrapped, withPathId);
-
-        expect(actual.match(/pathId: "[^"]+"/g)).toEqual(expected.match(/pathId: "[^"]+"/g));
-        expect(actual.match(/lazy: n\(\(\) => import\('[^']+'\)\)/g)).toEqual([
-          "lazy: n(() => import('@pages/home'))",
-        ]);
-        expect(actual.match(/import n from/g)).toHaveLength(1);
-      },
-    );
-  });
-
-  it.each([
-    ['TSTypeAssertion', '<TRouteObject[]>'],
-    ['ParenthesizedExpression', ''],
-  ])('should parse an explicit %s AST node', (nodeType, assertion) => {
-    stubExistFiles();
-    // JSX parsing normally represents parentheses as metadata and disallows angle assertions.
-    const code = `${routeImports}const routes = (${assertion}${childRoutes}); export default routes;`;
-    const ast = parse(code, {
-      sourceType: 'module',
-      createImportExpressions: true,
-      createParenthesizedExpressions: true,
-      plugins: ['typescript'],
-    });
-    const initializer = ast.program.body.find((node) => node.type === 'VariableDeclaration')
-      ?.declarations[0].init;
-    expect(initializer?.type).toBe('ParenthesizedExpression');
-    if (initializer?.type === 'ParenthesizedExpression') {
-      expect(initializer.expression.type).toBe(assertion ? nodeType : 'ArrayExpression');
-    }
-    const routesParser = routesService as unknown as {
-      parseFile: (filename: string) => ReturnType<typeof parse> | null;
+describe('ordinary route declarations', () => {
+  it.each(routeFixtures)('$name resolves the original module and route ID', (fixture) => {
+    const { root, parser, config } = setup();
+    writeRouteFixture(root, fixture);
+    const tree = parser.parse();
+    const manifest = SsrManifest.get(config) as unknown as {
+      getRoutesTreeIds: (tree: ReturnType<ParseRoutes['parse']>) => Record<string, string>;
     };
-    sandbox
-      .stub(routesParser, 'parseFile')
-      .onFirstCall()
-      .returns(parse(clientEntrypoint(), { sourceType: 'module' }))
-      .onSecondCall()
-      .returns(ast);
-
-    expect(routesService.parse()).toEqual([
-      { index: 0, import: notLazyImport, children: [] },
-      { index: 1, import: '@pages/home', children: [] },
-    ]);
-  });
-
-  it('should parse wrappers in imported children route files', () => {
-    stubExistFiles();
-    sandbox
-      .stub(fs, 'readFileSync')
-      .onFirstCall()
-      .returns(clientEntrypoint())
-      .onSecondCall()
-      .returns(
-        `
-        import children from './details';
-        const routes = [{ children }] satisfies TRouteObject[];
-        export default routes;
-      `,
-      )
-      .onThirdCall()
-      .returns(`${routeImports}export default (${childRoutes} as const);`);
-
-    expect(routesService.parse()).toEqual([
+    const result = manifest.getRoutesTreeIds(tree);
+    const expectedId =
       {
-        index: 0,
-        import: '',
-        children: [
-          { index: 0, import: notLazyImport, children: [] },
-          { index: 1, import: '@pages/home', children: [] },
-        ],
+        'explicit-id': 'about',
+        'object-spread': 'about',
+        'computed-keys': 'about',
+        'skipped-position': '1-1',
+        'imported-children': '0-0',
+        'wrapped-arrays': '0-0',
+      }[fixture.name] ?? '0';
+    expect(result).toEqual({ [expectedId]: 'About' });
+  });
+
+  it.each([
+    ['', ''],
+    ['(', ')'],
+    ['', ' satisfies import("react-router").RouteObject[]'],
+    ['', ' as const'],
+    ['((', ' as const) satisfies import("react-router").RouteObject[])!'],
+  ])('unwraps array and children syntax %s ... %s', (prefix, suffix) => {
+    const { root, parser } = setup();
+    writeRouteFixture(root, {
+      routes: `const routes = ${prefix}[{ children: ${prefix}[{ lazy: () => import('./About') }]${suffix} }]${suffix}; export default routes;`,
+    });
+    expect(parser.parse()[0].children[0].import).toBe(path.join(root, 'About'));
+  });
+
+  it('follows named re-exports, local aliases, spread override order, and JSX modules', () => {
+    const { root, parser } = setup();
+    writeRouteFixture(root, {
+      routes: "export { routes as default } from './other';",
+      files: {
+        'other.tsx':
+          "import Page from './Page'; const common = { id: 'first', lazy: () => import('./About') }; const routes = [{ ...common, id: 'second' }, { element: <Page /> }]; export { routes };",
+        'Page.tsx': 'export default function Page() { return <p>Page</p>; }',
       },
+    });
+    expect(parser.parse()).toEqual([
+      { index: 0, id: 'second', import: path.join(root, 'About'), children: [] },
+      { index: 1, import: path.join(root, 'Page'), children: [] },
     ]);
   });
 
   it.each([
-    ['const routes = makeRoutes(); export default routes;', 'CallExpression'],
-    ['const routes = ({} as TRouteObject[])!; export default routes;', 'ObjectExpression'],
-    ['const routes = otherRoutes satisfies TRouteObject[]; export default routes;', 'Identifier'],
-    ['let routes; export default routes;', 'undefined'],
-  ])('should report the file and unwrapped node type for %s', (code, nodeType) => {
-    stubExistFiles();
-    const warnStub = sandbox.stub(serverConfig.getLogger(), 'warn');
-    sandbox
-      .stub(fs, 'readFileSync')
-      .onFirstCall()
-      .returns(clientEntrypoint())
-      .onSecondCall()
-      .returns(code);
-
-    expect(() => routesService.parse()).toThrow(
-      `Expected routes array in /src/routes/index.js, received ${nodeType}.`,
+    ['export default makeRoutes();', 'routes array'],
+    ['export default [{ ...makeShared() }];', 'object spread'],
+    ['const key = "path"; export default [{ [key]: "/" }];', 'computed route key'],
+    ['export default [{ lazy: () => import(moduleName) }];', 'dynamic lazy import'],
+    ['export default [{ lazy: () => Promise.resolve({}) }];', 'lazy route result'],
+    ['export default [{ lazy: { Component: () => import("./About") } }];', 'lazy route'],
+    ['export default [{ children: makeChildren() }];', 'routes array'],
+    ['export default [{ id: Math.random() }];', 'route id'],
+    ['const shared = { ...shared }; export default [shared];', 'object spread'],
+    ['const routes = [{ children: routes }]; export default routes;', 'routes array'],
+    ['const routes = [...others]; export default routes;', 'route array spread'],
+    ['export default [{ children: missing }];', 'unresolved binding missing'],
+    ['const routes = other; const other = routes; export default routes;', 'circular binding'],
+    ['export default {};', 'routes array'],
+  ])('reports file, line and construct for %s', (routes, construct) => {
+    const { root, parser } = setup();
+    writeRouteFixture(root, { routes: `\n${routes}` });
+    expect(() => parser.parse()).toThrow(
+      new RegExp(`routes\\.ts:2:\\d+: Unsupported .*${construct}`),
     );
-    expect(warnStub.called).toBe(false);
   });
 
-  it.each([
-    ['export default createRoutes();', 'CallExpression'],
-    ['export default {} satisfies TRouteObject[];', 'ObjectExpression'],
-  ])('should warn once and return an empty result for %s', (code, nodeType) => {
-    stubExistFiles();
-    const warnStub = sandbox.stub(serverConfig.getLogger(), 'warn');
-    sandbox
-      .stub(fs, 'readFileSync')
-      .onFirstCall()
-      .returns(clientEntrypoint())
-      .onSecondCall()
-      .returns(code);
+  it('reports missing exports, imports and syntax without swallowing errors', () => {
+    const { root, parser } = setup();
+    writeRouteFixture(root, { routes: 'export const nothing = 1;' });
+    expect(() => parser.parse()).toThrow(/routes.ts:1:1: Unsupported missing export "default"/);
+    fs.rmSync(path.join(root, 'routes.ts'));
+    expect(() => parser.parse()).toThrow(/client.ts:4:\d+: Unsupported missing import/);
+    writeFixture(root, 'routes.ts', 'export default [');
+    expect(() => parser.parse()).toThrow(/routes.ts: Unexpected token/);
+  });
 
-    expect(routesService.parse()).toEqual([]);
-    expect(
-      warnStub.calledOnceWithExactly(
-        `Routes manifest: default export of /src/routes/index.js is a ${nodeType} and cannot be analyzed; lazy route assets will not be injected.`,
-      ),
-    ).toBe(true);
+  it('does not mistake an unrelated local entryClient function for the library entry', () => {
+    const { root, parser } = setup();
+    writeFixture(root, 'client.ts', 'function entryClient() {} entryClient();');
+    expect(() => parser.parse()).toThrow(/browser entry calls \(0\)/);
+  });
+
+  it('transforms computed lazy keys and async function/then imports once', () => {
+    for (const lazy of [
+      "() => import('./About')",
+      "async function () { return await import('./About'); }",
+      "() => import('./About').then(m => ({ Component: m.Component }))",
+    ]) {
+      const result = ParseRoutes.handleRoutes(`const routes = [{ ['lazy']: ${lazy} }];`, true);
+      expect(result).toContain('pathId: "./About"');
+      expect(result.match(/import n from/g)).toHaveLength(1);
+      expect(result.match(/\bn\(/g)).toHaveLength(1);
+    }
   });
 });

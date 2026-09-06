@@ -33,6 +33,8 @@ Loader and action promises stream by default in Data mode. Return `{ fast, slow:
 
 ## Application guidance
 
+For an existing Vite + React Router app, run `ssr-boost init --dry-run` first and review every diff before `--apply`. After changing entries, routes, plugins, scripts, or dependencies, run `ssr-boost doctor --json`; resolve errors and inspect version warnings before building. See the [CLI reference](/api/cli) for `--root`, overrides and support bundles.
+
 - Keep lazy route imports statically analyzable.
 - Align Vite `base` with the server static middleware basename.
 - Use `onRequest` for app props scoped to a request.

@@ -1,0 +1,5 @@
+import Home from './Home'
+export const appRoutes = [
+  { path: '/', Component: Home },
+  { id: 'about', path: '/about', lazy: () => import('./About') },
+] satisfies import('react-router').RouteObject[]

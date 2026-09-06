@@ -1,0 +1,4 @@
+{
+  "client": "import boot from '@lomray/vite-ssr-boost/browser/entry';\nimport routes from './routes';\nvoid boot(App, routes);\n",
+  "routes": "export default [{ path: '/about', lazy: () => import('./About') }];\n"
+}

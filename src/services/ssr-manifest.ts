@@ -161,15 +161,16 @@ class SsrManifest extends RouteAssets {
   ): Record<string, string | undefined> {
     const result: Record<string, string | undefined> = {};
 
-    routes.forEach((route, routeIndex) => {
-      const routeId = [index, String(routeIndex)].filter(Boolean).join('-');
+    routes.forEach((route) => {
+      const position = [index, String(route.index)].filter(Boolean).join('-');
+      const routeId = route.id ?? position;
 
       if (route.import) {
         result[routeId] = this.pathNormalize.getAppPath(route.import);
       }
 
       if (route.children.length > 0) {
-        Object.assign(result, this.getRoutesTreeIds(route.children, routeId));
+        Object.assign(result, this.getRoutesTreeIds(route.children, position));
       }
     });
 

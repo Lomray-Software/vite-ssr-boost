@@ -120,24 +120,30 @@ describe('Build internals', () => {
     let exitHandler!: (code: number) => void;
     let closeHandler!: (code: number) => void;
     let errorHandler!: (message: string) => void;
-    let stderrDataHandler!: (buff: Uint8Array) => void;
+    const stderrDataHandlers: ((buff: Uint8Array) => void)[] = [];
     const command = {
       on: vi.fn((event: string, handler: (...args: any[]) => void) => {
         if (event === 'exit') exitHandler = handler as never;
         if (event === 'close') closeHandler = handler as never;
         if (event === 'error') errorHandler = handler as never;
       }),
-      stdout: { pipe: vi.fn() },
+      stdout: { pipe: vi.fn(), on: vi.fn() },
       stderr: {
         pipe: vi.fn(),
         on: vi.fn((event: string, handler: (buff: Uint8Array) => void) => {
-          if (event === 'data') stderrDataHandler = handler;
+          if (event === 'data') stderrDataHandlers.push(handler);
         }),
       },
     };
 
     const result = service.promisifyProcess(command as never, true);
-    stderrDataHandler(new TextEncoder().encode('WARNING found'));
+    stderrDataHandlers.forEach((handler) =>
+      handler(new TextEncoder().encode('WARNING SSR_BOOST_OUTLET_')),
+    );
+    stderrDataHandlers.forEach((handler) =>
+      handler(new TextEncoder().encode('MISSING cookie=secret-build-data')),
+    );
+    expect([...service.diagnosticCodes]).toEqual(['SSR_BOOST_OUTLET_MISSING']);
     exitHandler(0);
     closeHandler(0);
     errorHandler('err');
@@ -173,12 +179,15 @@ describe('Build internals', () => {
     expect(processStopMock).toHaveBeenCalled();
 
     service.runPreviewMode();
-    const listener = stdout.on.mock.calls[0][1];
-    listener(new TextEncoder().encode('built in 123ms'));
+    stdout.on.mock.calls.forEach(([, listener]) =>
+      listener(new TextEncoder().encode('built in 123ms')),
+    );
     expect(createDevMarkerMock).toHaveBeenCalled();
   });
 
   it('should run full build flow', async () => {
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
+    const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
     const service = prepareService({
       focusOnly: 'all',
       isUnlockRobots: true,
@@ -191,6 +200,10 @@ describe('Build internals', () => {
     vi.spyOn(service, 'unlockRobots').mockImplementation(() => undefined);
 
     await service.build();
+    expect(write).toHaveBeenCalledWith(
+      '/root/dist/ssr-boost-diagnostics.json',
+      JSON.stringify({ codes: [] }, null, 2),
+    );
 
     expect(viteResetCacheMock).toHaveBeenCalled();
     expect(service.spawnBuild).toHaveBeenCalled();

@@ -47,7 +47,9 @@ class PathNormalize {
    */
   public getImportPostfix(): string[] {
     return ['', '/index']
-      .map((prefix) => ['', '.js', '.ts', '.tsx'].map((ext) => `${prefix}${ext}`))
+      .map((prefix) =>
+        ['', '.js', '.ts', '.tsx', '.jsx', '.mjs', '.mts'].map((ext) => `${prefix}${ext}`),
+      )
       .flat();
   }
 

@@ -1,0 +1,6 @@
+{
+  "routes": "import { childRoutes as children } from './nested/children';\nexport default [{ children }];\n",
+  "files": {
+    "nested/children.ts": "const routes = [{ path: '/about', lazy: () => import('../About') }];\nexport { routes as childRoutes };\n"
+  }
+}

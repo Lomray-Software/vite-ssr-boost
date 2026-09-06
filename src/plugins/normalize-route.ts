@@ -30,7 +30,7 @@ function ViteNormalizeRouterPlugin(options: IPluginOptions = {}): Plugin {
 
       if (
         id.includes('node_modules') ||
-        !['.js', '.mjs', '.ts', '.tsx'].includes(extName) ||
+        !['.js', '.jsx', '.mjs', '.ts', '.tsx', '.mts'].includes(extName) ||
         !isRoutesPath ||
         !isRoutesFile(code)
       ) {
@@ -42,6 +42,7 @@ function ViteNormalizeRouterPlugin(options: IPluginOptions = {}): Plugin {
           code,
           // always add pathId to routes for development
           isSSR && !isBuild,
+          id,
         ),
         map: { mappings: '' },
       };

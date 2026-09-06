@@ -1,5 +1,9 @@
 # FAQ
 
+## How do I add SSR or check an existing setup?
+
+Start with `npx ssr-boost init --dry-run`, review the diff, then use `--apply` and install dependencies. Follow the [automatic migration guide](/guide/migrate-existing-spa#automatic-npx-ssr-boost-init) for invocation before the library is installed and for unsupported layouts. Run [`ssr-boost doctor`](/api/cli#ssr-boost-doctor) after changes; `--json` is suitable for scripts, and `--bundle support.json` collects structural support information without request or environment data.
+
 ## Do I need React Server Components?
 
 No. vite-ssr-boost renders your React component tree through its SSR renderer and hydrates it in the browser. It does not implement React Server Components or Server Actions; use the [migration guide](/guide/migrate-existing-spa) to add SSR to route objects.

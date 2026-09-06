@@ -1,0 +1,438 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`init > alias-wrapper has a complete dry-run diff and applies idempotently 1`] = `
+"===================================================================
+--- a/index.html
++++ b/index.html
+@@ -1,8 +1,8 @@
+ <!doctype html>
+ <html lang="en">
+   <head><meta charset="UTF-8" /><title>Vite + React</title></head>
+   <body>
+-    <div id="root"></div>
++    <div id="root"><!--ssr-outlet--></div>
+     <script type="module" src="/src/main.tsx"></script>
+   </body>
+ </html>
+
+===================================================================
+--- a/package.json
++++ b/package.json
+@@ -3,17 +3,19 @@
+   "private": true,
+   "version": "0.0.0",
+   "type": "module",
+   "scripts": {
+-    "dev": "vite",
+-    "build": "tsc -b && vite build",
+-    "preview": "vite preview",
+-    "lint": "eslint ."
++    "dev": "ssr-boost dev",
++    "build": "ssr-boost build",
++    "preview": "ssr-boost preview",
++    "lint": "eslint .",
++    "start:ssr": "ssr-boost start"
+   },
+   "dependencies": {
+     "react": "19.2.8",
+     "react-dom": "19.2.8",
+-    "react-router": "8.3.1"
++    "react-router": "8.3.1",
++    "@lomray/vite-ssr-boost": "^1.0.0"
+   },
+   "devDependencies": {
+     "@vitejs/plugin-react": "6.1.1",
+     "vite": "8.2.2",
+
+===================================================================
+--- a/src/main.tsx
++++ b/src/main.tsx
+@@ -1,16 +1,10 @@
++import entryClient from '@lomray/vite-ssr-boost/browser/entry'
+ import { StrictMode } from 'react'
+-import { createRoot } from 'react-dom/client'
+-import { createBrowserRouter, RouterProvider } from 'react-router'
+-import Home from '@/Home'
+ import App from '@/App'
++import type { FC, PropsWithChildren } from 'react'
++import routes from './routes.ssr'
+ import './index.css'
+ 
+-const routes = [
+-  { path: '/', Component: Home },
+-  { path: '/about', lazy: () => import('@/About') },
+-]
+-const router = createBrowserRouter(routes)
++const App_: FC<PropsWithChildren> = ({ children }) => <StrictMode><App>{children}</App></StrictMode>
+ 
+-createRoot(document.getElementById('root')!).render(
+-  <StrictMode><App><RouterProvider router={router} /></App></StrictMode>,
+-)
++void entryClient(App_, routes)
+
+===================================================================
+--- /dev/null
++++ b/src/routes.ssr.tsx
+@@ -0,0 +1,6 @@
++import Home from '@/Home'
++
++export default [
++  { path: '/', Component: Home },
++  { path: '/about', lazy: () => import('@/About') },
++] satisfies import('react-router').RouteObject[]
+
+===================================================================
+--- /dev/null
++++ b/src/server.ts
+@@ -0,0 +1,10 @@
++import entryServer from '@lomray/vite-ssr-boost/adapters/express/entry'
++import { StrictMode } from 'react'
++import App from '@/App'
++import type { FC, PropsWithChildren } from 'react'
++import { createElement as ssrCreateElement } from 'react'
++import routes from './routes.ssr'
++
++const App_: FC<PropsWithChildren> = ({ children }) => ssrCreateElement(StrictMode, null, ssrCreateElement(App, null, children))
++
++export default entryServer(App_, routes)
+
+===================================================================
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -1,9 +1,10 @@
++import SsrBoost from '@lomray/vite-ssr-boost/plugin'
+ import { defineConfig } from 'vite'
+ import { fileURLToPath, URL } from 'node:url'
+ import react from '@vitejs/plugin-react'
+ 
+ // Keep the React plugin and this comment.
+ export default defineConfig({
+   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+-  plugins: [react()],
++  plugins: [SsrBoost({ clientFile: 'src/main.tsx', serverFile: 'src/server.ts' }), react()],
+ })
+
+Dry run: no files written. Use --apply to write these changes.
+Next: npm install; then npx ssr-boost doctor."
+`;
+
+exports[`init > javascript has a complete dry-run diff and applies idempotently 1`] = `
+"===================================================================
+--- a/index.html
++++ b/index.html
+@@ -1,8 +1,8 @@
+ <!doctype html>
+ <html lang="en">
+   <head><meta charset="UTF-8" /><title>Vite + React</title></head>
+   <body>
+-    <div id="root"></div>
++    <div id="root"><!--ssr-outlet--></div>
+     <script type="module" src="/src/main.jsx"></script>
+   </body>
+ </html>
+
+===================================================================
+--- a/package.json
++++ b/package.json
+@@ -3,17 +3,19 @@
+   "private": true,
+   "version": "0.0.0",
+   "type": "module",
+   "scripts": {
+-    "dev": "vite",
+-    "build": "vite build",
+-    "preview": "vite preview",
+-    "lint": "eslint ."
++    "dev": "ssr-boost dev",
++    "build": "ssr-boost build",
++    "preview": "ssr-boost preview",
++    "lint": "eslint .",
++    "start:ssr": "ssr-boost start"
+   },
+   "dependencies": {
+     "react": "19.2.8",
+     "react-dom": "19.2.8",
+-    "react-router": "8.3.1"
++    "react-router": "8.3.1",
++    "@lomray/vite-ssr-boost": "^1.0.0"
+   },
+   "devDependencies": {
+     "@vitejs/plugin-react": "6.1.1",
+     "vite": "8.2.2"
+
+===================================================================
+--- a/src/main.jsx
++++ b/src/main.jsx
+@@ -1,15 +1,8 @@
++import entryClient from '@lomray/vite-ssr-boost/browser/entry'
+ import { StrictMode } from 'react'
+-import { createRoot } from 'react-dom/client'
+-import { createBrowserRouter, RouterProvider } from 'react-router'
+-import Home from './Home'
++import routes from './routes.ssr'
+ import './index.css'
+ 
+-const routes = [
+-  { path: '/', Component: Home },
+-  { path: '/about', lazy: () => import('./About') },
+-]
+-const router = createBrowserRouter(routes)
++const App = ({ children }) => <StrictMode>{children}</StrictMode>
+ 
+-createRoot(document.getElementById('root')).render(
+-  <StrictMode><RouterProvider router={router} /></StrictMode>,
+-)
++void entryClient(App, routes)
+
+===================================================================
+--- /dev/null
++++ b/src/routes.ssr.jsx
+@@ -0,0 +1,6 @@
++import Home from './Home'
++
++export default [
++  { path: '/', Component: Home },
++  { path: '/about', lazy: () => import('./About') },
++]
+
+===================================================================
+--- /dev/null
++++ b/src/server.js
+@@ -0,0 +1,8 @@
++import entryServer from '@lomray/vite-ssr-boost/adapters/express/entry'
++import { StrictMode } from 'react'
++import { createElement as ssrCreateElement } from 'react'
++import routes from './routes.ssr'
++
++const App = ({ children }) => ssrCreateElement(StrictMode, null, children)
++
++export default entryServer(App, routes)
+
+===================================================================
+--- a/vite.config.js
++++ b/vite.config.js
+@@ -1,7 +1,8 @@
++import SsrBoost from '@lomray/vite-ssr-boost/plugin'
+ import { defineConfig } from 'vite'
+ import react from '@vitejs/plugin-react'
+ 
+ // Keep the React plugin and this comment.
+ export default defineConfig({
+-  plugins: [react()],
++  plugins: [SsrBoost({ clientFile: 'src/main.jsx', serverFile: 'src/server.js', tsconfigAliases: false }), react()],
+ })
+
+Dry run: no files written. Use --apply to write these changes.
+Next: npm install; then npx ssr-boost doctor."
+`;
+
+exports[`init > root-inline has a complete dry-run diff and applies idempotently 1`] = `
+"===================================================================
+--- a/index.html
++++ b/index.html
+@@ -1,8 +1,8 @@
+ <!doctype html>
+ <html lang="en">
+   <head><meta charset="UTF-8" /><title>Vite + React</title></head>
+   <body>
+-    <div id="root"></div>
++    <div id="root"><!--ssr-outlet--></div>
+     <script type="module" src="/src/main.tsx"></script>
+   </body>
+ </html>
+
+===================================================================
+--- a/package.json
++++ b/package.json
+@@ -3,17 +3,19 @@
+   "private": true,
+   "version": "0.0.0",
+   "type": "module",
+   "scripts": {
+-    "dev": "vite",
+-    "build": "tsc -b && vite build",
+-    "preview": "vite preview",
+-    "lint": "eslint ."
++    "dev": "ssr-boost dev",
++    "build": "ssr-boost build",
++    "preview": "ssr-boost preview",
++    "lint": "eslint .",
++    "start:ssr": "ssr-boost start"
+   },
+   "dependencies": {
+     "react": "19.2.8",
+     "react-dom": "19.2.8",
+-    "react-router": "8.3.1"
++    "react-router": "8.3.1",
++    "@lomray/vite-ssr-boost": "^1.0.0"
+   },
+   "devDependencies": {
+     "@vitejs/plugin-react": "6.1.1",
+     "vite": "8.2.2",
+
+===================================================================
+--- a/src/main.tsx
++++ b/src/main.tsx
+@@ -1,15 +1,9 @@
++import entryClient from '@lomray/vite-ssr-boost/browser/entry'
+ import { StrictMode } from 'react'
+-import { createRoot } from 'react-dom/client'
+-import { createBrowserRouter, RouterProvider } from 'react-router'
+-import Home from './Home'
++import type { FC, PropsWithChildren } from 'react'
++import routes from './routes.ssr'
+ import './index.css'
+ 
+-const routes = [
+-  { path: '/', Component: Home },
+-  { path: '/about', lazy: () => import('./About') },
+-]
+-const router = createBrowserRouter(routes)
++const App: FC<PropsWithChildren> = ({ children }) => <StrictMode>{children}</StrictMode>
+ 
+-createRoot(document.getElementById('root')!).render(
+-  <StrictMode><RouterProvider router={router} /></StrictMode>,
+-)
++void entryClient(App, routes)
+
+===================================================================
+--- /dev/null
++++ b/src/routes.ssr.tsx
+@@ -0,0 +1,6 @@
++import Home from './Home'
++
++export default [
++  { path: '/', Component: Home },
++  { path: '/about', lazy: () => import('./About') },
++] satisfies import('react-router').RouteObject[]
+
+===================================================================
+--- /dev/null
++++ b/src/server.ts
+@@ -0,0 +1,9 @@
++import entryServer from '@lomray/vite-ssr-boost/adapters/express/entry'
++import { StrictMode } from 'react'
++import type { FC, PropsWithChildren } from 'react'
++import { createElement as ssrCreateElement } from 'react'
++import routes from './routes.ssr'
++
++const App: FC<PropsWithChildren> = ({ children }) => ssrCreateElement(StrictMode, null, children)
++
++export default entryServer(App, routes)
+
+===================================================================
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -1,7 +1,8 @@
++import SsrBoost from '@lomray/vite-ssr-boost/plugin'
+ import { defineConfig } from 'vite'
+ import react from '@vitejs/plugin-react'
+ 
+ // Keep the React plugin and this comment.
+ export default defineConfig({
+-  plugins: [react()],
++  plugins: [SsrBoost({ clientFile: 'src/main.tsx', serverFile: 'src/server.ts' }), react()],
+ })
+
+Dry run: no files written. Use --apply to write these changes.
+Next: npm install; then npx ssr-boost doctor."
+`;
+
+exports[`init > src-export has a complete dry-run diff and applies idempotently 1`] = `
+"===================================================================
+--- a/package.json
++++ b/package.json
+@@ -3,17 +3,19 @@
+   "private": true,
+   "version": "0.0.0",
+   "type": "module",
+   "scripts": {
+-    "dev": "vite",
+-    "build": "tsc -b && vite build",
+-    "preview": "vite preview",
+-    "lint": "eslint ."
++    "dev": "ssr-boost dev",
++    "build": "ssr-boost build",
++    "preview": "ssr-boost preview",
++    "lint": "eslint .",
++    "start:ssr": "ssr-boost start"
+   },
+   "dependencies": {
+     "react": "19.2.8",
+     "react-dom": "19.2.8",
+-    "react-router": "8.3.1"
++    "react-router": "8.3.1",
++    "@lomray/vite-ssr-boost": "^1.0.0"
+   },
+   "devDependencies": {
+     "@vitejs/plugin-react": "6.1.1",
+     "vite": "8.2.2",
+
+===================================================================
+--- a/src/index.html
++++ b/src/index.html
+@@ -1,8 +1,8 @@
+ <!doctype html>
+ <html lang="en">
+   <head><meta charset="UTF-8" /><title>Vite + React</title></head>
+   <body>
+-    <div id="root"></div>
++    <div id="root"><!--ssr-outlet--></div>
+     <script type="module" src="/main.tsx"></script>
+   </body>
+ </html>
+
+===================================================================
+--- a/src/main.tsx
++++ b/src/main.tsx
+@@ -1,11 +1,9 @@
++import entryClient from '@lomray/vite-ssr-boost/browser/entry'
+ import { StrictMode } from 'react'
+-import { createRoot } from 'react-dom/client'
+-import { createBrowserRouter, RouterProvider } from 'react-router'
++import type { FC, PropsWithChildren } from 'react'
+ import { appRoutes as routes } from './routes'
+ import './index.css'
+ 
+-const router = createBrowserRouter(routes)
++const App: FC<PropsWithChildren> = ({ children }) => <StrictMode>{children}</StrictMode>
+ 
+-createRoot(document.getElementById('root')!).render(
+-  <StrictMode><RouterProvider router={router} /></StrictMode>,
+-)
++void entryClient(App, routes)
+
+===================================================================
+--- /dev/null
++++ b/src/server.ts
+@@ -0,0 +1,9 @@
++import entryServer from '@lomray/vite-ssr-boost/adapters/express/entry'
++import { StrictMode } from 'react'
++import type { FC, PropsWithChildren } from 'react'
++import { createElement as ssrCreateElement } from 'react'
++import { appRoutes as routes } from './routes'
++
++const App: FC<PropsWithChildren> = ({ children }) => ssrCreateElement(StrictMode, null, children)
++
++export default entryServer(App, routes)
+
+===================================================================
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -1,10 +1,11 @@
++import SsrBoost from '@lomray/vite-ssr-boost/plugin'
+ import { defineConfig } from 'vite'
+ import react from '@vitejs/plugin-react'
+ 
+ // Keep the React plugin and this comment.
+ export default defineConfig({
+   root: 'src',
+   publicDir: '../public',
+   build: { outDir: '../dist' },
+-  plugins: [react()],
++  plugins: [SsrBoost({ clientFile: 'main.tsx', serverFile: 'server.ts' }), react()],
+ })
+
+Dry run: no files written. Use --apply to write these changes.
+Next: npm install; then npx ssr-boost doctor."
+`;

@@ -3,7 +3,7 @@ import MakeAliases from './src/plugins/make-aliases';
 
 export default defineConfig({
   test: {
-    include: ['__tests__/**/*'],
+    include: ['__tests__/**/*.{ts,tsx,js}'],
     setupFiles: ['__helpers__/setup.ts'],
     coverage: {
       include: ['src/**/*'],

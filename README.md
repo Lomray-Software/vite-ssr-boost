@@ -24,6 +24,10 @@
 
 ```bash
 npm i @lomray/vite-ssr-boost
+npx ssr-boost init --dry-run
+npx ssr-boost init --apply
+npm install
+npx ssr-boost doctor
 ```
 
 `@lomray/vite-ssr-boost` adds server rendering to your Vite project while keeping your route objects and components. Build SSR and SPA output from the same app, and choose a managed Express server or a Fetch handler for your own transport.
