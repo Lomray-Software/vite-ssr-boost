@@ -1,0 +1,2 @@
+import type { PropsWithChildren } from 'react'
+export default function App({ children }: PropsWithChildren) { return <div className="app-wrapper">{children}</div> }

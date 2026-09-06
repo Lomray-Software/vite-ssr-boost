@@ -137,3 +137,5 @@ async function entry<TAppProps>(
 }
 
 export default entry;
+
+export { entry };

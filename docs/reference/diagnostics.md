@@ -1,5 +1,7 @@
 # Development diagnostics
 
+Run [`ssr-boost doctor`](/api/cli#ssr-boost-doctor) to check project setup before investigating a runtime warning. Use `doctor --json` in automation and `doctor --bundle support.json` to collect versions, route structure, checks and recorded build codes without request data.
+
 Diagnostics catch state serialization and response-hook mistakes before they reach the browser.
 Each distinct warning is logged once per process through the existing logger, with a stable code,
 the affected route/key or file, and a link to its section below; managed development uses your

@@ -1,0 +1,3 @@
+{
+  "routes": "export default [{ path: '/skipped' }, { id: 'parent', children: [{ path: '/also-skipped' }, { path: '/about', lazy: () => import('./About') }] }];\n"
+}

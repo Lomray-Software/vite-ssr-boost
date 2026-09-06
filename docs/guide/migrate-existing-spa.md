@@ -2,6 +2,27 @@
 
 Add SSR while keeping your React Router [Data-mode route objects](https://reactrouter.com/start/modes) and components. This guide follows the five-file change in the [minimal example README](https://github.com/Lomray-Software/vite-template/tree/example/minimal#from-a-plain-vite-spa-to-this-project).
 
+## Automatic: `npx ssr-boost init`
+
+For a Vite + React app using `createBrowserRouter` and route objects, preview the migration first:
+
+```bash
+npx ssr-boost init --dry-run
+npx ssr-boost init --apply
+npm install
+npx ssr-boost doctor
+npm run build
+npm run start:ssr
+```
+
+If the library is not installed yet, use `npx --package @lomray/vite-ssr-boost ssr-boost init --dry-run` (then repeat with `--apply`). This downloads the CLI to npm's cache; `init` itself never installs dependencies. With neither flag, `init` defaults to a dry run and prints a unified diff without creating files. `--root <dir>`, `--entry <file>` and `--routes <file>` select the project, browser entry and exported route module; file overrides are relative to the project directory.
+
+The command makes the five integration changes below: adds `SsrBoost()` while preserving existing plugins, inserts the outlet inside `#root`, replaces the browser bootstrap with the library entry, creates an Express server entry next to it, and updates the dependency and scripts. An existing `dev` script becomes `ssr-boost dev` without adding a duplicate `develop`; otherwise it updates or adds `develop`. It always sets `build` to `ssr-boost build` and adds `start:ssr` as `ssr-boost start`. A stock `preview` script also switches to `ssr-boost preview`. It preserves an imported App wrapper around `RouterProvider`. For `StrictMode`, a Fragment, or no wrapper, it creates an explicit App component in both entries so the browser and server render the same tree. Inline route declarations and their dependencies move into an additional `routes.ssr.tsx` (or JS/TS equivalent) module shared by both entries. Existing exported route modules stay in place, preserving their import specifiers and local bindings. Repeating `--apply` makes no further changes.
+
+Automatic migration supports TypeScript and JavaScript, root `index.html` and Vite `root: 'src'`, literal plugin arrays, static routes, and conventional aliases. It stops before writing for JSX `BrowserRouter`/`Routes`, missing or multiple `createBrowserRouter` calls, multiple HTML/build entries, runtime-generated Vite configuration, an existing server file, custom router options, wrappers requiring extra props, additional browser startup statements, or a Vite `base` other than `/`. The error identifies the file and construct and links to this manual reference. It does not invent metadata providers or request hooks: adapt those with the steps below when your app needs them.
+
+Run [`doctor --json`](/api/cli#ssr-boost-doctor) after further changes. Review browser globals in your components using the [pitfalls below](#pitfalls).
+
 ## Prerequisites
 
 - Node 22: the package declares `engines.node: ">=22.12.0"`; use Node 22.23.2 for this example and its tooling.
@@ -141,7 +162,7 @@ After — source: [package.json](https://github.com/Lomray-Software/vite-templat
 }
 ```
 
-Run `npm run develop` for development. Run `npm run build` and then `npm run start:ssr` to serve the SSR build.
+Run `npm run dev` if your app has a `dev` script, or `npm run develop` for the example above. Run `npm run build` and then `npm run start:ssr` to serve the SSR build.
 
 ## Data loading
 

@@ -45,6 +45,7 @@ export default {
     'node:zlib',
     'node:url',
     'node:http',
+    'node:module',
     'node:https',
     '@babel/types',
   ],
@@ -58,7 +59,16 @@ export default {
     terser(),
     copy({
       targets: [
-        { src: 'package.json', dest: dest },
+        {
+          src: 'package.json',
+          dest,
+          transform(contents) {
+            const metadata = JSON.parse(contents.toString());
+            // Published consumers and directory packing do not need checkout Git hooks.
+            delete metadata.scripts.prepare;
+            return `${JSON.stringify(metadata, null, 2)}\n`;
+          },
+        },
         { src: 'README.md', dest: dest },
         { src: 'SECURITY.md', dest: dest },
         { src: 'LICENSE', dest: dest },
