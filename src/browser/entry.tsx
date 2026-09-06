@@ -125,6 +125,15 @@ async function entry<TAppProps>(
     IS_SSR_MODE &&
     root.dataset['forceSpa'] !== '1' &&
     document.documentElement.dataset['forceSpa'] !== '1';
+
+  if (IS_SSR_MODE) {
+    Reflect.deleteProperty(window, '__staticRouterHydrationData');
+
+    if (isSSRMode) {
+      window.dispatchEvent(new CustomEvent('ssr-boost:router-ready', { detail: { rootId } }));
+    }
+  }
+
   const appProps = (await init?.({ isSSRMode, router })) as TAppProps;
 
   const AppComponent: FC = () => (

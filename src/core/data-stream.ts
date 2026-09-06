@@ -4,6 +4,7 @@ import type { StaticHandlerContext } from 'react-router';
 import script, { streamScript } from '@core/script';
 import serializeErrors from '@helpers/serialize-errors';
 import type Diagnostics from '@services/diagnostics';
+import type RequestTimeline from '@services/request-timeline';
 
 interface IPending {
   settled: boolean;
@@ -71,6 +72,7 @@ class DataStream {
     context: StaticHandlerContext,
     protected readonly diagnostics?: Diagnostics,
     protected readonly nonce?: string,
+    protected readonly timeline?: RequestTimeline,
   ) {
     diagnostics?.inspectRouterState(context);
     this.done = new Promise((resolve) => {
@@ -173,12 +175,14 @@ class DataStream {
       );
 
       this.frames.push(streamScript([rejected ? 'reject' : 'resolve', id, payload], this.nonce));
+      this.timeline?.record(rejected ? 'stream.reject' : 'stream.resolve', { id });
     } catch (error) {
       const payload = this.encodeValue(
         new Error(`Cannot serialize streamed value: ${String(error)}`),
       );
 
       this.frames.push(streamScript(['reject', id, payload], this.nonce));
+      this.timeline?.record('stream.reject', { id });
     } finally {
       this.pending.delete(id);
       this.wake();

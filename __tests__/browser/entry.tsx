@@ -165,7 +165,7 @@ describe('browserEntry', () => {
     expect(hydrateStub.calledOnce).toBe(true);
 
     document.dispatchEvent(new Event('DOMContentLoaded'));
-    expect(hydrationWindow.__staticRouterHydrationData).toBe(state);
+    expect(hydrationWindow.__staticRouterHydrationData).toBeUndefined();
     hydrationWindow.__staticRouterHydrationData = { loaderData: {} };
     expect(hydrationWindow.__staticRouterHydrationData).toEqual({ loaderData: {} });
     expect(createRouter.calledOnce).toBe(true);
@@ -220,9 +220,7 @@ describe('browserEntry', () => {
     const pending = entry(App, routes, { createRouter });
 
     expect(createRouter.calledOnce).toBe(true);
-    expect(Object.getOwnPropertyDescriptor(window, '__staticRouterHydrationData')).toEqual(
-      descriptor,
-    );
+    expect(Object.getOwnPropertyDescriptor(window, '__staticRouterHydrationData')).toBeUndefined();
     await pending;
     expect(hydrateStub.calledOnce).toBe(true);
   });

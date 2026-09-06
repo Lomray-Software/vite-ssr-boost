@@ -25,6 +25,30 @@
     "./*": {
       "types": "./*.d.ts",
       "default": "./*.js"
+    },
+    "./testing": {
+      "types": "./testing.d.ts",
+      "workerd": "./testing/edge.js",
+      "worker": "./testing/edge.js",
+      "edge-light": "./testing/edge.js",
+      "browser": "./testing/edge.js",
+      "default": "./testing.js"
+    },
+    "./testing.js": {
+      "types": "./testing.d.ts",
+      "workerd": "./testing/edge.js",
+      "worker": "./testing/edge.js",
+      "edge-light": "./testing/edge.js",
+      "browser": "./testing/edge.js",
+      "default": "./testing.js"
+    },
+    "./testing/playwright": {
+      "types": "./testing/playwright.d.ts",
+      "default": "./testing/playwright.js"
+    },
+    "./testing/playwright.js": {
+      "types": "./testing/playwright.d.ts",
+      "default": "./testing/playwright.js"
     }
   },
   "keywords": [
@@ -153,7 +177,8 @@
     "react": ">=18.2.0",
     "react-dom": ">=18.2.0",
     "react-router": ">=7.0.1",
-    "vite": ">=5"
+    "vite": ">=5",
+    "@playwright/test": ">=1.40.0"
   },
   "peerDependenciesMeta": {
     "@types/compression": {
@@ -163,6 +188,9 @@
       "optional": true
     },
     "@types/serve-static": {
+      "optional": true
+    },
+    "@playwright/test": {
       "optional": true
     }
   },
