@@ -9,11 +9,13 @@ At runtime the package:
 1. creates or reuses server config
 2. loads your server entry
 3. calls `onRequest`
-4. queries React Router static handler
+4. applies the [SSR policy](/guide/incremental-ssr), serving the SPA shell when selected or querying the React Router static handler for SSR
 5. decides whether to stream or wait
 6. writes HTML, state and response mutations
 
 That is where the customization hooks fit.
+
+Policy-selected SPA responses run `onRequest` and asset preparation, then return the shell without loaders or SSR render hooks. Fetch asset preparation can use `context.matches` in both modes; `context.isSpa` identifies a SPA response and `routerContext` exists only after an SSR query.
 
 Render hooks receive a [context](/api/server-entry#hook-context) with the shared Fetch `request` and live Express `req` / `res`; `onRequest` receives `(req, res)` before that context is created.
 

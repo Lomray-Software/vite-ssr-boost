@@ -4,6 +4,8 @@ import Logger from '@services/logger';
 type TDiagnosticCode =
   | 'SSR_BOOST_CACHE_PRIVATE_LEAK'
   | 'SSR_BOOST_DEPRECATED_REQ_RES'
+  | 'SSR_BOOST_SSR_POLICY'
+  | 'SSR_BOOST_SSR_POLICY_UNMATCHED'
   | 'SSR_BOOST_LOADER_NOT_SERIALIZABLE'
   | 'SSR_BOOST_STREAM_PROMISE_ABORTED'
   | 'SSR_BOOST_STATE_NOT_SERIALIZABLE'
@@ -172,7 +174,7 @@ class Diagnostics {
 
   public constructor(
     protected readonly route: string,
-    protected readonly logger: Pick<Logger, 'warn'> = new Logger(),
+    protected readonly logger: Pick<Logger, 'warn'> & Partial<Pick<Logger, 'info'>> = new Logger(),
   ) {}
 
   /**
@@ -193,6 +195,32 @@ class Diagnostics {
     this.warn(
       'SSR_BOOST_DEPRECATED_REQ_RES',
       'context.req and context.res are deprecated in 8.x and planned for removal in 9.0; use context.request, context.response.headers/context.response.status and React Router HTTP helpers such as redirect().',
+    );
+  }
+
+  /**
+   * Report policy choices without logging concrete parameter, cookie or query values.
+   */
+  public policyDecision(pattern: string, mode: string, source: string): void {
+    const message = formatDiagnostic(
+      'SSR_BOOST_SSR_POLICY',
+      `Pattern ${JSON.stringify(pattern)} selects ${mode} via ${source}.`,
+    );
+    const reported = (registry[warnedKey] ??= new Set<string>());
+
+    if (!reported.has(message)) {
+      reported.add(message);
+      this.logger.info?.(message, {});
+    }
+  }
+
+  /**
+   * Warn once for a configured pattern with no corresponding route id.
+   */
+  public policyUnmatched(pattern: string): void {
+    this.warn(
+      'SSR_BOOST_SSR_POLICY_UNMATCHED',
+      `Pattern ${JSON.stringify(pattern)} matches no known route id; check its URL path and router basename.`,
     );
   }
 

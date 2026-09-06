@@ -2,6 +2,9 @@ import { hasCookie } from '@core/document-headers';
 import headResponse from '@core/head-response';
 import render from '@core/render';
 import type { ICoreRenderOptions, ICoreRenderParams, ISsrRequestContext } from '@core/render';
+import createSpaShell from '@core/spa-shell';
+import SsrPolicy from '@core/ssr-policy';
+import type { ISsrPolicy } from '@core/ssr-policy';
 import type { ISsrExecutionContext, TSsrHandler } from '@core/types';
 import Diagnostics, { isDiagnosticsEnabled } from '@services/diagnostics';
 
@@ -17,6 +20,12 @@ interface IRequestInit<TAppProps> {
 }
 
 interface ICreateHandlerOptions<TAppProps> extends ICoreRenderOptions<TAppProps> {
+  /** Select SSR or the SPA shell before running route loaders. */
+  ssr?: ISsrPolicy;
+
+  /** Must match the basename passed to createStaticHandler. */
+  basename?: string;
+
   /**
    * Development checks; defaults to NODE_ENV !== 'production', overridden by SSR_BOOST_DIAGNOSTICS.
    */
@@ -41,8 +50,11 @@ interface ICreateHandlerOptions<TAppProps> extends ICoreRenderOptions<TAppProps>
  */
 const createHandler = <TAppProps = Record<string, any>>(
   params: ICoreRenderParams<TAppProps>,
-  { diagnostics, getHtml, onRequest, ...options }: ICreateHandlerOptions<TAppProps>,
+  { diagnostics, getHtml, onRequest, ssr, basename, ...options }: ICreateHandlerOptions<TAppProps>,
 ): TSsrHandler => {
+  const policy = new SsrPolicy(ssr, params.handler.dataRoutes, basename);
+  const spaShell = createSpaShell();
+
   /**
    * Build fresh context for this request before invoking the renderer.
    */
@@ -72,10 +84,10 @@ const createHandler = <TAppProps = Record<string, any>>(
       },
     };
 
-    return render(params, context, options, executionContext);
+    return render({ ...params, policy, spaShell }, context, options, executionContext);
   };
 };
 
-export type { ICreateHandlerOptions, IHtmlShell, IRequestInit };
+export type { ICreateHandlerOptions, IHtmlShell, IRequestInit, ISsrPolicy };
 
 export default createHandler;

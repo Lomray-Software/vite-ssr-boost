@@ -44,6 +44,18 @@ Accessors are installed only in managed development with diagnostics enabled, us
 `SSR_BOOST_DIAGNOSTICS=0` disables them. Production keeps plain properties with no accessor or
 warning overhead, even when other diagnostics are enabled with `SSR_BOOST_DIAGNOSTICS=1`.
 
+## SSR_BOOST_SSR_POLICY {#ssr_boost_ssr_policy}
+
+An info message explains whether a URL pattern selected `ssr` or `spa`, and whether the decision came from the configured include/exclude policy, `decide`, `SSR_BOOST_SSR_ROUTES`, or `bots: 'ssr'`. It appears for active [incremental SSR policies](/guide/incremental-ssr), once per pattern and distinct decision per process, using the development logger and diagnostics settings above. Plain default `all` mode stays silent; an `all` policy with `decide` is active.
+
+The message identifies patterns rather than concrete dynamic parameters, cookies or query values. Check it when a URL uses an unexpected mode. The environment override replaces the configured route policy and `decide`; bot protection has highest priority. This is informational and does not count as a warning. SPA shells intentionally have no hydration state and do not trigger `SSR_BOOST_HYDRATION_STATE_MISSING`.
+
+## SSR_BOOST_SSR_POLICY_UNMATCHED {#ssr_boost_ssr_policy_unmatched}
+
+An include/exclude pattern has no match among known route ids' declared URL paths. The warning checks nested paths and router basenames without importing lazy route modules or running loaders. A global 404 catch-all does not hide typos. Each distinct unmatched pattern warns once per process under the diagnostics settings above.
+
+Check spelling, include the URL basename, and use path patterns rather than component filenames or generated numeric route ids. The check is advisory and compares declared paths, so a RegExp restricted to particular dynamic parameter values may need manual verification. Invalid path-to-regexp string syntax instead throws during entry/handler creation, even with diagnostics disabled.
+
 ## SSR_BOOST_LOADER_NOT_SERIALIZABLE {#ssr_boost_loader_not_serializable}
 
 ### When it appears

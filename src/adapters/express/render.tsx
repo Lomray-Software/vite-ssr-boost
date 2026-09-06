@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import React from 'react';
-import type { StaticHandlerContext, StaticHandler } from 'react-router';
+import type { RouterState, StaticHandlerContext, StaticHandler } from 'react-router';
 import createFetchRequest from '@adapters/express/create-request';
 import type { TApp } from '@adapters/express/entry';
 import StreamError from '@constants/stream-error';
@@ -10,6 +10,8 @@ import emitEarlyHints from '@core/early-hints';
 import { getHeaderEntries, getSetCookieHeaders } from '@core/headers';
 import coreRender from '@core/render';
 import type { ICoreRenderOptions, ISsrRequestContext } from '@core/render';
+import type createSpaShell from '@core/spa-shell';
+import type SsrPolicy from '@core/ssr-policy';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import renderToStream from '@node/render-to-stream';
 import createRequestSignal from '@node/request-signal';
@@ -31,6 +33,8 @@ export interface IRequestContext<TAppProps = Record<any, any>> {
   routerContext?: StaticHandlerContext;
   serverContext?: IServerContext;
   isStream?: boolean;
+  isSpa?: boolean;
+  matches?: RouterState['matches'];
   hasEarlyHints?: boolean;
   didError?: StreamError;
 }
@@ -44,6 +48,8 @@ export type TRender<TAppProps = Record<any, any>> = (
 export interface IRenderParams<TAppProps = Record<string, any>> {
   App: TApp<TAppProps>;
   handler: StaticHandler;
+  policy?: SsrPolicy;
+  spaShell?: ReturnType<typeof createSpaShell>;
 }
 
 export interface IRenderOptions<TAppProps = Record<string, any>> extends Pick<
@@ -203,7 +209,7 @@ const writeResponse = async (res: ExpressResponse, response: Response): Promise<
  * Render application
  */
 async function render(
-  { App, handler }: IRenderParams,
+  { App, handler, policy, spaShell }: IRenderParams,
   config: ServerConfig,
   initialContext: Omit<IRequestContext, 'request' | 'response'>,
   {
@@ -264,6 +270,15 @@ async function render(
       }
     }
 
+    syncResponse(coreContext, res, {
+      headers: new Headers(coreContext.response.headers),
+      status: coreContext.response.status,
+    });
+
+    if (coreContext.response.status === 200) {
+      coreContext.response.status = undefined;
+    }
+
     /**
      * Keep legacy hooks attached to their original mutable request context.
      */
@@ -273,6 +288,8 @@ async function render(
       context.didError = updated.didError;
       context.html = updated.html;
       context.isStream = updated.isStream;
+      context.isSpa = updated.isSpa;
+      context.matches = updated.matches;
       context.routerContext = updated.routerContext;
       context.serverContext = updated.serverContext;
 
@@ -287,6 +304,8 @@ async function render(
           <App server={{ ...updated.appProps, req }}>{children}</App>
         ),
         handler,
+        policy,
+        spaShell,
         renderToStream,
       },
       coreContext,
@@ -381,7 +400,7 @@ async function render(
           const legacyContext = syncContext(updated);
           const manifest = SsrManifest.get(config);
 
-          await manifest.prepareDevAssets(updated.routerContext?.matches);
+          await manifest.prepareDevAssets(updated.matches, updated.isSpa);
 
           const hints = manifest.injectAssets(legacyContext);
 

@@ -121,7 +121,11 @@ async function entry<TAppProps>(
 
   const router = createRouter(routes as RouteObject[], routerOptions);
   const root = document.getElementById(rootId) as HTMLElement;
-  const appProps = (await init?.({ isSSRMode: IS_SSR_MODE, router })) as TAppProps;
+  const isSSRMode =
+    IS_SSR_MODE &&
+    root.dataset['forceSpa'] !== '1' &&
+    document.documentElement.dataset['forceSpa'] !== '1';
+  const appProps = (await init?.({ isSSRMode, router })) as TAppProps;
 
   const AppComponent: FC = () => (
     <App client={appProps}>
@@ -129,7 +133,7 @@ async function entry<TAppProps>(
     </App>
   );
 
-  if (!IS_SSR_MODE || root.dataset['forceSpa'] === '1') {
+  if (!isSSRMode) {
     return ReactDOM.createRoot(root).render(<AppComponent />);
   }
 

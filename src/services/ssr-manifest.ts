@@ -264,18 +264,26 @@ class SsrManifest extends RouteAssets {
   /**
    * Get route assets from Vite in development or the built manifest in production.
    */
-  protected getAssets(routes?: RouterState['matches']): IAsset[] {
-    return this.isDev ? this.getAssetsDev(routes) : super.getAssets(routes);
+  protected getAssets(routes?: RouterState['matches'], isSpa?: boolean): IAsset[] {
+    return this.isDev ? this.getAssetsDev(routes, isSpa) : super.getAssets(routes);
+  }
+
+  /**
+   * Resolve structural route metadata without importing the server's lazy component.
+   */
+  protected getDevRouteIds(routes?: RouterState['matches']): string[] {
+    return (
+      (routes
+        ?.map(({ route }) => this.pathNormalize.getAppPath((route as IAsyncRoute)?.pathId, true))
+        .filter(Boolean) as string[]) ?? []
+    );
   }
 
   /**
    * Get development route assets
    */
   protected getDevModules(routes?: RouterState['matches']): ModuleNode[] {
-    const routeIds =
-      (routes
-        ?.map(({ route }) => this.pathNormalize.getAppPath((route as IAsyncRoute)?.pathId, true))
-        .filter(Boolean) as string[]) ?? [];
+    const routeIds = this.getDevRouteIds(routes);
 
     const postfixes = this.pathNormalize.getImportPostfix();
     const pluginConfig = this.config.getPluginConfig();
@@ -302,11 +310,23 @@ class SsrManifest extends RouteAssets {
   /**
    * Compile SSR graph styles before the browser has populated the client graph.
    */
-  public async prepareDevAssets(routes?: RouterState['matches']): Promise<void> {
+  public async prepareDevAssets(routes?: RouterState['matches'], isSpa = false): Promise<void> {
     const vite = this.config.getVite();
 
     if (!vite) {
       return;
+    }
+
+    if (isSpa) {
+      await Promise.all(
+        this.getDevRouteIds(routes).map(async (id) => {
+          const file = this.pathNormalize.findAppFile(id);
+
+          if (file) {
+            await vite.transformRequest(`/@fs/${file}`);
+          }
+        }),
+      );
     }
 
     const visited = new Set<string>();
@@ -334,13 +354,34 @@ class SsrManifest extends RouteAssets {
   /**
    * Collect development assets from the current server and client module graphs.
    */
-  protected getAssetsDev(routes?: RouterState['matches']): IAsset[] {
+  protected getAssetsDev(routes?: RouterState['matches'], isSpa = false): IAsset[] {
     const assets = Object.assign(
       {},
       ...this.getDevModules(routes).map((module) => this.getModuleAssets(module)),
     ) as TAssets;
 
-    return Object.values(assets);
+    const scripts: IAsset[] = isSpa
+      ? this.getDevRouteIds(routes).flatMap((id) => {
+          const module = this.pathNormalize
+            .getImportPostfix()
+            .map((ext) => this.config.getVite()?.moduleGraph.getModuleById(`${id}${ext}`))
+            .find(Boolean);
+
+          return module
+            ? [
+                {
+                  type: AssetType.script,
+                  url: module.url,
+                  weight: 2,
+                  isNested: false,
+                  isPreload: true,
+                },
+              ]
+            : [];
+        })
+      : [];
+
+    return [...Object.values(assets), ...scripts];
   }
 
   /**

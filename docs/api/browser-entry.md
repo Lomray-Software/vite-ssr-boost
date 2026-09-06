@@ -54,6 +54,8 @@ void entryClient(App, routes, {
 
 Those values are passed to `App` as `client`.
 
+`isSSRMode` reflects the current document: it is `false` for an [incremental SSR](/guide/incremental-ssr) SPA shell even when the shared browser bundle was built for SSR.
+
 ## `createRouter`
 
 The default is `createBrowserRouter`.

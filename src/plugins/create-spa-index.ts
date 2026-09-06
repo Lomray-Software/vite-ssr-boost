@@ -1,5 +1,6 @@
 import type { Plugin } from 'vite';
 import PLUGIN_NAME from '@constants/plugin-name';
+import createSpaHtml from '@core/spa-html';
 import { getCurrentEntrypointName } from '@plugins/handle-custom-entrypoint';
 
 export interface IPluginOptions {
@@ -30,7 +31,7 @@ function ViteCreateSPAIndexPlugin(options: IPluginOptions = {}): Plugin {
       return command === 'build' && !isSsrBuild && !getCurrentEntrypointName();
     },
     transformIndexHtml(html): string {
-      spaHtml = html.replace(`id="${rootId}"`, `id="${rootId}" data-force-spa="1"`);
+      spaHtml = createSpaHtml(html, rootId);
 
       return html;
     },
