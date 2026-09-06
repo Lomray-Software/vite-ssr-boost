@@ -256,9 +256,15 @@ class SsrManifest extends RouteAssets {
       result[routeId] = this.sortAssets(Object.values(this.getRouteAssets(manifest, routeMeta)));
     });
 
-    fs.writeFileSync(this.getAssetsManifestFile(), JSON.stringify(result, null, 2), {
-      encoding: 'utf-8',
-    });
+    const json = JSON.stringify(result, null, 2);
+
+    fs.writeFileSync(this.getAssetsManifestFile(), json, { encoding: 'utf-8' });
+    const clientDir = path.join(this.getOutDir(), 'client');
+
+    // A server-only build has no client output directory to copy the manifest into.
+    if (fs.existsSync(clientDir)) {
+      fs.writeFileSync(path.join(clientDir, 'assets-manifest.json'), json, { encoding: 'utf-8' });
+    }
   }
 
   /**

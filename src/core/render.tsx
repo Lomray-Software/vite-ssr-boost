@@ -26,6 +26,7 @@ export interface ISsrRequestContext<TAppProps = Record<string, any>> {
   appProps: NonNullable<TAppProps>;
   diagnostics?: Diagnostics;
   timeline?: RequestTimeline;
+  executionContext?: ISsrExecutionContext;
 
   /**
    * First render failure, or the explicit timeout/cancellation classification.

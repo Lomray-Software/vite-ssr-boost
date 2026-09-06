@@ -12,6 +12,7 @@ import type {
   IHtmlShell,
   ILoadHtmlShellOptions,
   IRouteAssetPreparerOptions,
+  TRouteAssetsManifest,
 } from '@lomray/vite-ssr-boost/node/production';
 ```
 
@@ -44,10 +45,10 @@ Load a new shell when deploying a new build.
 ## `createRouteAssetPreparer`
 
 ```ts
-interface IRouteAssetPreparerOptions {
-  buildDir: string;
-  modulePreload?: boolean; // Default: false
-}
+type IRouteAssetPreparerOptions = (
+  | { buildDir: string; manifest?: never }
+  | { manifest: TRouteAssetsManifest; buildDir?: never }
+) & { modulePreload?: boolean }; // Default: false
 
 function createRouteAssetPreparer<TAppProps>(
   options: IRouteAssetPreparerOptions,
@@ -62,6 +63,20 @@ preparer caches its own manifest and shares the managed server's asset injection
 not discover builds from the working directory or use the managed server's manifest singleton.
 Relative paths resolve against the working directory at creation; use an absolute path to start
 the application from any directory.
+
+Alternatively, import the parsed **`build/client/assets-manifest.json`** and pass `{ manifest }`:
+
+```ts
+import manifest from './build/client/assets-manifest.json';
+const prepare = createRouteAssetPreparer({ manifest });
+```
+
+The CLI emits this alongside the identical `build/server/assets-manifest.json` after the normal
+server build. It is not Vite's `.vite/manifest.json`. The exported `TRouteAssetsManifest` type accepts
+a JSON import directly. `RouteAssets` from `services/route-assets` also accepts the object as its
+first constructor argument, with `modulePreload` as the second. Manifest objects are not mutated.
+For Workers use the edge-safe [Cloudflare entry](/guide/cloudflare), which uses the same injection
+logic without importing the Node helpers.
 
 The hook runs after React Router matches the request. It inserts matching route styles and scripts
 before `</head>` in `context.html.header`; the shell must contain that closing tag. Lazy route IDs

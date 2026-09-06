@@ -64,6 +64,7 @@ export default defineConfig({
           { text: 'Runtime Adapters', link: '/guide/runtime-adapters' },
           { text: 'Deployment', link: '/guide/deployment' },
           { text: 'Caching', link: '/guide/caching' },
+          { text: 'Cloudflare Workers', link: '/guide/cloudflare' },
         ],
       },
       {

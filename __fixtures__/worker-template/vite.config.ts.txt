@@ -1,0 +1,14 @@
+import { defineConfig } from 'vite';
+import SsrBoost from '@lomray/vite-ssr-boost/plugin';
+
+export default defineConfig({
+  root: 'src',
+  publicDir: '../public',
+  build: { outDir: '../build' },
+  plugins: [SsrBoost({
+    clientFile: 'client.tsx',
+    serverFile: 'server.tsx',
+    tsconfigAliases: false,
+    entrypoint: [{ name: 'worker', type: 'ssr', serverFile: 'worker.ts' }],
+  })],
+});

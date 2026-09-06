@@ -35,7 +35,7 @@ const { exports: publicExports } = JSON.parse(await readFile(resolve(projectRoot
 const excludedPaths = [
   // The HTTP policy entry is server-side, even though it also supports edge runtimes.
   /^http\.js$/,
-  /^(?:server|core|edge|node|testing|adapters?|cli|plugins?|services|workflow)(?:\/|\.js$)/,
+  /^(?:server|cloudflare|core|edge|node|testing|adapters?|cli|plugins?|services|workflow)(?:\/|\.js$)/,
   /^constants\/(?:cli-|plugin-|stream-error\.js$)/,
   /^helpers\/(?:build-(?:custom|router)-state|create-focus-only|dev-marker|html-escape|is-route-file|obtain-stream-error|plugin-config|print-server-(?:info|urls)|process-stop|resolve-server-urls|serialize-errors|vite-aliases)\.js$/,
   // These exports have declarations but no browser runtime.

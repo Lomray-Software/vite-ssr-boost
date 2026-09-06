@@ -23,6 +23,7 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - run: npm run test:worker:browser
 
   react:
     uses: ./.github/workflows/react-compatibility.yml
@@ -80,6 +81,9 @@ jobs:
 
       - name: Boot the built edge package in workerd
         run: npm run test:edge:packed
+
+      - name: Build and boot the packed Worker with static assets and KV
+        run: npm run test:worker:packed
 
       - name: Prove public exports (including node/production) and core without optional adapters
         run: npm run test:core:no-optional

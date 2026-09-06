@@ -1,17 +1,18 @@
 import { readFile } from 'node:fs/promises';
 import type { ICreateHandlerOptions, IHtmlShell } from '@core/handler';
 import { splitHtmlShell } from '@services/diagnostics';
+import createAssetPreparer from '@services/route-asset-preparer';
 import RouteAssets from '@services/route-assets';
+import type { TRouteAssetsManifest } from '@services/route-assets';
 
 interface ILoadHtmlShellOptions {
   indexFile: string;
   outlet?: string;
 }
 
-interface IRouteAssetPreparerOptions {
-  buildDir: string;
-  modulePreload?: boolean;
-}
+type IRouteAssetPreparerOptions = (
+  { buildDir: string; manifest?: never } | { manifest: TRouteAssetsManifest; buildDir?: never }
+) & { modulePreload?: boolean };
 
 /**
  * Read a built document once and supply a fresh shell for each request.
@@ -31,19 +32,12 @@ const loadHtmlShell = async ({
  */
 const createRouteAssetPreparer = <TAppProps = Record<string, any>>({
   buildDir,
+  manifest,
   modulePreload = false,
 }: IRouteAssetPreparerOptions): NonNullable<ICreateHandlerOptions<TAppProps>['prepare']> => {
-  const assets = new RouteAssets(buildDir, modulePreload);
-
-  return async ({ context, executionContext }) => {
-    const hints = assets.injectAssets(context);
-
-    if (hints.has('Link')) {
-      await executionContext?.onEarlyHints?.(hints);
-    }
-  };
+  return createAssetPreparer(new RouteAssets(manifest ?? buildDir, modulePreload));
 };
 
 export { createRouteAssetPreparer, loadHtmlShell };
 
-export type { IHtmlShell, ILoadHtmlShellOptions, IRouteAssetPreparerOptions };
+export type { IHtmlShell, ILoadHtmlShellOptions, IRouteAssetPreparerOptions, TRouteAssetsManifest };

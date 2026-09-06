@@ -81,6 +81,7 @@ const createHandler = <TAppProps = Record<string, any>>(
       const context: ISsrRequestContext<TAppProps> = {
         appProps: (metadata?.appProps ?? {}) as NonNullable<TAppProps>,
         diagnostics: isEnabled ? new Diagnostics(new URL(request.url).pathname) : undefined,
+        executionContext,
         html: isBypass ? { header: '', footer: '' } : await getHtml(request),
         request,
         response: {
