@@ -1,7 +1,7 @@
 // @vitest-environment node
 import type { PropsWithChildren } from 'react';
 import { createStaticHandler } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StreamError from '@constants/stream-error';
 import render from '@adapters/express/render';
 import type { IRenderOptions, IRequestContext } from '@adapters/express/render';
@@ -48,6 +48,9 @@ describe('legacy Express render adapter', () => {
       off: vi.fn(),
       once: vi.fn(),
       redirect: vi.fn(),
+      removeHeader: vi.fn((name: string) => {
+        delete responseHeaders[name.toLowerCase()];
+      }),
       setHeader: vi.fn((name: string, value: string | string[]) => {
         responseHeaders[name.toLowerCase()] = value;
 
@@ -93,9 +96,111 @@ describe('legacy Express render adapter', () => {
     return { config, context, logger, res };
   };
 
+  beforeEach(() => {
+    const key = Symbol.for('@lomray/vite-ssr-boost/diagnostics');
+    (globalThis as Record<symbol, Set<string>>)[key]?.clear();
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it.each(['req', 'res'] as const)(
+    'emits SSR_BOOST_DEPRECATED_REQ_RES once per process when a hook reads context.%s',
+    async (field) => {
+      const warnings: unknown[] = [];
+      for (const route of ['/first', '/second']) {
+        const { config, context, logger } = createContext();
+        const original = context[field];
+        context.req.originalUrl = route;
+        coreRenderMock.mockImplementation(async (_, updated, options) => {
+          expect(logger.warn).not.toHaveBeenCalled();
+          await options.onRouterReady({ context: updated });
+          options.getState({ context: updated });
+          return new Response('rendered');
+        });
+        await render({ App, handler: {} as never }, config as never, context as never, {
+          onRouterReady: ({ context: hookContext }) => {
+            expect(hookContext[field]).toBe(original);
+            expect(Object.keys(hookContext)).toContain(field);
+            return {};
+          },
+          getState: ({ context: hookContext }) => {
+            expect(hookContext.req).toBe(context.req);
+            expect(hookContext.res).toBe(context.res);
+            return {};
+          },
+        });
+        warnings.push(...logger.warn.mock.calls.map(([message]) => message));
+      }
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('SSR_BOOST_DEPRECATED_REQ_RES');
+      expect(warnings[0]).toContain('context.request, context.response.headers/context.response.status');
+      expect(warnings[0]).toContain('9.0');
+      expect(warnings[0]).toContain('diagnostics#ssr_boost_deprecated_req_res');
+    },
+  );
+
+  it.each([
+    [true, '1'],
+    [false, '0'],
+  ] as const)('keeps plain req/res properties with isProd=%s and diagnostics=%s', async (isProd, override) => {
+    vi.stubEnv('SSR_BOOST_DIAGNOSTICS', override);
+    const { config, context, logger } = createContext();
+    config.isProd = isProd;
+    coreRenderMock.mockImplementation(async (_, updated, options) => {
+      await options.onRouterReady({ context: updated });
+      return new Response('rendered');
+    });
+    await render({ App, handler: {} as never }, config as never, context as never, {
+      onRouterReady: ({ context: hookContext }) => {
+        for (const name of ['req', 'res'] as const) {
+          expect(Object.getOwnPropertyDescriptor(hookContext, name)).toEqual({
+            configurable: true,
+            enumerable: true,
+            value: context[name],
+            writable: true,
+          });
+        }
+        return {};
+      },
+    });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('supports Fetch request and response metadata without a deprecation warning', async () => {
+    const { config, context, logger, res } = createContext();
+    const { default: coreRender } =
+      await vi.importActual<typeof import('@core/render')>('@core/render');
+    const handler = createStaticHandler([{ path: '*', Component: () => 'BODY' }]);
+    coreRenderMock.mockImplementationOnce(coreRender);
+    writeFetchResponseMock.mockImplementationOnce(async (_, response: Response) => {
+      expect(response.status).toBe(202);
+      expect(response.headers.get('x-modern')).toBe('shell');
+      expect(response.headers.has('x-remove')).toBe(false);
+      expect(res.getHeaders()['set-cookie']).toEqual(['one=1; Path=/', 'two=2; Path=/']);
+      await response.text();
+    });
+    await render({ App, handler }, config as never, context as never, {
+      onRouterReady: ({ context: hookContext }) => {
+        expect(hookContext.request.headers.get('user-agent')).toBe('Googlebot');
+        hookContext.response.status = 201;
+        hookContext.response.headers.set('x-modern', 'router');
+        hookContext.response.headers.set('x-remove', 'router');
+        return {};
+      },
+      onShellReady: ({ context: hookContext }) => {
+        hookContext.response.status = 202;
+        hookContext.response.headers.set('x-modern', 'shell');
+        hookContext.response.headers.delete('x-remove');
+        hookContext.response.headers.append('set-cookie', 'one=1; Path=/');
+        hookContext.response.headers.append('set-cookie', 'two=2; Path=/');
+        return {};
+      },
+    });
+    expect(writeFetchResponseMock).toHaveBeenCalledOnce();
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it.each([

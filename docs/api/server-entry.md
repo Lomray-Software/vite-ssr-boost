@@ -69,7 +69,8 @@ See [Server Lifecycle](/guide/server-lifecycle) for the flow and intent of each 
 receive `{ context }`, with these fields:
 
 - `request`: the Fetch `Request` built from the Express request; use it for headers, URL and method so hooks stay portable to other adapters.
-- `req` / `res`: the live Express request and response.
+- `response`: mutable Fetch `headers` and optional `status`; update these before the shell is sent.
+- `req` / `res`: the live Express request and response, [deprecated in 8.x](/guide/upgrade-v8#deprecated-in-8-x) with removal planned for 9.0.
 - `appProps`: request-scoped props returned by `onRequest`.
 - `html`: the template `header` and `footer`.
 - `routerContext` / `serverContext`: router and SSR metadata, once available.

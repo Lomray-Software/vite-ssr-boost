@@ -18,6 +18,23 @@ the response finishes, without delaying streamed chunks. When disabled, they nei
 accumulate HTML. Completed-output checks skip cancelled or failed streams, redirects, and bodyless
 responses; invalid file-backed shells always throw, even with diagnostics disabled.
 
+## SSR_BOOST_DEPRECATED_REQ_RES {#ssr_boost_deprecated_req_res}
+
+A managed Express hook or loader reads `context.req` or `context.res`. These fields still return
+the live Express objects, but are deprecated in 8.x with removal planned for **9.0**, subject to
+the [support policy](/reference/support) notice periods. One warning covers both fields across
+all requests, hooks and development module reloads in the process. Merely creating the context
+or reading `context.request` does not warn.
+
+Use `context.request` for the Fetch request's URL, headers, method and signal. Before the shell
+is sent, set `context.response.headers` and `context.response.status` for response metadata;
+use React Router's HTTP helpers such as `redirect()` in loaders/actions. The earlier managed
+`onRequest(req, res)` arguments and Express middleware are not deprecated by this diagnostic.
+
+Accessors are installed only in managed development with diagnostics enabled, using `loggerDev`.
+`SSR_BOOST_DIAGNOSTICS=0` disables them. Production keeps plain properties with no accessor or
+warning overhead, even when other diagnostics are enabled with `SSR_BOOST_DIAGNOSTICS=1`.
+
 ## SSR_BOOST_LOADER_NOT_SERIALIZABLE {#ssr_boost_loader_not_serializable}
 
 ### When it appears
