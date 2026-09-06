@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { appendFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { appendFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -9,11 +9,13 @@ import assert from 'node:assert/strict';
 import { createGunzip, gzipSync } from 'node:zlib';
 import { stripVTControlCharacters } from 'node:util';
 import { parse } from '@babel/parser';
+import { createProductionMemoryProbe, configureProductionMeasurements, startProductionMeasurement, measureProductionColdStart, assertProductionBudgets } from './helpers/production-budget.mjs';
 
 // KB = 1024 bytes. For intentional growth, measure the pinned template again and
 // set this to Math.ceil(measured gzip KB * 1.05); document the reason and new size.
 const TEMPLATE_CLIENT_GZIP_BUDGET_KB = 154;
 const TEMPLATE_HOME_MARKER = 'SPA, SSR, Mobx, Consistent Suspense, Meta tags';
+const BROWSER_USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 
 const projectRoot = process.cwd();
 const source = resolve(process.argv[2] ?? join(projectRoot, '..', 'vite-template'));
@@ -23,8 +25,13 @@ const useCurrentDependencies = process.env.SSR_BOOST_TEMPLATE_CURRENT === '1';
 const acceptance = {
   clientGzipKb: undefined,
   productionReadyMs: undefined,
+  coldStart: undefined,
+  baselineRss: undefined,
+  candidateRss: undefined,
   baselineTtfb: undefined,
   candidateTtfb: undefined,
+  baselineDeferredTtfb: undefined,
+  candidateDeferredTtfb: undefined,
   chunks: [],
   deferred: [],
   policyInfo: 0,
@@ -176,19 +183,28 @@ const inspectStream = (origin, pathname, headers = {}) =>
     request.on('error', reject);
   });
 
+/** Compare warmed routes in alternating order with the same browser headers and socket policy. */
 const measureTtfb = async (origin) => {
-  await inspectStream(origin, '/');
-  await inspectStream(origin, '/');
+  const samples = { '/': [], '/deferred': [] };
+  const headers = { 'User-Agent': BROWSER_USER_AGENT, 'Accept-Encoding': 'identity' };
 
-  const samples = [];
+  for (let sample = -3; sample < 11; sample += 1) {
+    const paths = sample % 2 === 0 ? ['/', '/deferred'] : ['/deferred', '/'];
 
-  for (let sample = 0; sample < 7; sample += 1) {
-    samples.push((await inspectStream(origin, '/')).firstChunkMs);
+    for (const pathname of paths) {
+      const { status, firstChunkMs } = await inspectStream(origin, pathname, headers);
+
+      assert.equal(status, 200, `TTFB ${pathname} status`);
+      assert.ok(Number.isFinite(firstChunkMs), `TTFB ${pathname} must contain HTML`);
+
+      if (sample >= 0) samples[pathname].push(firstChunkMs);
+    }
   }
 
-  samples.sort((left, right) => left - right);
+  /** Keep unrounded medians for the advisory latency comparison. */
+  const median = (values) => values.sort((left, right) => left - right)[Math.floor(values.length / 2)];
 
-  return samples[Math.floor(samples.length / 2)];
+  return { home: median(samples['/']), deferred: median(samples['/deferred']) };
 };
 
 const inspectEarlyStream = async (origin, pathname, mode, headers = {}) => {
@@ -337,7 +353,10 @@ const measureClientGzip = async () => {
 };
 
 const reportAcceptance = async () => {
-  const milliseconds = (value) => value === undefined ? 'not measured' : `${Math.round(value)} ms`;
+  const milliseconds = (value) => value === undefined ? 'not measured' : `${value.toFixed(3)} ms`;
+
+  /** Format resident memory independently of heap size. */
+  const memory = (value) => value === undefined ? 'not measured' : `${(value / 1024 ** 2).toFixed(2)} MiB`;
   const markdown = [
     `## Template acceptance (${useCurrentDependencies ? 'current' : 'pinned'} runtime dependencies)`,
     '',
@@ -345,8 +364,14 @@ const reportAcceptance = async () => {
     '| --- | ---: | ---: |',
     `| Template client gzip total (KB, 1024 bytes) | ${acceptance.clientGzipKb?.toFixed(3) ?? 'not measured'} | ${TEMPLATE_CLIENT_GZIP_BUDGET_KB} |`,
     `| Production server ready (process start to successful response) | ${milliseconds(acceptance.productionReadyMs)} | advisory |`,
+    `| Plain production cold start (npm, median of 5) | ${milliseconds(acceptance.coldStart?.baselineMs)} | baseline |`,
+    `| Production cold start (npm, median of 5) | ${milliseconds(acceptance.coldStart?.candidateMs)} | ≤ 2 × baseline |`,
+    `| Plain server RSS after TTFB | ${memory(acceptance.baselineRss)} | baseline |`,
+    `| Production server RSS after TTFB | ${memory(acceptance.candidateRss)} | ≤ 1.6 × baseline |`,
     `| Baseline median TTFB | ${milliseconds(acceptance.baselineTtfb)} | advisory |`,
     `| Candidate median TTFB | ${milliseconds(acceptance.candidateTtfb)} | advisory |`,
+    `| Baseline /deferred median HTML TTFB | ${milliseconds(acceptance.baselineDeferredTtfb)} | advisory |`,
+    `| Candidate /deferred median HTML TTFB | ${milliseconds(acceptance.candidateDeferredTtfb)} | advisory: <= 1.5 × candidate / |`,
     ...acceptance.chunks.map(({ mode, streamed, buffered, gzip }) =>
       `| ${mode} chunks (streamed / buffered / decoded gzip) | ${streamed} / ${buffered} / ${gzip ?? 'n/a'} | — |`),
     ...acceptance.deferred.map(({ mode, settleMs }) =>
@@ -523,6 +548,64 @@ const verifyIncremental = async (origin, mode) => {
   console.info(`${mode} incremental SSR: /details SPA shell + assets, / SSR, Googlebot /details SSR, HEAD passed`);
 };
 
+
+/**
+ * Prove the packed server can respond without loading source configuration or tooling.
+ */
+const verifyProductionImports = async () => {
+  const filename = join(directory, 'vite.config.ts');
+  const original = await readFile(filename, 'utf8');
+  const port = await getPort();
+  const hook = join(projectRoot, 'scripts/helpers/production-imports.mjs');
+  const relocated = join(directory, 'relocated-output');
+
+  await writeFile(filename, "throw new Error('Production must not evaluate vite.config.ts');\n");
+  await rename(join(directory, 'build'), relocated);
+  const server = start(['start', '--port', String(port), '--build-dir', relocated, '--module-preload', '--host', '--focus-only', 'app'], {
+    NODE_ENV: 'production',
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${JSON.stringify(hook)}`,
+  });
+
+  try {
+    const origin = `http://127.0.0.1:${port}`;
+
+    await waitUntilReady(origin, server);
+    const response = await fetch(`${origin}/deferred`);
+
+    assert.equal(response.status, 200);
+    await response.arrayBuffer();
+    console.info('production imports: relocated build + start flags passed; no Vite, CLI command tree, Babel, config evaluation or source-path helpers');
+  } finally {
+    await stop(server);
+    await writeFile(filename, original);
+    await rename(relocated, join(directory, 'build'));
+  }
+};
+
+/**
+ * Preserve the actionable error for an application that has never been built.
+ */
+const verifyMissingBuild = async () => {
+  const empty = await mkdtemp(join(tmpdir(), 'ssr-boost-no-build-'));
+
+  try {
+    let result;
+
+    try {
+      execFileSync(process.execPath, [cli, 'start'], { cwd: empty, env: process.env, timeout: 10_000, encoding: 'utf8' });
+      assert.fail('Production started without a build.');
+    } catch (error) {
+      result = error;
+    }
+
+    assert.equal(result.status, 1);
+    assert.match(stripVTControlCharacters(String(result.stderr)), /Before starting the server, you need to create a build: ssr-boost build or provide path to build dir: ssr-boost start --build-dir build/);
+    console.info('production missing build: existing error preserved');
+  } finally {
+    await rm(empty, { force: true, recursive: true });
+  }
+};
+
 const verifyIncrementalServer = async (command) => {
   const port = await getPort();
   if (command === 'dev') await writeFile(join(directory, '.env.development.local'), `VITE_PORT=${port}\n`);
@@ -589,7 +672,7 @@ const configureBasename = async () => {
   await edit(
     'src/server.ts',
     'abortDelay: 20000,',
-    "abortDelay: 20000, routerOptions: { basename: '/acceptance' }, middlewares: { expressStatic: { basename: '/acceptance' } },",
+    "abortDelay: 20000, routerOptions: { basename: '/acceptance' },",
   );
 };
 
@@ -651,7 +734,8 @@ try {
     await cp(join(source, filename), destination, { recursive: true });
   }
 
-  await cp(join(source, 'node_modules'), join(directory, 'node_modules'), { recursive: true });
+  await cp(join(source, 'node_modules'), join(directory, 'node_modules'), { recursive: true, verbatimSymlinks: true });
+  await configureProductionMeasurements(directory);
 
   await run(['build']);
 
@@ -664,14 +748,16 @@ try {
 
     await waitUntilReady(origin, baseline);
     baselineTtfb = await measureTtfb(origin);
-    acceptance.baselineTtfb = baselineTtfb;
-    console.info(`baseline production median TTFB: ${Math.round(baselineTtfb)}ms`);
+    acceptance.baselineTtfb = baselineTtfb.home;
+    acceptance.baselineDeferredTtfb = baselineTtfb.deferred;
+    console.info(`baseline production median HTML TTFB: / ${baselineTtfb.home.toFixed(3)}ms; /deferred ${baselineTtfb.deferred.toFixed(3)}ms`);
   } finally {
     await stop(baseline);
   }
 
   await installCandidate();
   await configureTypedRoutes();
+  await verifyMissingBuild();
 
   const devPort = await getPort();
 
@@ -696,8 +782,9 @@ try {
   await measureClientGzip();
 
   const prodPort = await getPort();
+  const { environment: memoryEnvironment, memory, dispose } = await createProductionMemoryProbe(prodPort);
   const prodStarted = performance.now();
-  const prod = start(['start', '--port', String(prodPort)]);
+  const prod = start(['start', '--port', String(prodPort)], { ...memoryEnvironment, NODE_ENV: 'production' });
 
   try {
     const origin = `http://127.0.0.1:${prodPort}`;
@@ -707,19 +794,37 @@ try {
     await verify(origin, 'production');
 
     const candidateTtfb = await measureTtfb(origin);
-    acceptance.candidateTtfb = candidateTtfb;
-    const allowedTtfb = baselineTtfb + Math.max(35, baselineTtfb * 0.5);
+    acceptance.candidateTtfb = candidateTtfb.home;
+    acceptance.candidateDeferredTtfb = candidateTtfb.deferred;
+    acceptance.candidateRss = (await memory()).rss;
+    const allowedTtfb = baselineTtfb.home + Math.max(35, baselineTtfb.home * 0.5);
 
-    if (candidateTtfb > allowedTtfb) {
+    if (candidateTtfb.home > allowedTtfb) {
       console.warn(`Advisory: production TTFB exceeded ${Math.round(allowedTtfb)}ms; shared-runner timing does not block release.`);
     }
     console.info(
-      `production median TTFB: ${Math.round(baselineTtfb)}ms -> ${Math.round(candidateTtfb)}ms`,
+      `production median HTML TTFB: / ${baselineTtfb.home.toFixed(3)}ms -> ${candidateTtfb.home.toFixed(3)}ms; /deferred ${baselineTtfb.deferred.toFixed(3)}ms -> ${candidateTtfb.deferred.toFixed(3)}ms`,
     );
+    console.info(`Advisory: streamed shell ratio: ${(candidateTtfb.deferred / candidateTtfb.home).toFixed(3)}x / 1.5x target`);
   } finally {
     await stop(prod);
+    await dispose();
   }
 
+  const plain = await startProductionMeasurement({ directory, port: await getPort(), baseline: true });
+
+  try {
+    await measureTtfb(plain.origin);
+    acceptance.baselineRss = (await plain.memory()).rss;
+  } finally {
+    await plain.stop();
+  }
+
+  acceptance.coldStart = await measureProductionColdStart({ directory, getPort });
+  console.info(`production cold start samples (ms): plain ${acceptance.coldStart.baseline.map((value) => value.toFixed(1)).join(', ')}; candidate ${acceptance.coldStart.candidate.map((value) => value.toFixed(1)).join(', ')}`);
+  assertProductionBudgets(acceptance);
+
+  await verifyProductionImports();
   await verifyIncrementalServer('start');
 
   if (keepTemplate) {

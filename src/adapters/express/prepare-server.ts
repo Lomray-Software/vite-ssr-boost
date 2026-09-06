@@ -56,6 +56,11 @@ class PrepareServer {
   protected html: string;
 
   /**
+   * Retain the validated production shell without sharing its mutable tuple.
+   */
+  protected htmlParts?: [string, string];
+
+  /**
    * Middlewares configs
    */
   protected middlewaresConfigs?: NonNullable<IPrepareRenderOut['middlewares']>;
@@ -163,6 +168,10 @@ class PrepareServer {
    * Load and return html shell
    */
   public async loadHtml(req: Request): Promise<[string, string]> {
+    if (this.config.isProd && this.htmlParts) {
+      return [...this.htmlParts];
+    }
+
     const { isProd, root, indexFile, clientFile } = this.config.getParams();
 
     if (!this.html || !isProd) {
@@ -190,7 +199,13 @@ class PrepareServer {
       );
     }
 
-    return splitHtmlShell(modifiedHtml, path.resolve(`${root}/${indexFile}`));
+    const parts = splitHtmlShell(modifiedHtml, path.resolve(`${root}/${indexFile}`));
+
+    if (isProd) {
+      this.htmlParts = parts;
+    }
+
+    return [...parts];
   }
 
   /**
@@ -220,7 +235,9 @@ class PrepareServer {
         expressStatic !== false
           ? {
               ...expressStatic,
-              basename: expressStatic?.basename ?? '/',
+              basename:
+                expressStatic?.basename ??
+                new URL(this.config.getParams().base ?? '/', 'http://localhost').pathname,
             }
           : false,
     };

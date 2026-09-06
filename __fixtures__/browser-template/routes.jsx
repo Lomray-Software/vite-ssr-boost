@@ -34,6 +34,10 @@ const Deferred = () => {
 };
 export const routes = [
   {
+    path: '/footer',
+    Component: () => <Shell><p>Footer hydration</p></Shell>,
+  },
+  {
     path: '/spa',
     loader: () => {
       if (typeof window === 'undefined') throw new Error('SPA loader executed on server');

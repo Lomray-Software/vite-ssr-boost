@@ -17,6 +17,7 @@ interface IConfigOptions {
 
 interface IConfigParams {
   root: string;
+  base: string;
   publicDir: string;
   pluginPath: string;
   isProd: boolean;
@@ -107,6 +108,7 @@ class ServerConfig {
     this.mode = mode;
     this.entrypointName = entrypointName;
     this.defaultParams = {
+      base: '/',
       publicDir: '/client', // default for production,
       indexFile: '/client/index.html',
       serverFile: '/server/server.js',
@@ -171,6 +173,7 @@ class ServerConfig {
 
     this.params = {
       root: config?.root ?? this.getBuildDir(root),
+      base: config?.base ?? this.defaultParams.base!,
       publicDir: config?.publicDir ?? publicDir!,
       indexFile: pluginConfig.indexFile ?? indexFile!,
       clientFile: pluginConfig.clientFile ?? clientFile!,

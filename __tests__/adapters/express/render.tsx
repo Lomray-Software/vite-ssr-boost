@@ -324,7 +324,7 @@ describe('legacy Express render adapter', () => {
       expect(getBody).toHaveBeenCalledTimes(method === 'POST' ? 1 : 0);
       expect(requests).toHaveLength(6);
       expect(new Set(requests).size).toBe(1);
-      expect(injectAssetsMock).toHaveBeenCalledWith(context);
+      expect(injectAssetsMock).toHaveBeenCalledWith(context, false);
       expect(onRouterReady).toHaveBeenCalledWith({ context });
       expect(onShellReady).toHaveBeenCalledWith({ context });
       expect(onShellError).toHaveBeenCalledWith({ context, error: shellError });

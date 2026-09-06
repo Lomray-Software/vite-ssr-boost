@@ -11,6 +11,7 @@ import { createDevMarker } from '@helpers/dev-marker';
 import type { IPluginConfig } from '@helpers/plugin-config';
 import getPluginConfig from '@helpers/plugin-config';
 import processStop from '@helpers/process-stop';
+import type { IProductionConfig } from '@services/production-config';
 import ServerConfig from '@services/server-config';
 import SsrManifest from '@services/ssr-manifest';
 
@@ -235,6 +236,30 @@ class Build {
   }
 
   /**
+   * Persist only the resolved serving settings, with paths relative to the build output.
+   */
+  protected writeProductionConfig(): void {
+    const { base, mode } = this.viteConfig;
+    const { indexFile = 'index.html', serverFile = 'server.ts' } = this.pluginConfig;
+    const config: IProductionConfig = {
+      version: 1,
+      root: '..',
+      base: base ?? '/',
+      mode: mode ?? this.params.mode,
+      publicDir: 'client',
+      indexFile: path.posix.join('client', indexFile),
+      serverFile: `server/${path.parse(serverFile).name}.js`,
+    };
+    const directory = path.join(this.buildDir, 'server');
+
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(
+      path.join(directory, 'ssr-boost.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+  }
+
+  /**
    * Change general directive Disallow to Allow in robots.txt.
    */
   protected unlockRobots(): void {
@@ -374,6 +399,7 @@ class Build {
             buildProcess.command.stdout?.removeListener('data', listener);
           });
           createDevMarker(this.isProd, this.viteConfig);
+          this.writeProductionConfig();
           onFinish?.();
         }
       }
@@ -480,6 +506,7 @@ class Build {
     }
 
     createDevMarker(this.isProd, this.viteConfig);
+    this.writeProductionConfig();
     fs.mkdirSync(this.buildDir, { recursive: true });
     fs.writeFileSync(
       path.join(this.buildDir, 'ssr-boost-diagnostics.json'),

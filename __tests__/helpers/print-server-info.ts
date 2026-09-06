@@ -76,4 +76,20 @@ describe('printServerInfo', () => {
     expect(printServerUrls).toHaveBeenCalledOnce();
     expect(info).toHaveBeenCalled();
   });
+
+  it('uses the recorded pathname when the production base is a full asset URL', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    const resolveServerUrls = (await import('@helpers/resolve-server-urls')).default;
+    const config = {
+      mode: 'production',
+      getPluginConfig: () => undefined,
+      getParams: () => ({ isProd: true, host: 'localhost', root: '/root', base: 'https://cdn.example.com/store/' }),
+      getLogger: () => ({ info: vi.fn() }),
+      getVite: () => undefined,
+    };
+
+    await printServerInfo(config as never, { server: {} as never });
+
+    expect(resolveServerUrls).toHaveBeenCalledWith({}, { host: 'localhost', isHttps: false, rawBase: '/store/' });
+  });
 });

@@ -1,11 +1,12 @@
 import { PassThrough, Readable } from 'node:stream';
-import { renderToPipeableStream } from 'react-dom/server';
+import * as ReactDOMServer from 'react-dom/server';
 import type { TRenderToStream } from '@core/render';
+import renderWebStream from '@edge/render-to-stream';
 
 /**
  * Adapt React pipeable rendering to Fetch streams with byte-based backpressure.
  */
-const renderToStream: TRenderToStream = (node, options) => {
+const renderPipeableStream: TRenderToStream = (node, options) => {
   const destination = new PassThrough();
   const stream = Readable.toWeb(destination, {
     strategy: {
@@ -43,7 +44,7 @@ const renderToStream: TRenderToStream = (node, options) => {
 
   let hasShellSettled = false;
   let hasAborted = false;
-  const rendered = renderToPipeableStream(node, {
+  const rendered = ReactDOMServer.renderToPipeableStream(node, {
     nonce: options.nonce,
     bootstrapScriptContent: options.bootstrapScriptContent,
     onAllReady: resolveAll,
@@ -130,5 +131,11 @@ const renderToStream: TRenderToStream = (node, options) => {
     stream,
   };
 };
+
+/** Use React's native Web stream when available, retaining the React 18 bridge. */
+const renderToStream: TRenderToStream =
+  typeof ReactDOMServer.renderToReadableStream === 'function'
+    ? renderWebStream
+    : renderPipeableStream;
 
 export default renderToStream;

@@ -44,6 +44,7 @@ export default {
     'node:stream',
     'node:zlib',
     'node:url',
+    'node:util',
     'node:http',
     'node:module',
     'node:https',

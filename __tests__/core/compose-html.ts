@@ -2,6 +2,24 @@ import { describe, expect, it, vi } from 'vitest';
 import composeHtml from '@core/compose-html';
 
 describe('composeHtml', () => {
+  it('queues the prepared shell without pulling React before the next body read', async () => {
+    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => {
+      controller.enqueue(new TextEncoder().encode('body'));
+    });
+    const cancel = vi.fn();
+    const source = new ReadableStream<Uint8Array>({ pull, cancel }, { highWaterMark: 0 });
+    const reader = composeHtml('shell', source, 'footer').getReader();
+
+    await Promise.resolve();
+    expect(pull).not.toHaveBeenCalled();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('shell');
+    await Promise.resolve();
+    expect(pull).not.toHaveBeenCalled();
+    await reader.cancel('shell only');
+    expect(cancel).toHaveBeenCalledWith('shell only');
+    expect(pull).not.toHaveBeenCalled();
+  });
+
   it('streams header, body and footer without dropping chunks', async () => {
     const encoder = new TextEncoder();
     const body = new ReadableStream<Uint8Array>({
