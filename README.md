@@ -161,6 +161,29 @@ Test SSR routes without a server with `@lomray/vite-ssr-boost/testing`; see the 
 - [Hydration order and streaming](./docs/reference/hydration-and-streaming.md).
 - API: [Plugin](./docs/api/plugin.md), [Browser entry](./docs/api/browser-entry.md), [Server entry](./docs/api/server-entry.md), [Node production](./docs/api/node-production.md), [Components and helpers](./docs/api/components-and-helpers.md) and [CLI](./docs/api/cli.md).
 
+## AI agents
+
+The repository includes `ssr-boost-migrate` and `ssr-boost-new-app` in the [Agent Skills format](https://agentskills.io/specification).
+
+Claude Code plugin:
+
+```sh
+claude plugin marketplace add Lomray-Software/vite-ssr-boost
+claude plugin install ssr-boost@lomray
+```
+
+Codex CLI, from this checkout:
+
+```sh
+mkdir -p ~/.codex/skills
+cp -R skills/ssr-boost-migrate skills/ssr-boost-new-app ~/.codex/skills/
+# Or use the target application's .codex/skills directory.
+```
+
+Current Codex versions document `.agents/skills` for discovery; use that destination or the symlinks in [AI usage and installation](./docs/ai-usage.md#ai-agents). That page also covers local Claude plugin testing before the files reach the default branch.
+
+For Cursor, copy the folders into the app's `skills/` directory and add a `.cursor/rules/ssr-boost.mdc` rule pointing to the relevant `SKILL.md`; see the [complete rule](./docs/ai-usage.md#ai-agents). Other agents can use [llms.txt](https://lomray-software.github.io/vite-ssr-boost/llms.txt) or [llms-full.txt](https://lomray-software.github.io/vite-ssr-boost/llms-full.txt).
+
 ## License
 
 Made with 💚

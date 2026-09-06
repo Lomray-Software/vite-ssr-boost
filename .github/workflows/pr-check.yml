@@ -57,6 +57,9 @@ jobs:
       - name: Check eslint
         run: npm run lint:check
 
+      - name: Validate agent skills and verification scripts
+        run: npm run test:skills
+
       - name: Typescript check
         run: npm run ts:check
 

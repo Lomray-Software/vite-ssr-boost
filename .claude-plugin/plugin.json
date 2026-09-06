@@ -1,0 +1,14 @@
+{
+  "name": "ssr-boost",
+  "description": "Skills for migrating Vite React Router SPAs to SSR Boost and creating new SSR applications.",
+  "version": "1.0.0",
+  "skills": [
+    "./skills/ssr-boost-migrate",
+    "./skills/ssr-boost-new-app"
+  ],
+  "repository": "https://github.com/Lomray-Software/vite-ssr-boost",
+  "license": "MIT",
+  "author": {
+    "name": "Lomray Software"
+  }
+}

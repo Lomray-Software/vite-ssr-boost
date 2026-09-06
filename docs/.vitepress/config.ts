@@ -91,6 +91,7 @@ export default defineConfig({
         items: [
           { text: 'AI Usage', link: '/ai-usage' },
           { text: 'Support and versions', link: '/reference/support' },
+          { text: 'Benchmarks', link: '/reference/benchmarks' },
           { text: 'Talking Points', link: '/reference/talking-points' },
           { text: 'Hydration order and streaming', link: '/reference/hydration-and-streaming' },
           { text: 'FAQ', link: '/reference/faq' },

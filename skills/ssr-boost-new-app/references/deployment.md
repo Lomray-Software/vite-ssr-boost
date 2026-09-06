@@ -1,0 +1,16 @@
+# Deployment choices
+
+Choose the target from the user's requirements. Complete the target's local build and preview, verify its output paths and runtime dependencies, then publish only within the user's deployment authorization. See [deployment](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/docs/guide/deployment.md).
+
+| Target | Prepare and verify | Deployment integration |
+| --- | --- | --- |
+| Node / Docker | `npm run build`, then `npm run start:ssr`; a non-default output directory needs `--build-dir <dir>`. For an image: `npx ssr-boost build-docker --image-name my-app`. | Retain generated Dockerfile/runtime configuration if present, inspect it before image creation, expose the configured port, set runtime secrets in the host, and serve both client assets and server output. The managed runtime needs Express/compression even though they are optional package dependencies. |
+| Vercel | `npx ssr-boost build-vercel`; inspect the app's `vercel.json` and generated `.vercel/output` before using the Vercel deployment workflow. | This is Node/Express serverless output. It is not a Vercel Edge or Cloudflare bundle. Configure project environment values in Vercel and test routes/assets/streaming in a preview deployment when authorized. |
+| AWS Amplify | `npx ssr-boost build-amplify`; inspect `amplify.yml`, the deployment manifest and generated compute/static files. | Set the app's build command and environment variables in Amplify. Check the selected Node runtime, deep links, response statuses and proxy buffering. |
+| Cloudflare Workers | Keep the Express entry for development. Add the documented Worker entry, route manifest import, `ASSETS` binding and `wrangler.jsonc`; build with `npx ssr-boost build --focus-only all`, then `npx wrangler dev --local` and `npx wrangler deploy --dry-run`. | Deploy the Worker and static assets together with `npx wrangler deploy` when authorized. Bind runtime secrets through Wrangler/platform settings; never import Express or `node/production` into the Worker. |
+
+The full [Cloudflare guide](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/docs/guide/cloudflare.md) gives the exact `createWorkerHandler`, `getHtmlFromAssets`, manifest and Wrangler shapes. Import `build/client/assets-manifest.json`, not Vite's `.vite/manifest.json`. The CLI builds client/server before the extra Worker entry; a normal build omits extra entries. Use managed CLI development and built Wrangler preview for bindings. The Cloudflare Vite plugin integration is not a substitute for that documented path.
+
+For an application-owned Node transport, follow [runtime adapters](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/docs/guide/runtime-adapters.md) and [Node production helpers](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/docs/api/node-production.md). Preserve lazy-route CSS and module preloads, root/base alignment, HTTP redirect/status behavior, separate Set-Cookie values and abort propagation.
+
+Check streaming through the actual host/proxy, since compression or buffering can delay the shell. Check [private cache handling](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/docs/guide/caching.md) before caching personalized HTML. Do not lift browser-only loader work into a server environment without providing a browser-compatible API path.

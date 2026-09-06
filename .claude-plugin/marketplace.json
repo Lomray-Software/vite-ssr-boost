@@ -1,0 +1,16 @@
+{
+  "name": "lomray",
+  "owner": {
+    "name": "Lomray Software"
+  },
+  "plugins": [
+    {
+      "name": "ssr-boost",
+      "source": "./",
+      "description": "Migrate a Vite SPA or create a new SSR Boost application."
+    }
+  ],
+  "metadata": {
+    "description": "Agent skills for Vite SSR Boost applications."
+  }
+}

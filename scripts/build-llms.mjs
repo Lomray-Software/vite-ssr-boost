@@ -27,6 +27,18 @@ const files = (await readdir(docs, { recursive: true }))
   .filter((file) => file.endsWith('.md') && !file.split('/').some((part) => part.startsWith('.')))
   .sort();
 const pages = [];
+const skillNames = ['ssr-boost-migrate', 'ssr-boost-new-app'];
+const skills = await Promise.all(skillNames.map(async (name) => {
+  const file = `skills/${name}/SKILL.md`;
+  const url = `https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/${file}`;
+  const source = await readFile(new URL(file, root), 'utf8');
+
+  // Installed skills use relative supporting files; the concatenated document has no file base.
+  const absoluteSource = source.replace(/\]\((?![a-z]+:|#|\/)([^)]+)\)/g,
+    (_match, target) => `](${new URL(target, url).href})`);
+
+  return { title: name, url, source: absoluteSource };
+}));
 
 for (const file of files) {
   const source = await readFile(new URL(file, docs), 'utf8');
@@ -66,8 +78,10 @@ const introduction = [
 ].join('\n\n');
 const index = `${introduction}\n\n## Documentation\n\n${pages
   .map(({ title, url }) => `- [${title}](${url})`)
+  .join('\n')}\n\n## Agent skills\n\n${skills
+  .map(({ title, url }) => `- [${title}](${url})`)
   .join('\n')}\n`;
-const full = `${introduction}\n\n${pages
+const full = `${introduction}\n\n${[...pages, ...skills]
   .map(({ url, source }) => `---\n\nSource: ${url}\n\n${source.trim()}`)
   .join('\n\n')}\n`;
 
@@ -79,6 +93,6 @@ process.stdout.write(
     ? `Documentation version: ${version} (source: ${versionSource})\n`
     : 'Documentation version: omitted (git tags and npm registry unavailable)\n') +
     `llms.txt: ${pages.length} page links, ${Buffer.byteLength(index)} bytes\n` +
-    `llms-full.txt: ${pages.length} concatenated pages, ${Buffer.byteLength(full)} bytes\n` +
+    `llms-full.txt: ${pages.length} concatenated pages, ${skills.length} skills, ${Buffer.byteLength(full)} bytes\n` +
     `Verified ${pages.length}/${pages.length} page links resolve in ${fileURLToPath(dist)}\n`,
 );
