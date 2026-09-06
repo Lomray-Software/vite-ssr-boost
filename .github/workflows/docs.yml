@@ -10,6 +10,11 @@ on:
       - 'package.json'
       - 'package-lock.json'
   workflow_dispatch:
+  # Redeploy after a release so the generated llms.txt reports the released version (the tag exists only after semantic-release).
+  workflow_run:
+    workflows: [ Release ]
+    branches: [ prod ]
+    types: [ completed ]
 
 permissions:
   contents: read
@@ -26,6 +31,7 @@ env:
 
 jobs:
   build:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
