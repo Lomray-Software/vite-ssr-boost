@@ -7,6 +7,8 @@ assignees: ''
 
 ---
 
+Please read the [support policy](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/SUPPORT.md) for supported versions and response targets. Report security issues privately using [SECURITY.md](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/SECURITY.md).
+
 **Describe the bug**
 A clear and concise description of what the bug is.
 
@@ -36,3 +38,18 @@ If applicable, add screenshots to help explain your problem.
 
 **Additional context**
 Add any other context about the problem here.
+
+**Versions**
+- vite-ssr-boost:
+- Node or other runtime:
+- React / React DOM:
+- React Router:
+- Vite:
+
+**Adapter and route setup**
+- Managed CLI / Node / Express / Fastify / Hono / edge:
+- Development or production; SSR or SPA:
+- Route objects, loaders and lazy routes (or a minimal reproduction link):
+
+**Diagnostic codes**
+Include any `SSR_BOOST_*` diagnostic codes and relevant logs, with secrets removed. See [Development diagnostics](https://lomray-software.github.io/vite-ssr-boost/reference/diagnostics).

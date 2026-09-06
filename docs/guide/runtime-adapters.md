@@ -33,32 +33,7 @@ transforms streamed HTML. The core decodes split UTF-8 chunks safely before invo
 
 ### Migration notes
 
-Update imports relative to `@lomray/vite-ssr-boost/` (also applies to explicit `.js` imports):
-
-| Removed path | New path |
-| --- | --- |
-| `node/entry` | `adapters/express/entry` |
-| `node/server` | `adapters/express/server` |
-| `node/render` | `adapters/express/render` |
-| `node/create-fetch-request` | `adapters/express/create-request` |
-| `services/prepare-server` | `adapters/express/prepare-server` |
-
-The old `node/write-response` and `helpers/handle-response` internals are removed. The renderer now
-handles response composition and redirects through the Fetch core; custom Node transports can send
-the resulting `Response` with `node/write-fetch-response`.
-
-- The default shell-error page returns a generic HTTP 500 without exception messages. Use `onError`
-  for diagnostics or `onShellError` for a custom page.
-- Request/render hook failures reach Express error middleware through `next(error)`, rather than
-  falling through to a 404. Register error middleware after the SSR handler.
-- Unless explicitly overridden, rendered responses use React Router's status, including 404 for
-  unmatched routes. Previously these could be sent as 200.
-- Render timeouts and client/intentional cancellation report `onError` codes `timeout` and `cancel`.
-  The managed Express server logs these at info level. Unexpected errors retain their original error.
-- Parsed JSON and flat URL-encoded bodies work automatically. Nested form values and unsupported
-  custom or multipart parser results fail explicitly; use `getBody` as shown below.
-- Package exports support extensionless and explicit `.js` imports for the new paths, with matching
-  TypeScript declarations. Other module paths are unchanged.
+See [Upgrade from 7 to 8](/guide/upgrade-v8) for the complete import map, `onResponse` contract, `context.request`, Node requirement and changed error handling.
 
 Express and compression are optional dependencies installed by default. If your install command
 uses `--omit=optional`, install them explicitly:

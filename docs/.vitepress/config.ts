@@ -53,6 +53,7 @@ export default defineConfig({
           { text: 'Introduction', link: '/' },
           { text: 'Getting Started', link: '/guide/getting-started' },
           { text: 'Migrate an Existing SPA', link: '/guide/migrate-existing-spa' },
+          { text: 'Upgrade from 7 to 8', link: '/guide/upgrade-v8' },
           { text: 'Choosing an SSR Approach', link: '/guide/choosing' },
           { text: 'Rendering Modes', link: '/guide/rendering-modes' },
           { text: 'Routing', link: '/guide/routing' },
@@ -83,6 +84,7 @@ export default defineConfig({
         text: 'Reference',
         items: [
           { text: 'AI Usage', link: '/ai-usage' },
+          { text: 'Support and versions', link: '/reference/support' },
           { text: 'Talking Points', link: '/reference/talking-points' },
           { text: 'Hydration order and streaming', link: '/reference/hydration-and-streaming' },
           { text: 'FAQ', link: '/reference/faq' },

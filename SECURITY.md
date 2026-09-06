@@ -13,7 +13,7 @@ When reporting security issues, please provide the following information:
  - Steps to reproduce the vulnerability
  - Your contact information
 
-We take all security reports seriously and will do our best to rapidly address the issue. We are grateful for your contributions to our security efforts, and we will acknowledge your report upon resolution.
+We will provide a human acknowledgment within **two business days** of receiving your security report. Business days are Monday through Friday, excluding public holidays observed by the responding maintainer. We will keep you informed while we investigate and coordinate a fix; acknowledgment does not mean resolution. See [Support policy](./SUPPORT.md) for the security maintenance windows.
 
 ## Responsible Disclosure
 We adhere to the principle of responsible disclosure. This means that if you discover a vulnerability, you agree to:
