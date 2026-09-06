@@ -121,7 +121,24 @@ async function entry<TAppProps>(
 
   const router = createRouter(routes as RouteObject[], routerOptions);
   const root = document.getElementById(rootId) as HTMLElement;
-  const appProps = (await init?.({ isSSRMode: IS_SSR_MODE, router })) as TAppProps;
+
+  /**
+   * Honor SPA shell markers before choosing hydration or a client render.
+   */
+  const isSSRMode =
+    IS_SSR_MODE &&
+    root.dataset['forceSpa'] !== '1' &&
+    document.documentElement.dataset['forceSpa'] !== '1';
+
+  if (IS_SSR_MODE) {
+    Reflect.deleteProperty(window, '__staticRouterHydrationData');
+
+    if (isSSRMode) {
+      window.dispatchEvent(new CustomEvent('ssr-boost:router-ready', { detail: { rootId } }));
+    }
+  }
+
+  const appProps = (await init?.({ isSSRMode, router })) as TAppProps;
 
   const AppComponent: FC = () => (
     <App client={appProps}>
@@ -129,7 +146,7 @@ async function entry<TAppProps>(
     </App>
   );
 
-  if (!IS_SSR_MODE || root.dataset['forceSpa'] === '1') {
+  if (!isSSRMode) {
     return ReactDOM.createRoot(root).render(<AppComponent />);
   }
 

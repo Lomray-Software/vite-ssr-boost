@@ -2,6 +2,10 @@ import type { StaticHandlerContext } from 'react-router';
 import Logger from '@services/logger';
 
 type TDiagnosticCode =
+  | 'SSR_BOOST_CACHE_PRIVATE_LEAK'
+  | 'SSR_BOOST_DEPRECATED_REQ_RES'
+  | 'SSR_BOOST_SSR_POLICY'
+  | 'SSR_BOOST_SSR_POLICY_UNMATCHED'
   | 'SSR_BOOST_LOADER_NOT_SERIALIZABLE'
   | 'SSR_BOOST_STREAM_PROMISE_ABORTED'
   | 'SSR_BOOST_STATE_NOT_SERIALIZABLE'
@@ -168,9 +172,19 @@ const walkSerializable = (
 class Diagnostics {
   protected chunks: string[] = [];
 
+  /**
+   * Attach route context and the logger used for request diagnostics.
+   */
   public constructor(
+    /**
+     * Identify the route in request diagnostics.
+     */
     protected readonly route: string,
-    protected readonly logger: Pick<Logger, 'warn'> = new Logger(),
+
+    /**
+     * Deliver warnings and optional policy decisions through the runtime logger.
+     */
+    protected readonly logger: Pick<Logger, 'warn'> & Partial<Pick<Logger, 'info'>> = new Logger(),
   ) {}
 
   /**
@@ -186,6 +200,40 @@ class Diagnostics {
     }
   }
 
+  /** Warn once for either legacy Express field, regardless of route or hook. */
+  public deprecatedReqRes(): void {
+    this.warn(
+      'SSR_BOOST_DEPRECATED_REQ_RES',
+      'context.req and context.res are deprecated in 8.x and planned for removal in 9.0; use context.request, context.response.headers/context.response.status and React Router HTTP helpers such as redirect().',
+    );
+  }
+
+  /**
+   * Report policy choices without logging concrete parameter, cookie or query values.
+   */
+  public policyDecision(pattern: string, mode: string, source: string): void {
+    const message = formatDiagnostic(
+      'SSR_BOOST_SSR_POLICY',
+      `Pattern ${JSON.stringify(pattern)} selects ${mode} via ${source}.`,
+    );
+    const reported = (registry[warnedKey] ??= new Set<string>());
+
+    if (!reported.has(message)) {
+      reported.add(message);
+      this.logger.info?.(message, {});
+    }
+  }
+
+  /**
+   * Warn once for a configured pattern with no corresponding route id.
+   */
+  public policyUnmatched(pattern: string): void {
+    this.warn(
+      'SSR_BOOST_SSR_POLICY_UNMATCHED',
+      `Pattern ${JSON.stringify(pattern)} matches no known route id; check its URL path and router basename.`,
+    );
+  }
+
   /**
    * A split Fetch shell has one insertion boundary and must not retain raw outlets.
    */
@@ -199,6 +247,19 @@ class Diagnostics {
       this.warn(
         'SSR_BOOST_OUTLET_MISSING',
         `HTML shell for route ${JSON.stringify(this.route)} must supply both header and footer around exactly one ${OUTLET} outlet, with no outlet left in either half.`,
+      );
+    }
+  }
+
+  /** Warn about explicitly public documents carrying credentials without logging their values. */
+  public inspectCachePolicy(headers: Headers, hasSessionCookie: boolean): void {
+    if (
+      /(?:^|,)\s*public\s*(?:,|$)/i.test(headers.get('Cache-Control') ?? '') &&
+      (headers.has('Set-Cookie') || hasSessionCookie)
+    ) {
+      this.warn(
+        'SSR_BOOST_CACHE_PRIVATE_LEAK',
+        `Response for route ${JSON.stringify(this.route)} is public with Set-Cookie or a session cookie. Use private, no-store and bypass the shared cache for authenticated requests.`,
       );
     }
   }

@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './browser-tests',
+  testIgnore: ['template.spec.mjs', '**/worker/**'],
   workers: 1,
   timeout: 30_000,
   reporter: 'list',

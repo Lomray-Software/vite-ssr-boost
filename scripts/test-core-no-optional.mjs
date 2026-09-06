@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import { build } from 'esbuild';
 
 const npmCli = process.env.npm_execpath;
 
@@ -82,7 +83,7 @@ try {
     `./${archive}`,
   ]);
 
-  for (const dependency of ['compression', 'express']) {
+  for (const dependency of ['compression', 'express', '@playwright/test']) {
     try {
       await access(join(directory, 'node_modules', dependency));
       throw new Error(`${dependency} was installed despite --omit=optional.`);
@@ -166,8 +167,29 @@ try {
       assert.equal(import.meta.resolve('@lomray/vite-ssr-boost/' + subpath), expected, subpath);
     }
     const { default: createHandler } = await import('@lomray/vite-ssr-boost/core/handler');
+    const { createTestHandler, createDeferred, crawlerRequest } = await import('@lomray/vite-ssr-boost/testing');
+    const testingJs = await import('@lomray/vite-ssr-boost/testing.js');
+    assert.equal(createTestHandler, testingJs.createTestHandler);
+    const React = await import('react');
+    const deferred = createDeferred();
+    const testApp = createTestHandler({
+      diagnostics: false,
+      routes: [{ id: 'test', path: '/', element: React.createElement('p', null, 'testing-ok'), loader: () => ({ slow: deferred.promise }) }],
+    });
+    const testResponse = await testApp.fetch(crawlerRequest('/'));
+    deferred.resolve(new Set([42n]));
+    assert.equal(testResponse.status, 200);
+    assert.deepEqual((await testResponse.routerState()).loaderData.test.slow, new Set([42n]));
+    assert.match(await testResponse.html(), /testing-ok/);
     const { default: adapterEdge } = await import('@lomray/vite-ssr-boost/adapters/edge');
     const { default: adapterNode } = await import('@lomray/vite-ssr-boost/adapters/node');
+    const http = await import('@lomray/vite-ssr-boost/http');
+    const httpJs = await import('@lomray/vite-ssr-boost/http.js');
+    for (const name of ['cacheControl', 'documentHeaders', 'copyLoaderHeaders', 'conditionalRequest']) {
+      assert.equal(typeof http[name], 'function', name);
+      assert.equal(http[name], httpJs[name], name);
+    }
+    assert.equal(http.cacheControl({ private: true, noStore: true }), 'private, no-store');
     const production = await import('@lomray/vite-ssr-boost/node/production');
     const productionJs = await import('@lomray/vite-ssr-boost/node/production.js');
     for (const name of ['loadHtmlShell', 'createRouteAssetPreparer']) {
@@ -197,6 +219,24 @@ try {
     stdio: 'inherit',
   });
 
+  // Resolve the public conditional export in an installed consumer, with no Node shims.
+  const edgeBundle = await build({
+    absWorkingDir: directory,
+    stdin: {
+      contents: "export { createTestHandler, TestResponse } from '@lomray/vite-ssr-boost/testing';",
+      resolveDir: directory,
+    },
+    bundle: true,
+    platform: 'browser',
+    conditions: ['workerd', 'worker', 'browser'],
+    format: 'esm',
+    define: { 'process.env.NODE_ENV': '"production"' },
+    metafile: true,
+    write: false,
+  });
+  assert.ok(Object.keys(edgeBundle.metafile.inputs).some((file) => file.endsWith('/testing/edge.js')));
+  assert.ok(!Object.keys(edgeBundle.metafile.inputs).some((file) => /playwright|\/node\/|express/.test(file)));
+
   const typeProof = join(directory, 'consumer.mts');
 
   await writeFile(typeProof, `
@@ -210,6 +250,21 @@ try {
     import type { IHtmlShell, ILoadHtmlShellOptions, IRouteAssetPreparerOptions } from '@lomray/vite-ssr-boost/node/production';
     import type { IHtmlShell as IHtmlShellJs } from '@lomray/vite-ssr-boost/node/production.js';
     import type { ICreateHandlerOptions } from '@lomray/vite-ssr-boost/core/handler';
+    import { cacheControl, documentHeaders, conditionalRequest } from '@lomray/vite-ssr-boost/http';
+    import type { IDocumentHeaderRule } from '@lomray/vite-ssr-boost/http.js';
+    const rules: IDocumentHeaderRule[] = [{ when: ({ hasCookie }) => !hasCookie('session'), set: { 'Cache-Control': cacheControl({ public: true, sMaxAge: 30 }) } }];
+    const headers: Headers = documentHeaders(rules, { sessionCookie: 'session' })({ request: new Request('https://example.com'), response: { headers: new Headers() } });
+    const conditional: Response | undefined = conditionalRequest(new Request('https://example.com'), { etag: '"v1"' });
+    // @ts-expect-error Cache durations are numeric seconds.
+    cacheControl({ maxAge: '30' });
+    import { createTestHandler, createDeferred, TestResponse } from '@lomray/vite-ssr-boost/testing';
+    const deferred = createDeferred<string[]>();
+    deferred.resolve(['ready']);
+    // @ts-expect-error Deferred resolution must match its declared value type.
+    deferred.resolve(42);
+    const testApp = createTestHandler({ routes: [{ path: '/', loader: () => ({ users: deferred.promise }) }] });
+    const testResponse: TestResponse = await testApp.fetch('/', { isStream: false, timeout: 100 });
+    const html: string = await testResponse.html();
 
     const shellOptions: ILoadHtmlShellOptions = { indexFile: '/app/build/client/index.html' };
     const assetOptions: IRouteAssetPreparerOptions = { buildDir: '/app/build', modulePreload: true };
@@ -263,7 +318,7 @@ try {
     }
   }
 
-  process.stdout.write('Packed exports (including node/production), NodeNext/Bundler declarations and optional-free core passed.\n');
+  process.stdout.write('Packed exports (including http, testing and node/production), NodeNext/Bundler declarations, optional-free core/testing and edge testing bundle passed.\n');
 } finally {
   await rm(directory, { force: true, recursive: true });
 }

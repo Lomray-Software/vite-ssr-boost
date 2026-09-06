@@ -40,6 +40,7 @@ describe('createHandler', () => {
         renderToStream: vi.fn(),
       },
       {
+        diagnostics: false,
         getHtml: () => ({ footer: '</html>', header: '<html>' }),
         onRequest,
       },
@@ -62,6 +63,7 @@ describe('createHandler', () => {
         renderToStream: vi.fn(),
       },
       {
+        diagnostics: false,
         getHtml: vi.fn(),
         onRequest: () => response,
       },

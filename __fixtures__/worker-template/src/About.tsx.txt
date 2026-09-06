@@ -1,0 +1,3 @@
+import React from 'react';
+import './about.css';
+export const Component = () => <h1 className="about">Lazy Worker route</h1>;

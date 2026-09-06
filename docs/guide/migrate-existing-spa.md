@@ -192,6 +192,10 @@ Read public values through `import.meta.env` and keep secrets out of `VITE_*` va
 
 Compare the server HTML with the initial browser render, including data, dates, randomness and browser-dependent branches. [React's hydration troubleshooting](https://react.dev/reference/react-dom/client/hydrateRoot#troubleshooting) requires those outputs to match; correct their inputs before hiding a warning.
 
+## Roll out SSR one URL at a time
+
+Use [incremental SSR](/guide/incremental-ssr) to start with `ssr: { mode: 'include', routes: ['/', '/articles/:slug'] }` in your managed server entry, widen the public pages over time, and keep the remaining URLs on the SPA shell in the same build. Crawlers stay on SSR by default. Restart with `SSR_BOOST_SSR_ROUTES='!/details'` to roll a URL back to SPA without rebuilding; keep authentication redirects in `onRequest` because SPA route loaders execute in the browser.
+
 ## Going back to SPA
 
 Run `npm run build:spa`, then `npm run start:spa`; both scripts select `--focus-only client`. The app keeps the same route objects and browser entry, and the build omits the SSR server. Run `npm run build` again before returning to `npm run start:ssr`.

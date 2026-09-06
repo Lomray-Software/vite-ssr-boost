@@ -1,0 +1,11 @@
+{
+  "name": "ssr-boost-worker-template",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "ssr-boost dev",
+    "build": "ssr-boost build --focus-only all",
+    "preview": "wrangler dev --local",
+    "deploy": "npm run build && wrangler deploy"
+  }
+}

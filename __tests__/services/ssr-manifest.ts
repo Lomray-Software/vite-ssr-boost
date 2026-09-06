@@ -124,7 +124,7 @@ describe('SsrManifest', () => {
     manifest.pathNormalize.getImportPostfix = vi.fn(() => ['', '.ts']);
     manifest.pathNormalize.getAppPath = vi.fn((val: string) => val);
     parseMock.mockReturnValue([{ import: 'src/routes', children: [], index: 0 }]);
-    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(manifest, 'loadClientManifest').mockReturnValue({
       'src/routes': {
         assets: ['img.png'],
@@ -152,7 +152,23 @@ describe('SsrManifest', () => {
 
     manifest.buildRoutesManifest();
 
-    expect(writeFileSync).toHaveBeenCalled();
+    expect(writeFileSync).toHaveBeenCalledWith('/root/dist/server/assets-manifest.json', expect.any(String), { encoding: 'utf-8' });
+    expect(writeFileSync).toHaveBeenCalledWith('/root/dist/client/assets-manifest.json', writeFileSync.mock.calls[0][1], { encoding: 'utf-8' });
+  });
+
+  it('keeps server-only builds working without a client output directory', () => {
+    const writeFileSync = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    parseMock.mockReturnValue([]);
+    const manifest = SsrManifest.get(createConfig(), { buildDir: 'dist' });
+
+    manifest.buildRoutesManifest();
+
+    expect(writeFileSync).toHaveBeenCalledExactlyOnceWith(
+      '/root/dist/server/assets-manifest.json',
+      '{}',
+      { encoding: 'utf-8' },
+    );
   });
 
   it('should collect assets in prod and dev modes', () => {

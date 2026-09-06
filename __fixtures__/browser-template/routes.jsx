@@ -1,5 +1,5 @@
 import React, { Suspense, useState } from 'react';
-import { Await, Link, useLoaderData } from 'react-router';
+import { Await, Link, redirect, useLoaderData } from 'react-router';
 
 const Shell = ({ children }) => {
   const [count, setCount] = useState(0);
@@ -8,6 +8,8 @@ const Shell = ({ children }) => {
       <button onClick={() => setCount(count + 1)}>Count {count}</button>
       <Link to="/">Home</Link>
       <Link to="/deferred">Deferred</Link>
+      <Link to="/spa">SPA</Link>
+      <Link to="/public">Public</Link>
       {children}
     </main>
   );
@@ -31,6 +33,28 @@ const Deferred = () => {
   );
 };
 export const routes = [
+  {
+    path: '/spa',
+    loader: () => {
+      if (typeof window === 'undefined') throw new Error('SPA loader executed on server');
+      return 'Browser loader';
+    },
+    HydrateFallback: () => <p>Loading SPA</p>,
+    Component: () => <Shell><h1>SPA page</h1><p>{useLoaderData()}</p></Shell>,
+  },
+  {
+    path: '/spa-redirect',
+    loader: () => {
+      if (typeof window === 'undefined') throw new Error('SPA redirect executed on server');
+      return redirect('/public');
+    },
+    HydrateFallback: () => <p>Redirecting</p>,
+  },
+  {
+    path: '/public',
+    loader: ({ request }) => typeof document === 'undefined' ? request.headers.get('cookie') : document.cookie,
+    Component: () => <Shell><h1>Public page</h1><p data-cookie>{useLoaderData() || 'No cookie'}</p></Shell>,
+  },
   {
     path: '/',
     Component: () => (

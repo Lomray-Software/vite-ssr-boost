@@ -1,24 +1,32 @@
 import type { ReactNode } from 'react';
 import React from 'react';
-import type { StaticHandler, StaticHandlerContext } from 'react-router';
-import { createStaticRouter, StaticRouterProvider } from 'react-router';
+import type { RouterState, StaticHandler, StaticHandlerContext } from 'react-router';
+import { createStaticRouter, matchRoutes, StaticRouterProvider } from 'react-router';
 import StreamError from '@constants/stream-error';
 import { ServerProvider } from '@context/server';
 import type { IServerContext } from '@context/server';
 import composeHtml from '@core/compose-html';
 import DataStream from '@core/data-stream';
+import documentHeaders, { hasCookie } from '@core/document-headers';
+import type { IDocumentHeaderRule, IDocumentHeadersOptions } from '@core/document-headers';
 import headResponse from '@core/head-response';
 import { mergeResponseHeaders } from '@core/headers';
+import type createSpaShell from '@core/spa-shell';
+import type SsrPolicy from '@core/ssr-policy';
 import transformHtml from '@core/transform-html';
 import type { ISsrExecutionContext } from '@core/types';
 import buildCustomState from '@helpers/build-custom-state';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import obtainStreamError from '@helpers/obtain-stream-error';
 import type Diagnostics from '@services/diagnostics';
+import type RequestTimeline from '@services/request-timeline';
+import { createTimeline } from '@services/request-timeline';
 
 export interface ISsrRequestContext<TAppProps = Record<string, any>> {
   appProps: NonNullable<TAppProps>;
   diagnostics?: Diagnostics;
+  timeline?: RequestTimeline;
+  executionContext?: ISsrExecutionContext;
 
   /**
    * First render failure, or the explicit timeout/cancellation classification.
@@ -26,6 +34,10 @@ export interface ISsrRequestContext<TAppProps = Record<string, any>> {
   didError?: StreamError;
   html: { footer: string; header: string };
   isStream?: boolean;
+  isSpa?: boolean;
+
+  /** Structural route matches are available to prepare even when loaders are skipped. */
+  matches?: RouterState['matches'];
   request: Request;
 
   /**
@@ -78,9 +90,16 @@ export interface ICoreRenderParams<TAppProps = Record<string, any>> {
   createApp: (children: ReactNode, context: ISsrRequestContext<TAppProps>) => ReactNode;
   handler: StaticHandler;
   renderToStream: TRenderToStream;
+  policy?: SsrPolicy;
+  spaShell?: ReturnType<typeof createSpaShell>;
 }
 
-export interface ICoreRenderOptions<TAppProps = Record<string, any>> {
+export interface ICoreRenderOptions<
+  TAppProps = Record<string, any>,
+> extends IDocumentHeadersOptions {
+  /** Opt in to document policies after onShellReady; redirects keep their header contract. */
+  documentHeaders?: readonly IDocumentHeaderRule[];
+
   /** Hydrate the parsed shell while deferred boundaries are still pending. */
   hydration?: 'early' | 'footer';
   nonce?: string;
@@ -163,7 +182,15 @@ const createShellErrorResponse = <TAppProps,>(
  */
 const prepareHtmlResponse = <TAppProps,>(
   context: ISsrRequestContext<TAppProps>,
-  { getState, onShellReady, hydration, nonce }: ICoreRenderOptions<TAppProps>,
+  {
+    getState,
+    onShellReady,
+    hydration,
+    nonce,
+    documentHeaders: rules,
+    sessionCookie,
+    protectPrivate,
+  }: ICoreRenderOptions<TAppProps>,
   dataStream: DataStream,
 ): IHtmlResponse => {
   const serverResponse = context.serverContext!.response;
@@ -176,6 +203,7 @@ const prepareHtmlResponse = <TAppProps,>(
   }
 
   const shell = onShellReady?.({ context }) ?? {};
+
   const isEarly = hydration === 'early' && context.isStream;
   const customState = buildCustomState(
     getState?.({ context }),
@@ -197,6 +225,10 @@ const prepareHtmlResponse = <TAppProps,>(
     footer = customState + dataStream.state(false) + dataStream.take() + footer;
   }
 
+  if (rules) {
+    context.response.headers = documentHeaders(rules, { sessionCookie, protectPrivate })(context);
+  }
+
   const headers = new Headers(context.response.headers);
 
   return { header, footer, headers, status: context.response.status };
@@ -205,8 +237,8 @@ const prepareHtmlResponse = <TAppProps,>(
 /**
  * Coordinate router queries, React rendering and the final Fetch response.
  */
-const render = async <TAppProps,>(
-  { createApp, handler, renderToStream }: ICoreRenderParams<TAppProps>,
+const renderResponse = async <TAppProps,>(
+  { createApp, handler, renderToStream, policy, spaShell }: ICoreRenderParams<TAppProps>,
   context: ISsrRequestContext<TAppProps>,
   {
     abortDelay = 15_000,
@@ -221,22 +253,58 @@ const render = async <TAppProps,>(
     onShellReady,
     prepare,
     routerRequestContext,
+    documentHeaders: rules,
+    sessionCookie,
+    protectPrivate,
   }: ICoreRenderOptions<TAppProps>,
   executionContext?: ISsrExecutionContext,
 ): Promise<Response> => {
+  const mode = policy?.select(context.request, context.diagnostics) ?? 'ssr';
+
+  if (policy?.active && !context.response.headers.has('Cache-Control')) {
+    context.response.headers.set('Cache-Control', 'no-store');
+  }
+
+  if (mode === 'spa') {
+    context.isSpa = true;
+    context.isStream = false;
+    context.matches =
+      matchRoutes(handler.dataRoutes, new URL(context.request.url), policy?.basename) ?? [];
+    context.html = spaShell!(context.html);
+
+    await prepare?.({ context, executionContext });
+
+    // Document policies apply to SPA shells too; the no-store default above is their baseline.
+    if (rules) {
+      context.response.headers = documentHeaders(rules, { sessionCookie, protectPrivate })(context);
+    }
+
+    context.response.status = 200;
+    context.response.headers.set(CONTENT_TYPE, 'text/html; charset=utf-8');
+
+    return new Response(
+      context.request.method === 'HEAD' ? null : context.html.header + context.html.footer,
+      { headers: context.response.headers, status: 200 },
+    );
+  }
+
   const queried = await handler.query(context.request, {
     requestContext: routerRequestContext ?? context,
   });
+
+  context.timeline?.record('router.query');
 
   if (queried instanceof Response) {
     return headResponse(context.request, mergeResponseHeaders(queried, context.response.headers));
   }
 
   context.routerContext = queried;
-  const dataStream = new DataStream(queried, context.diagnostics, nonce);
+  context.matches = queried.matches;
+  const dataStream = new DataStream(queried, context.diagnostics, nonce, context.timeline);
 
   try {
     await prepare?.({ context, executionContext });
+    context.timeline?.record('prepare');
   } catch (error) {
     dataStream.cancel();
     throw error;
@@ -297,6 +365,7 @@ const render = async <TAppProps,>(
 
     hasAborted = true;
     abortReason = reason;
+    context.timeline?.abort(reason);
     cleanup();
     context.didError ??= StreamError.RenderCancel;
     dataStream.abort();
@@ -309,6 +378,7 @@ const render = async <TAppProps,>(
    */
   const abortTimer = setTimeout(() => {
     context.didError = StreamError.RenderTimeout;
+    context.timeline?.abort(new Error(`SSR render timed out after ${abortDelay}ms`));
     abort();
   }, abortDelay);
 
@@ -356,7 +426,12 @@ const render = async <TAppProps,>(
 
     void Promise.all([output.allReady, dataStream.done]).then(clearAbortTimer, clearAbortTimer);
 
-    await (isStream ? output.shellReady : Promise.all([output.allReady, dataStream.done]));
+    await output.shellReady;
+    context.timeline?.record('shell.ready');
+
+    if (!isStream) {
+      await Promise.all([output.allReady, dataStream.done]);
+    }
   } catch (error) {
     abort(error);
     await output?.stream.cancel(error).catch(() => undefined);
@@ -384,6 +459,9 @@ const render = async <TAppProps,>(
         onShellReady,
         hydration,
         nonce,
+        documentHeaders: rules,
+        sessionCookie,
+        protectPrivate,
       },
       dataStream,
     );
@@ -398,7 +476,16 @@ const render = async <TAppProps,>(
       });
     }
 
-    const body = composeHtml(header, output.stream, footer, abort, cleanup, dataStream);
+    const body = composeHtml(
+      header,
+      output.stream,
+      footer,
+      abort,
+      cleanup,
+      dataStream,
+      context.timeline,
+      hydration === 'early' && isStream,
+    );
     const transformed = transformHtml(
       body,
       onResponse ? (html, isEnd) => onResponse({ context, html, isEnd }) : undefined,
@@ -418,6 +505,37 @@ const render = async <TAppProps,>(
       await output.stream.cancel(error).catch(() => undefined);
     }
 
+    throw error;
+  }
+};
+
+/** Record the timeline and inspect the committed metadata, including redirect and shell-error responses, for every core consumer. */
+const render = async <TAppProps,>(
+  params: ICoreRenderParams<TAppProps>,
+  context: ISsrRequestContext<TAppProps>,
+  options: ICoreRenderOptions<TAppProps>,
+  executionContext?: ISsrExecutionContext,
+): Promise<Response> => {
+  const timeline =
+    context.timeline ?? createTimeline(context.request, Boolean(context.diagnostics));
+
+  if (timeline) {
+    context.timeline = timeline;
+  }
+
+  try {
+    const response = await renderResponse(params, context, options, executionContext);
+    const { sessionCookie } = options;
+
+    context.diagnostics?.inspectCachePolicy(
+      response.headers,
+      Boolean(sessionCookie && hasCookie(context.request, sessionCookie)),
+    );
+
+    return timeline?.response(response) ?? response;
+  } catch (error) {
+    timeline?.abort(error);
+    timeline?.end();
     throw error;
   }
 };

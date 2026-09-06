@@ -1,5 +1,6 @@
 import type DataStream from '@core/data-stream';
 import htmlBoundary from '@core/html-boundary';
+import type RequestTimeline from '@services/request-timeline';
 
 /** Stream shell, data frames, React bytes and footer only under downstream demand. */
 const composeHtml = (
@@ -9,6 +10,8 @@ const composeHtml = (
   abort?: (reason?: unknown) => void,
   onComplete?: () => void,
   data?: DataStream,
+  timeline?: RequestTimeline,
+  isEarly = false,
 ): ReadableStream<Uint8Array> => {
   const encoder = new TextEncoder();
   const reader = body.getReader();
@@ -53,6 +56,10 @@ const composeHtml = (
             phase = 'body';
 
             if (header) {
+              if (isEarly) {
+                timeline?.record('state.emitted', { placement: 'early' });
+              }
+
               controller.enqueue(encoder.encode(header));
 
               return;
@@ -103,6 +110,7 @@ const composeHtml = (
               }
 
               phase = 'footer';
+              timeline?.record('body.end');
               canInject = true;
               release();
               continue;
@@ -114,6 +122,10 @@ const composeHtml = (
             }
 
             if (footer) {
+              if (!isEarly) {
+                timeline?.record('state.emitted', { placement: 'footer' });
+              }
+
               controller.enqueue(encoder.encode(footer));
             }
 

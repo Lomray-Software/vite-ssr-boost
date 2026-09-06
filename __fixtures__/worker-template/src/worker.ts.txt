@@ -1,0 +1,28 @@
+import { createWorkerHandler, getHtmlFromAssets } from '@lomray/vite-ssr-boost/cloudflare';
+import manifest from '../build/client/assets-manifest.json';
+import App from './App';
+import routes from './routes';
+
+export interface Env { ASSETS: Fetcher; MESSAGES: KVNamespace; }
+
+export default {
+  fetch: createWorkerHandler<Env>({
+    App, routes, manifest,
+    hydration: 'early',
+    getHtml: async (_request, env) => (await getHtmlFromAssets(env, '/index.html'))(),
+    onRequest: ({ request, executionContext }) => {
+      const visits = Number(request.headers.get('Cookie')?.match(/visits=(\d+)/)?.[1] ?? 0) + 1;
+      if (new URL(request.url).pathname === '/bindings') {
+        executionContext.waitUntil(executionContext.platform.env.MESSAGES.put('background', 'done'));
+      }
+      return { appProps: { visits }, headers: { 'Set-Cookie': `visits=${visits}; Path=/; HttpOnly; SameSite=Lax` } };
+    },
+    prepare: ({ context, executionContext }) => {
+      if (!executionContext || executionContext.onEarlyHints || context.executionContext !== executionContext) {
+        throw new Error('Incorrect Worker execution context');
+      }
+      context.response.headers.set('X-Worker-Hook', 'ready');
+    },
+    getState: () => ({ worker: { ready: true } }),
+  }),
+} satisfies ExportedHandler<Env>;

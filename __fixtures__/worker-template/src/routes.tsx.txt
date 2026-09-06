@@ -1,0 +1,35 @@
+import type { TRouteObject } from '@lomray/vite-ssr-boost/interfaces/route-object';
+import type { ISsrRequestContext } from '@lomray/vite-ssr-boost/core/render';
+import type { IWorkerPlatform } from '@lomray/vite-ssr-boost/cloudflare';
+import type { Env } from './worker';
+import React, { Suspense, useState } from 'react';
+import { Await, Link, Outlet, redirect, useLoaderData } from 'react-router';
+import ResponseStatus from '@lomray/vite-ssr-boost/components/response-status';
+
+function Layout() {
+  const [count, setCount] = useState(0);
+  return <main><button onClick={() => setCount(count + 1)}>Count {count}</button>
+    <Link to="/">Home</Link> <Link to="/about">About</Link> <Link to="/deferred">Deferred</Link>
+    <Outlet /></main>;
+}
+function Data() { const data = useLoaderData(); return <p>{JSON.stringify(data)}</p>; }
+function Deferred() {
+  const data = useLoaderData();
+  return <Suspense fallback={<p data-fallback>Loading message</p>}>
+    <Await resolve={data.slow}>{message => <p data-resolved>{message}</p>}</Await>
+  </Suspense>;
+}
+const routes = [{ path: '/', Component: Layout, children: [
+  { index: true, Component: () => <h1>Worker home</h1> },
+  { id: 'about', path: 'about', lazy: () => import('./About') },
+  { path: 'redirect', loader: () => redirect('/about', 301) },
+  { path: 'cookie', Component: Data, loader: ({ context }) => ({ visits: (context as unknown as ISsrRequestContext<{ visits: number }>)?.appProps?.visits ?? 0 }) },
+  { path: 'bindings', Component: Data, loader: async ({ context }) => ({
+    message: await ((context as unknown as ISsrRequestContext)?.executionContext?.platform as IWorkerPlatform<Env> | undefined)?.env.MESSAGES.get('greeting') ?? 'Node development',
+  }) },
+  { path: 'deferred', Component: Deferred, loader: () => ({
+    slow: new Promise<string>(resolve => setTimeout(() => resolve('Resolved in workerd'), 1500)),
+  }) },
+  { path: '*', Component: () => <><ResponseStatus status={404} /><h1>Missing page</h1></> },
+]}] satisfies TRouteObject[];
+export default routes;

@@ -1,52 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { RouterState, StaticHandlerContext } from 'react-router';
-
-enum AssetType {
-  style = 'style',
-  script = 'script',
-  image = 'image',
-  font = 'font',
-}
-
-interface IAsset {
-  type: AssetType;
-  url: string;
-  weight: number;
-  isNested: boolean;
-  isPreload: boolean;
-  content?: string;
-}
-
-type TAssets = { [id: string]: IAsset };
-
-interface IInjectAssetsContext {
-  html: {
-    header: string;
-  };
-  routerContext?: StaticHandlerContext;
-}
+import MemoryRouteAssets from '@services/route-assets-memory';
+import type { TRouteAssetsManifest } from '@services/route-assets-memory';
 
 /**
- * Load and inject route assets with an independent cache for one build.
+ * Keep the Node manifest cache while also accepting a parsed JSON manifest.
  */
-class RouteAssets {
+class RouteAssets extends MemoryRouteAssets {
   protected readonly outputDir: string;
 
-  protected readonly modulePreload: boolean;
-
-  protected routesAssets: Record<string, IAsset[]> | null = null;
-
-  constructor(buildDir: string, modulePreload = false) {
-    this.outputDir = path.resolve(buildDir);
-    this.modulePreload = modulePreload;
-  }
-
-  /**
-   * Development manifests override this to inject inline styles.
-   */
-  protected get isDev(): boolean {
-    return false;
+  constructor(buildDir: string | TRouteAssetsManifest, modulePreload = false) {
+    super(typeof buildDir === 'string' ? {} : buildDir, modulePreload);
+    this.outputDir = typeof buildDir === 'string' ? path.resolve(buildDir) : '';
+    this.routesAssets = typeof buildDir === 'string' ? null : buildDir;
   }
 
   /**
@@ -57,9 +23,9 @@ class RouteAssets {
   }
 
   /**
-   * Load assets manifest
+   * Load and cache the Node manifest on first use.
    */
-  protected loadAssetsManifest(): Record<string, IAsset[]> {
+  protected loadAssetsManifest(): TRouteAssetsManifest {
     if (this.routesAssets !== null) {
       return this.routesAssets;
     }
@@ -70,94 +36,14 @@ class RouteAssets {
       return {};
     }
 
-    this.routesAssets = JSON.parse(fs.readFileSync(manifestFile, { encoding: 'utf-8' })) as Record<
-      string,
-      IAsset[]
-    >;
+    this.routesAssets = JSON.parse(fs.readFileSync(manifestFile, 'utf8')) as TRouteAssetsManifest;
 
     return this.routesAssets;
   }
-
-  /**
-   * Sort assets
-   */
-  protected sortAssets(assets: IAsset[]): IAsset[] {
-    return assets.sort((a, b) =>
-      a.weight === b.weight ? Number(a.isNested) - Number(b.isNested) : a.weight - b.weight,
-    );
-  }
-
-  /**
-   * Get route assets
-   */
-  protected getAssets(routes?: RouterState['matches']): IAsset[] {
-    const routeIds = routes?.map(({ route }) => route.id).filter(Boolean) ?? [];
-
-    if (!routeIds.length) {
-      return [];
-    }
-
-    const routesAssets = this.loadAssetsManifest();
-
-    return this.sortAssets(
-      routeIds
-        .map((routeId) => routesAssets[routeId])
-        .flat()
-        .filter(Boolean),
-    );
-  }
-
-  /**
-   * Build preload hints without depending on a particular HTTP transport.
-   */
-  public getEarlyHints(assets: IAsset[]): Headers {
-    const headers = new Headers();
-
-    assets.forEach(({ type, url }) => {
-      if (!type || !['style', 'script'].includes(type)) {
-        return;
-      }
-
-      headers.append('Link', `<${url}>; rel=preload; as=${type}`);
-    });
-
-    return headers;
-  }
-
-  /**
-   * Inject route assets to head html
-   */
-  public injectAssets({ routerContext, html }: IInjectAssetsContext): Headers {
-    const assets = this.getAssets(routerContext?.matches);
-    const htmlAssets = assets
-      .map(({ type, url, isPreload, content = '' }) => {
-        switch (type) {
-          case AssetType.style:
-            return this.isDev
-              ? `<style data-vite-dev-id="${url}">${content}</style>`
-              : `<link rel="stylesheet" href="${url}">`;
-
-          case AssetType.script:
-            return isPreload
-              ? this.modulePreload
-                ? // can reduce lighthouse performance
-                  `<link rel="modulepreload" as="script" crossorigin href="${url}">`
-                : null
-              : `<script async type="module" crossorigin src="${url}"></script>`;
-        }
-
-        return null;
-      })
-      .filter(Boolean);
-
-    html.header = html.header.replace('</head>', `${htmlAssets.join('\n')}</head>`);
-
-    return this.getEarlyHints(assets);
-  }
 }
 
-export { AssetType };
+export { AssetType } from '@services/route-assets-memory';
 
-export type { IAsset, TAssets };
+export type { IAsset, TAssets, TRouteAssetsManifest } from '@services/route-assets-memory';
 
 export default RouteAssets;

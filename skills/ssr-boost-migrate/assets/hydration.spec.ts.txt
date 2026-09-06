@@ -1,0 +1,16 @@
+// tests/browser/hydration.spec.ts
+import { expect, test } from '@playwright/test';
+import {
+  collectStreamTimeline, expectHydrated, expectStreamed,
+} from '@lomray/vite-ssr-boost/testing/playwright';
+
+test('streams, hydrates once and attaches the counter handler', async ({ page }) => {
+  const timeline = await collectStreamTimeline(page);
+  await page.goto('/deferred', { waitUntil: 'commit' });
+  await expectStreamed(page, '[data-resolved]');
+  await expectHydrated(page, { root: '#root', timeout: 10_000 });
+  await expect(page.locator('[data-resolved]')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Count: 0', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Count: 1', exact: true })).toBeVisible();
+  console.info(await timeline.read());
+});

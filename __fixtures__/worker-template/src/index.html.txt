@@ -1,0 +1,3 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Worker template</title></head>
+<body><div id="root"><!--ssr-outlet--></div><script async type="module" src="/client.tsx"></script></body></html>

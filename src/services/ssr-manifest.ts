@@ -114,6 +114,53 @@ class SsrManifest extends RouteAssets {
   }
 
   /**
+   * Compile SSR graph styles before the browser has populated the client graph.
+   */
+  public async prepareDevAssets(routes?: RouterState['matches'], isSpa = false): Promise<void> {
+    const vite = this.config.getVite();
+
+    if (!vite) {
+      return;
+    }
+
+    if (isSpa) {
+      /**
+       * Populate the client graph for structural matches without running lazy loaders.
+       */
+      await Promise.all(
+        this.getDevRouteIds(routes).map(async (id) => {
+          const file = this.pathNormalize.findAppFile(id);
+
+          if (file) {
+            await vite.transformRequest(`/@fs/${file}`);
+          }
+        }),
+      );
+    }
+
+    const visited = new Set<string>();
+
+    /**
+     * Transform each stylesheet once, including dependencies shared by several routes.
+     */
+    const visit = async (module: ModuleNode): Promise<void> => {
+      if (visited.has(module.url)) {
+        return;
+      }
+
+      visited.add(module.url);
+
+      if (module.file && /\.(?:css|less|s[ac]ss|styl(?:us)?|pcss|postcss)$/.test(module.file)) {
+        await vite.transformRequest(module.url);
+      }
+
+      await Promise.all([...module.importedModules].map(visit));
+    };
+
+    await Promise.all(this.getDevModules(routes).map(visit));
+  }
+
+  /**
    * Get output dir.
    */
   protected getOutDir(): string {
@@ -256,26 +303,40 @@ class SsrManifest extends RouteAssets {
       result[routeId] = this.sortAssets(Object.values(this.getRouteAssets(manifest, routeMeta)));
     });
 
-    fs.writeFileSync(this.getAssetsManifestFile(), JSON.stringify(result, null, 2), {
-      encoding: 'utf-8',
-    });
+    const json = JSON.stringify(result, null, 2);
+
+    fs.writeFileSync(this.getAssetsManifestFile(), json, { encoding: 'utf-8' });
+    const clientDir = path.join(this.getOutDir(), 'client');
+
+    // A server-only build has no client output directory to copy the manifest into.
+    if (fs.existsSync(clientDir)) {
+      fs.writeFileSync(path.join(clientDir, 'assets-manifest.json'), json, { encoding: 'utf-8' });
+    }
   }
 
   /**
    * Get route assets from Vite in development or the built manifest in production.
    */
-  protected getAssets(routes?: RouterState['matches']): IAsset[] {
-    return this.isDev ? this.getAssetsDev(routes) : super.getAssets(routes);
+  protected getAssets(routes?: RouterState['matches'], isSpa?: boolean): IAsset[] {
+    return this.isDev ? this.getAssetsDev(routes, isSpa) : super.getAssets(routes);
+  }
+
+  /**
+   * Resolve structural route metadata without importing the server's lazy component.
+   */
+  protected getDevRouteIds(routes?: RouterState['matches']): string[] {
+    return (
+      (routes
+        ?.map(({ route }) => this.pathNormalize.getAppPath((route as IAsyncRoute)?.pathId, true))
+        .filter(Boolean) as string[]) ?? []
+    );
   }
 
   /**
    * Get development route assets
    */
   protected getDevModules(routes?: RouterState['matches']): ModuleNode[] {
-    const routeIds =
-      (routes
-        ?.map(({ route }) => this.pathNormalize.getAppPath((route as IAsyncRoute)?.pathId, true))
-        .filter(Boolean) as string[]) ?? [];
+    const routeIds = this.getDevRouteIds(routes);
 
     const postfixes = this.pathNormalize.getImportPostfix();
     const pluginConfig = this.config.getPluginConfig();
@@ -300,47 +361,39 @@ class SsrManifest extends RouteAssets {
   }
 
   /**
-   * Compile SSR graph styles before the browser has populated the client graph.
-   */
-  public async prepareDevAssets(routes?: RouterState['matches']): Promise<void> {
-    const vite = this.config.getVite();
-
-    if (!vite) {
-      return;
-    }
-
-    const visited = new Set<string>();
-
-    /**
-     * Transform each stylesheet once, including dependencies shared by several routes.
-     */
-    const visit = async (module: ModuleNode): Promise<void> => {
-      if (visited.has(module.url)) {
-        return;
-      }
-
-      visited.add(module.url);
-
-      if (module.file && /\.(?:css|less|s[ac]ss|styl(?:us)?|pcss|postcss)$/.test(module.file)) {
-        await vite.transformRequest(module.url);
-      }
-
-      await Promise.all([...module.importedModules].map(visit));
-    };
-
-    await Promise.all(this.getDevModules(routes).map(visit));
-  }
-
-  /**
    * Collect development assets from the current server and client module graphs.
    */
-  protected getAssetsDev(routes?: RouterState['matches']): IAsset[] {
+  protected getAssetsDev(routes?: RouterState['matches'], isSpa = false): IAsset[] {
     const assets = Object.assign(
       {},
       ...this.getDevModules(routes).map((module) => this.getModuleAssets(module)),
     ) as TAssets;
 
-    return Object.values(assets);
+    /**
+     * Preload SPA route modules that have not been queried on the server.
+     */
+    const scripts: IAsset[] = isSpa
+      ? this.getDevRouteIds(routes).flatMap((id) => {
+          const module = this.pathNormalize
+            .getImportPostfix()
+            .map((ext) => this.config.getVite()?.moduleGraph.getModuleById(`${id}${ext}`))
+            .find(Boolean);
+
+          return module
+            ? [
+                {
+                  type: AssetType.script,
+                  url: module.url,
+                  weight: 2,
+                  isNested: false,
+                  isPreload: true,
+                },
+              ]
+            : [];
+        })
+      : [];
+
+    return [...Object.values(assets), ...scripts];
   }
 
   /**

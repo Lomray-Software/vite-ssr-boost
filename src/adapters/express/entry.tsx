@@ -8,6 +8,9 @@ import type { ServeStaticOptions } from 'serve-static';
 import type { Logger } from 'vite';
 import type { IRenderOptions, TRender } from '@adapters/express/render';
 import render from '@adapters/express/render';
+import createSpaShell from '@core/spa-shell';
+import SsrPolicy from '@core/ssr-policy';
+import type { ISsrPolicy } from '@core/ssr-policy';
 import type { TRouteObject } from '@interfaces/route-object';
 import type ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
@@ -31,6 +34,9 @@ export interface IEntrypointOptions<TAppProps = Record<string, any>> extends Pic
   | 'hydration'
   | 'nonce'
   | 'bootstrapScriptContent'
+  | 'documentHeaders'
+  | 'sessionCookie'
+  | 'protectPrivate'
 > {
   onServerCreated?: (app: Express, serverApi: ServerApi) => Promise<void> | void;
   onServerStarted?: (app: Express, serverApi: ServerApi, server: Server) => Promise<void> | void;
@@ -67,6 +73,7 @@ export interface IEntryServerOptions<TAppProps = Record<string, any>> extends Pi
   IPrepareRenderOut,
   'loggerProd' | 'loggerDev' | 'middlewares'
 > {
+  ssr?: ISsrPolicy;
   abortDelay?: number;
   init?: (params: {
     config: ServerConfig;
@@ -80,12 +87,14 @@ export interface IEntryServerOptions<TAppProps = Record<string, any>> extends Pi
 function entry<TAppProps>(
   App: TApp<TAppProps>,
   routes: TRouteObject[],
-  { init, routerOptions, ...rest }: IEntryServerOptions<TAppProps> = {},
+  { init, routerOptions, ssr, ...rest }: IEntryServerOptions<TAppProps> = {},
 ): IPrepareRenderOut<TAppProps> {
   const handler = createStaticHandler(routes as RouteObject[], routerOptions);
+  const policy = new SsrPolicy(ssr, handler.dataRoutes, routerOptions?.basename);
+  const spaShell = createSpaShell();
 
   return {
-    render: render.bind(null, { handler, App }) as TRender,
+    render: render.bind(null, { handler, App, policy, spaShell }) as TRender,
     init,
     routes,
     ...rest,
@@ -93,3 +102,5 @@ function entry<TAppProps>(
 }
 
 export default entry;
+
+export type { ISsrPolicy };

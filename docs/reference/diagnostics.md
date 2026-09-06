@@ -18,6 +18,48 @@ the response finishes, without delaying streamed chunks. When disabled, they nei
 accumulate HTML. Completed-output checks skip cancelled or failed streams, redirects, and bodyless
 responses; invalid file-backed shells always throw, even with diagnostics disabled.
 
+## SSR_BOOST_CACHE_PRIVATE_LEAK {#ssr_boost_cache_private_leak}
+
+A final response is explicitly public while carrying Set-Cookie or while the request
+contains the configured `sessionCookie`. Use `documentHeaders` with its default
+credential protection and bypass shared cache reads and writes for that cookie.
+The warning is deduplicated and never prints cookie values. Like other development
+checks, it is disabled in production unless diagnostics are explicitly enabled.
+See [Document headers and caching](/guide/caching) for the helpers and tested recipes.
+
+## SSR_BOOST_DEPRECATED_REQ_RES {#ssr_boost_deprecated_req_res}
+
+A managed Express hook or loader reads `context.req` or `context.res`. These fields still return
+the live Express objects, but are deprecated in 8.x with removal planned for **9.0**, subject to
+the [support policy](/reference/support) notice periods. One warning covers both fields across
+all requests, hooks and development module reloads in the process. Merely creating the context
+or reading `context.request` does not warn.
+
+Use `context.request` for the Fetch request's URL, headers, method and signal. Before the shell
+is sent, set `context.response.headers` and `context.response.status` for response metadata;
+use React Router's HTTP helpers such as `redirect()` in loaders/actions. The earlier managed
+`onRequest(req, res)` arguments and Express middleware are not deprecated by this diagnostic.
+
+Accessors are installed only in managed development with diagnostics enabled, using `loggerDev`.
+`SSR_BOOST_DIAGNOSTICS=0` disables them. Production keeps plain properties with no accessor or
+warning overhead, even when other diagnostics are enabled with `SSR_BOOST_DIAGNOSTICS=1`.
+
+## SSR_BOOST_SSR_POLICY {#ssr_boost_ssr_policy}
+
+An info message explains whether a URL pattern selected `ssr` or `spa`, and whether the decision came from the configured include/exclude policy, `decide`, `SSR_BOOST_SSR_ROUTES`, or `bots: 'ssr'`. It appears for active [incremental SSR policies](/guide/incremental-ssr), once per pattern and distinct decision per process, using the development logger and diagnostics settings above. Plain default `all` mode stays silent; an `all` policy with `decide` is active.
+
+The message identifies patterns rather than concrete dynamic parameters, cookies or query values. Check it when a URL uses an unexpected mode. The environment override replaces the configured route policy and `decide`; bot protection has highest priority. This is informational and does not count as a warning. SPA shells intentionally have no hydration state and do not trigger `SSR_BOOST_HYDRATION_STATE_MISSING`.
+
+## SSR_BOOST_SSR_POLICY_UNMATCHED {#ssr_boost_ssr_policy_unmatched}
+
+An include/exclude pattern has no match among known route ids' declared URL paths. The warning checks nested paths and router basenames without importing lazy route modules or running loaders. A global 404 catch-all does not hide typos. Each distinct unmatched pattern warns once per process under the diagnostics settings above.
+
+Check spelling, include the URL basename, and use path patterns rather than component filenames or generated numeric route ids. The check is advisory and compares declared paths, so a RegExp restricted to particular dynamic parameter values may need manual verification. Invalid path-to-regexp string syntax instead throws during entry/handler creation, even with diagnostics disabled.
+
+## SSR_BOOST_TIMELINE {#ssr_boost_timeline}
+
+Set `SSR_BOOST_TIMELINE=1` to record request stages even when diagnostics are disabled and print one JSON line per completed or cancelled request in development. The line includes the method, pathname and millisecond offsets for routing, preparation, shell readiness, state emission, deferred settlements (with promise ids), body/response completion and abort reasons. Recording is also enabled by diagnostics; logging requires the timeline environment flag and stays off in production. Hooks can inspect `context.timeline?.events`, and the testing kit exposes `await response.timeline()`. When diagnostics are off and the flag is unset, no timeline instance or event array is allocated. See [Request timeline](/guide/testing#request-timeline) for stage definitions; `response.end` measures consumption of the Fetch body, not delivery over a socket.
+
 ## SSR_BOOST_LOADER_NOT_SERIALIZABLE {#ssr_boost_loader_not_serializable}
 
 ### When it appears

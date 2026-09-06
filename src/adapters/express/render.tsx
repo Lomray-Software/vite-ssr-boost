@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import React from 'react';
-import type { StaticHandlerContext, StaticHandler } from 'react-router';
+import type { RouterState, StaticHandlerContext, StaticHandler } from 'react-router';
 import createFetchRequest from '@adapters/express/create-request';
 import type { TApp } from '@adapters/express/entry';
 import StreamError from '@constants/stream-error';
@@ -9,7 +9,9 @@ import type { IServerContext } from '@context/server';
 import emitEarlyHints from '@core/early-hints';
 import { getHeaderEntries, getSetCookieHeaders } from '@core/headers';
 import coreRender from '@core/render';
-import type { ISsrRequestContext } from '@core/render';
+import type { ICoreRenderOptions, ISsrRequestContext } from '@core/render';
+import type createSpaShell from '@core/spa-shell';
+import type SsrPolicy from '@core/ssr-policy';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import renderToStream from '@node/render-to-stream';
 import createRequestSignal from '@node/request-signal';
@@ -20,30 +22,41 @@ import type ServerConfig from '@services/server-config';
 import SsrManifest from '@services/ssr-manifest';
 
 export interface IRequestContext<TAppProps = Record<any, any>> {
+  /** @deprecated Use request; planned for removal in 9.0. */
   req: ExpressRequest;
+  /** @deprecated Use response.headers/status; planned for removal in 9.0. */
   res: ExpressResponse;
   request: Request;
+  response: ISsrRequestContext['response'];
   appProps: NonNullable<TAppProps>;
   html: { header: string; footer: string };
   routerContext?: StaticHandlerContext;
   serverContext?: IServerContext;
   isStream?: boolean;
+  isSpa?: boolean;
+  matches?: RouterState['matches'];
   hasEarlyHints?: boolean;
   didError?: StreamError;
+  timeline?: ISsrRequestContext<TAppProps>['timeline'];
 }
 
 export type TRender<TAppProps = Record<any, any>> = (
   config: ServerConfig,
-  context: Omit<IRequestContext<TAppProps>, 'request'>,
+  context: Omit<IRequestContext<TAppProps>, 'request' | 'response'>,
   options: IRenderOptions,
 ) => Promise<void>;
 
 export interface IRenderParams<TAppProps = Record<string, any>> {
   App: TApp<TAppProps>;
   handler: StaticHandler;
+  policy?: SsrPolicy;
+  spaShell?: ReturnType<typeof createSpaShell>;
 }
 
-export interface IRenderOptions<TAppProps = Record<string, any>> {
+export interface IRenderOptions<TAppProps = Record<string, any>> extends Pick<
+  ICoreRenderOptions<TAppProps>,
+  'documentHeaders' | 'sessionCookie' | 'protectPrivate'
+> {
   hydration?: 'early' | 'footer';
   nonce?: string;
   bootstrapScriptContent?: string;
@@ -115,7 +128,38 @@ const prepareResponse = (context: ISsrRequestContext, res: ExpressResponse): voi
 /**
  * Copy legacy hook metadata back to the core; cookies remain on the live response.
  */
-const syncResponse = (context: ISsrRequestContext, res: ExpressResponse): void => {
+const syncResponse = (
+  context: ISsrRequestContext,
+  res: ExpressResponse,
+  previous: ISsrRequestContext['response'],
+): void => {
+  // Apply Fetch metadata edits before reading legacy metadata back. Unchanged
+  // Fetch values must not overwrite edits made through the live Express response.
+  if (!res.headersSent && !res.writableEnded) {
+    if (context.response.status !== previous.status) {
+      res.status(context.response.status ?? 200);
+    }
+
+    const names = new Set([...previous.headers.keys(), ...context.response.headers.keys()]);
+
+    for (const name of names) {
+      if (context.response.headers.get(name) === previous.headers.get(name)) {
+        continue;
+      }
+
+      if (!context.response.headers.has(name)) {
+        res.removeHeader(name);
+      } else {
+        res.setHeader(
+          name,
+          name === 'set-cookie'
+            ? getSetCookieHeaders(context.response.headers)
+            : context.response.headers.get(name)!,
+        );
+      }
+    }
+  }
+
   const headers = new Headers(context.response.headers);
 
   headers.delete('Set-Cookie');
@@ -166,9 +210,9 @@ const writeResponse = async (res: ExpressResponse, response: Response): Promise<
  * Render application
  */
 async function render(
-  { App, handler }: IRenderParams,
+  { App, handler, policy, spaShell }: IRenderParams,
   config: ServerConfig,
-  initialContext: Omit<IRequestContext, 'request'>,
+  initialContext: Omit<IRequestContext, 'request' | 'response'>,
   {
     onRouterReady,
     onShellReady,
@@ -180,6 +224,9 @@ async function render(
     hydration,
     nonce,
     bootstrapScriptContent,
+    documentHeaders,
+    sessionCookie,
+    protectPrivate,
     abortDelay = 15000,
   }: IRenderOptions,
 ): Promise<void> {
@@ -189,6 +236,7 @@ async function render(
   try {
     const context: IRequestContext = Object.assign(initialContext, {
       request: createRenderRequest(req, requestSignal.signal, getBody),
+      response: { headers: new Headers() },
     });
     const coreContext: ISsrRequestContext = {
       appProps,
@@ -197,21 +245,57 @@ async function render(
         : undefined,
       html: shellHtml,
       request: context.request,
-      response: {
-        headers: new Headers(),
-      },
+      response: context.response,
     };
+
+    // Keep plain data properties in production, even with diagnostics forced on.
+    // Adapter internals retain req/res locals so only consumer reads warn.
+    if (!config.isProd && coreContext.diagnostics) {
+      const { diagnostics } = coreContext;
+
+      for (const name of ['req', 'res'] as const) {
+        let value = context[name];
+
+        Object.defineProperty(context, name, {
+          configurable: true,
+          enumerable: true,
+          get: () => {
+            diagnostics.deprecatedReqRes();
+
+            return value;
+          },
+          set: (next: typeof value) => {
+            value = next;
+          },
+        });
+      }
+    }
+
+    const { response: initialResponse } = coreContext;
+
+    syncResponse(coreContext, res, {
+      headers: new Headers(initialResponse.headers),
+      status: initialResponse.status,
+    });
+
+    if (initialResponse.status === 200) {
+      initialResponse.status = undefined;
+    }
 
     /**
      * Keep legacy hooks attached to their original mutable request context.
      */
     const syncContext = (updated: ISsrRequestContext): IRequestContext => {
       context.request = updated.request;
+      context.response = updated.response;
       context.didError = updated.didError;
       context.html = updated.html;
       context.isStream = updated.isStream;
+      context.isSpa = updated.isSpa;
+      context.matches = updated.matches;
       context.routerContext = updated.routerContext;
       context.serverContext = updated.serverContext;
+      context.timeline = updated.timeline;
 
       return context;
     };
@@ -224,6 +308,8 @@ async function render(
           <App server={{ ...updated.appProps, req }}>{children}</App>
         ),
         handler,
+        policy,
+        spaShell,
         renderToStream,
       },
       coreContext,
@@ -232,6 +318,9 @@ async function render(
         hydration,
         nonce,
         bootstrapScriptContent,
+        documentHeaders,
+        sessionCookie,
+        protectPrivate,
 
         /**
          * Read custom state through the legacy request context.
@@ -296,9 +385,14 @@ async function render(
 
           prepareResponse(updated, res);
 
+          const previous = {
+            headers: new Headers(updated.response.headers),
+            status: updated.response.status,
+          };
+
           const shell = onShellReady?.({ context: legacyContext });
 
-          syncResponse(updated, res);
+          syncResponse(updated, res, previous);
 
           return shell ?? {};
         },
@@ -309,8 +403,9 @@ async function render(
         prepare: async ({ context: updated, executionContext }) => {
           const legacyContext = syncContext(updated);
           const manifest = SsrManifest.get(config);
+          const { matches, isSpa } = updated;
 
-          await manifest.prepareDevAssets(updated.routerContext?.matches);
+          await manifest.prepareDevAssets(matches, isSpa);
 
           const hints = manifest.injectAssets(legacyContext);
 
