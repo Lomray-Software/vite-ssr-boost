@@ -7,9 +7,14 @@ import type Diagnostics from '@services/diagnostics';
 type TRenderMode = 'ssr' | 'spa';
 
 interface ISsrPolicy {
+  /** Select all routes by default. */
   mode?: 'all' | 'include' | 'exclude';
   routes?: (string | RegExp)[];
+
+  /** Render crawlers with SSR by default, regardless of route policy. */
   bots?: 'ssr' | 'policy';
+
+  /** Return undefined to keep the matched policy decision. */
   decide?: (params: { request: Request; url: URL; isBot: boolean }) => TRenderMode | undefined;
 }
 
@@ -35,6 +40,10 @@ const compilePattern = (pattern: string | RegExp, exclude: boolean): IPolicyPatt
   return {
     pattern,
     exclude,
+
+    /**
+     * Reset stateful expressions before checking each pathname.
+     */
     test: (pathname) => {
       regexp.lastIndex = 0;
 
@@ -50,37 +59,67 @@ const routePaths = (
   routes: StaticHandler['dataRoutes'],
   parent = '',
 ): { id: string; path: string }[] =>
-  routes.flatMap((route) => {
+  routes.flatMap(({ id, path: routePath, children }) => {
     const path =
-      (route.path?.startsWith('/') ? route.path : `${parent}/${route.path ?? ''}`)
+      (routePath?.startsWith('/') ? routePath : `${parent}/${routePath ?? ''}`)
         .replace(/\/+/g, '/')
         .replace(/\/$/, '') || '/';
 
-    return [{ id: route.id, path }, ...routePaths(route.children ?? [], path)];
+    return [{ id, path }, ...routePaths(children ?? [], path)];
   });
 
 /**
  * Snapshot environment policy when the application entry/handler is created at startup.
  */
 class SsrPolicy {
+  /**
+   * Skip policy work when every request uses SSR.
+   */
   public readonly active: boolean;
 
+  /**
+   * Keep policy paths aligned with the router's mount path.
+   */
   public readonly basename: string;
 
+  /**
+   * Retain compiled inclusion and exclusion checks.
+   */
   protected readonly patterns: IPolicyPattern[];
 
+  /**
+   * Choose how unmatched requests are rendered.
+   */
   protected readonly mode: NonNullable<ISsrPolicy['mode']>;
 
+  /**
+   * Control whether crawlers bypass route policy.
+   */
   protected readonly bots: NonNullable<ISsrPolicy['bots']>;
 
+  /**
+   * Allow application decisions after route matching.
+   */
   protected readonly decide?: ISsrPolicy['decide'];
 
+  /**
+   * Identify the effective configuration in diagnostics.
+   */
   protected readonly source: string;
 
+  /**
+   * Retain declared paths for policy diagnostics.
+   */
   protected readonly paths: ReturnType<typeof routePaths>;
 
+  /**
+   * Inspect configured patterns only once per policy.
+   */
   protected hasInspected = false;
 
+  /**
+   * Compile the startup policy with environment overrides taking precedence.
+   */
   public constructor(
     { mode = 'all', routes = [], bots = 'ssr', decide }: ISsrPolicy = {},
     dataRoutes: StaticHandler['dataRoutes'] = [],
@@ -89,6 +128,10 @@ class SsrPolicy {
   ) {
     this.basename = basename;
     this.bots = bots;
+
+    /**
+     * Prefix declared paths with the router's configured basename.
+     */
     this.paths = routePaths(dataRoutes).map((route) => ({
       ...route,
       path: `${basename.replace(/\/$/, '')}${route.path}`,
@@ -105,6 +148,10 @@ class SsrPolicy {
         : values.some((value) => !value.startsWith('!'))
           ? 'include'
           : 'exclude';
+
+      /**
+       * Compile environment entries with their explicit exclusion markers.
+       */
       this.patterns = values.map((value) => {
         const isExcluded = value.startsWith('!');
 
@@ -123,30 +170,6 @@ class SsrPolicy {
   }
 
   /**
-   * Explain typos using declared paths, including concrete URLs for dynamic route ids.
-   * A global 404 catch-all must not hide a misspelled policy.
-   */
-  protected inspect(diagnostics?: Diagnostics): void {
-    if (!diagnostics || this.hasInspected) {
-      return;
-    }
-
-    this.hasInspected = true;
-
-    for (const { pattern, test } of this.patterns) {
-      const hasMatch = this.paths.some(
-        ({ path }) =>
-          path !== '/*' &&
-          (test(path) || (typeof pattern === 'string' && Boolean(matchPath(path, pattern)))),
-      );
-
-      if (!hasMatch) {
-        diagnostics.policyUnmatched(String(pattern));
-      }
-    }
-  }
-
-  /**
    * Crawler protection wins over both runtime decisions and environment rollback rules.
    */
   public select(request: Request, diagnostics?: Diagnostics): TRenderMode {
@@ -156,8 +179,9 @@ class SsrPolicy {
 
     this.inspect(diagnostics);
 
-    const url = new URL(request.url);
-    const isBot = isbot(request.headers.get('user-agent'));
+    const { url: requestUrl, headers } = request;
+    const url = new URL(requestUrl);
+    const isBot = isbot(headers.get('user-agent'));
     const matched = this.patterns.filter(({ test }) => test(url.pathname));
     const excluded = matched.find(({ exclude }) => exclude);
     let mode: TRenderMode =
@@ -185,6 +209,33 @@ class SsrPolicy {
     diagnostics?.policyDecision(String(pattern), mode, source);
 
     return mode;
+  }
+
+  /**
+   * Explain typos using declared paths, including concrete URLs for dynamic route ids.
+   * A global 404 catch-all must not hide a misspelled policy.
+   */
+  protected inspect(diagnostics?: Diagnostics): void {
+    if (!diagnostics || this.hasInspected) {
+      return;
+    }
+
+    this.hasInspected = true;
+
+    for (const { pattern, test } of this.patterns) {
+      /**
+       * Check declared paths without allowing a catch-all to hide policy typos.
+       */
+      const hasMatch = this.paths.some(
+        ({ path }) =>
+          path !== '/*' &&
+          (test(path) || (typeof pattern === 'string' && Boolean(matchPath(path, pattern)))),
+      );
+
+      if (!hasMatch) {
+        diagnostics.policyUnmatched(String(pattern));
+      }
+    }
   }
 }
 

@@ -13,6 +13,7 @@ import TestResponse from './response';
 
 interface ITestRequestInit extends RequestInit {
   isStream?: boolean;
+
   /** Whole-request deadline, including loaders and body consumption. */
   timeout?: number;
 }
@@ -24,6 +25,8 @@ interface ITestHandlerOptions<TAppProps> extends Omit<ICreateHandlerOptions<TApp
   routerOptions?: Parameters<typeof createStaticHandler>[1];
   renderToStream?: TRenderToStream;
   signal?: AbortSignal;
+
+  /** Default whole-request deadline in milliseconds; omitted means no deadline. */
   timeout?: number;
 }
 
@@ -33,6 +36,9 @@ interface ITestHandler {
 
 type TLoadShell = (options: ILoadHtmlShellOptions) => Promise<() => IHtmlShell>;
 
+/**
+ * Supply a complete document around the rendered test application.
+ */
 const DEFAULT_SHELL: IHtmlShell = {
   header: '<!doctype html><html><head></head><body><div id="root">',
   footer: '</div><script type="module">/* test browser entry */</script></body></html>',
@@ -55,6 +61,10 @@ const testHandlerFactory =
   }: ITestHandlerOptions<TAppProps>): ITestHandler => {
     const handler = createStaticHandler(routes as RouteObject[], routerOptions);
     let fileShell: Promise<() => IHtmlShell> | undefined;
+
+    /**
+     * Cache file loading while returning a fresh shell for every request.
+     */
     const getHtml = async (): Promise<IHtmlShell> => {
       if ('indexFile' in shell) {
         fileShell ??= loadShell(shell);
@@ -66,6 +76,9 @@ const testHandlerFactory =
     };
 
     return {
+      /**
+       * Render one cancellable request and collect its response assertions.
+       */
       fetch: async (input, { isStream, timeout = defaultTimeout, signal, ...init } = {}) => {
         const started = performance.now();
         const controller = new AbortController();
@@ -86,10 +99,22 @@ const testHandlerFactory =
         let timer: ReturnType<typeof setTimeout> | undefined;
         let timeline: RequestTimeline | undefined;
         let rejectAbort!: (reason: unknown) => void;
+
+        /**
+         * Allow cancellation to settle before hooks that ignore the signal.
+         */
         const aborted = new Promise<never>((_, reject) => {
           rejectAbort = reject;
         });
+
+        /**
+         * Reject pending rendering with the original abort reason.
+         */
         const onAbort = (): void => rejectAbort(combined.reason);
+
+        /**
+         * Release the deadline timer and abort listener after completion.
+         */
         const cleanup = (): void => {
           clearTimeout(timer);
           combined.removeEventListener('abort', onAbort);
@@ -103,6 +128,9 @@ const testHandlerFactory =
             throw new RangeError('timeout must be a finite, non-negative number of milliseconds.');
           }
 
+          /**
+           * Cancel rendering and body consumption when the deadline expires.
+           */
           timer = setTimeout(
             () =>
               controller.abort(
@@ -118,16 +146,28 @@ const testHandlerFactory =
             {
               handler,
               renderToStream,
+
+              /**
+               * Wrap matched content with the optional test application.
+               */
               createApp: (children, context) =>
                 App ? <App server={context.appProps}>{children}</App> : children,
             },
             {
               ...options,
               getHtml,
+
+              /**
+               * Retain the request timeline before forwarding context observation.
+               */
               onContext: (params) => {
                 ({ timeline } = params.context);
                 onContext?.(params);
               },
+
+              /**
+               * Apply a per-request streaming override after the application hook.
+               */
               onRouterReady: async (params) => {
                 const result = await onRouterReady?.(params);
 
@@ -137,7 +177,9 @@ const testHandlerFactory =
           );
           const pending = fetch(request);
 
-          // Hooks can ignore cancellation; release a response if it arrives after the deadline.
+          /**
+           * Hooks can ignore cancellation; release a response if it arrives after the deadline.
+           */
           void pending
             .then((response) => {
               if (combined.aborted) {

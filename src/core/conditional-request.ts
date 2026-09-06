@@ -1,11 +1,19 @@
 export interface IConditionalValidators {
   /** Quoted entity tag, optionally prefixed with W/. Must identify the selected representation. */
   etag?: string;
+
+  /** Modification time of the selected representation; must parse as a valid date. */
   lastModified?: string | Date;
 }
 
+/**
+ * Accept only quoted HTTP entity tags.
+ */
 const entityTag = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/;
-// HTTP-date includes the two obsolete wire formats; exclude Date.parse's ISO/year shortcuts.
+
+/**
+ * HTTP-date includes the two obsolete wire formats; exclude Date.parse's ISO/year shortcuts.
+ */
 const httpDate =
   /^(?:[A-Za-z]{3}, \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT|[A-Za-z]+, \d{2}-[A-Za-z]{3}-\d{2} \d{2}:\d{2}:\d{2} GMT|[A-Za-z]{3} [A-Za-z]{3} [ \d]\d \d{2}:\d{2}:\d{2} \d{4})$/;
 
@@ -15,7 +23,7 @@ const httpDate =
  * Call before sending a buffered response; this helper never reads or hashes a stream.
  */
 const conditionalRequest = (
-  request: Request,
+  { method, headers: requestHeaders }: Request,
   { etag, lastModified }: IConditionalValidators,
 ): Response | undefined => {
   if (etag !== undefined && !entityTag.test(etag)) {
@@ -28,15 +36,17 @@ const conditionalRequest = (
     throw new TypeError('Last-Modified must be a valid date.');
   }
 
-  if (!['GET', 'HEAD'].includes(request.method)) {
+  if (!['GET', 'HEAD'].includes(method)) {
     return undefined;
   }
 
-  const noneMatch = request.headers.get('If-None-Match');
+  const noneMatch = requestHeaders.get('If-None-Match');
   let hasMatch = false;
 
   if (noneMatch !== null) {
-    // Commas are legal inside an opaque tag, so splitting on commas is incorrect.
+    /**
+     * Commas are legal inside an opaque tag, so splitting on commas is incorrect.
+     */
     const list: string[] = noneMatch.match(/(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"|\*/g) ?? [];
     const isValidList =
       /^(?:\*|(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"(?:\s*,\s*(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*")*)$/.test(
@@ -49,7 +59,7 @@ const conditionalRequest = (
         (tag) => tag === '*' || (etag && tag.replace(/^W\//, '') === etag.replace(/^W\//, '')),
       );
   } else if (modified !== undefined) {
-    const since = request.headers.get('If-Modified-Since');
+    const since = requestHeaders.get('If-Modified-Since');
     const timestamp = since !== null && httpDate.test(since) ? Date.parse(since) : NaN;
 
     hasMatch =

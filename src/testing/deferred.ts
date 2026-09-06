@@ -8,9 +8,13 @@ interface IDeferred<T> {
 const createDeferred = <T>(): IDeferred<T> => {
   let resolve!: IDeferred<T>['resolve'];
   let reject!: IDeferred<T>['reject'];
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
+
+  /**
+   * Expose settlement controls to the caller.
+   */
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
   });
 
   // A test can reject before React Router has finished querying the other loaders.

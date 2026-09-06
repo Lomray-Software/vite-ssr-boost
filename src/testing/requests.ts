@@ -1,3 +1,6 @@
+/**
+ * Give relative test URLs a stable origin without starting a server.
+ */
 const TEST_ORIGIN = 'http://localhost';
 
 /** Give relative test paths the same stable origin as createTestHandler.fetch. */

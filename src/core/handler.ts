@@ -94,9 +94,11 @@ const createHandler = <TAppProps = Record<string, any>>(
       onContext?.({ context });
 
       if (isBypass) {
+        const { sessionCookie } = options;
+
         context.diagnostics?.inspectCachePolicy(
           requestInit.headers,
-          Boolean(options.sessionCookie && hasCookie(request, options.sessionCookie)),
+          Boolean(sessionCookie && hasCookie(request, sessionCookie)),
         );
 
         const response = await headResponse(request, requestInit);

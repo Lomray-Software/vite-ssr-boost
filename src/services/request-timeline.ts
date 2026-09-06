@@ -11,6 +11,8 @@ type TRequestStage =
 
 interface ITimelineEvent {
   stage: TRequestStage;
+
+  /** Milliseconds since the request timeline started. */
   at: number;
   id?: number;
   placement?: 'early' | 'footer';
@@ -36,20 +38,43 @@ const describeReason = (reason: unknown): string => {
 
 /** Request-local observations; never constructed on the disabled path. */
 class RequestTimeline {
+  /**
+   * Retain observations in emission order.
+   */
   public readonly events: ITimelineEvent[] = [];
+
+  /**
+   * Anchor event offsets to a monotonic clock.
+   */
   public readonly started = performance.now();
+
+  /**
+   * Prevent observations after response completion.
+   */
   protected ended = false;
+
+  /**
+   * Record only the first cancellation reason.
+   */
   protected aborted = false;
 
-  public constructor(protected readonly request: Request) {
-    if (request.signal.aborted) {
+  /**
+   * Observe cancellation from the request's signal.
+   */
+  public constructor(
+    /**
+     * Retain request metadata and its cancellation signal.
+     */
+    protected readonly request: Request,
+  ) {
+    const { signal } = request;
+
+    if (signal.aborted) {
       this.onAbort();
     } else {
-      request.signal.addEventListener('abort', this.onAbort, { once: true });
+      signal.addEventListener('abort', this.onAbort, { once: true });
     }
   }
-
-  protected onAbort = (): void => this.abort(this.request.signal.reason);
 
   /** Offsets mark completion/emission, not the beginning of a stage. */
   public record(stage: TRequestStage, detail?: Omit<ITimelineEvent, 'stage' | 'at'>): void {
@@ -58,6 +83,9 @@ class RequestTimeline {
     }
   }
 
+  /**
+   * Attach the first cancellation reason to the timeline.
+   */
   public abort(reason?: unknown): void {
     if (!this.aborted) {
       this.aborted = true;
@@ -93,14 +121,20 @@ class RequestTimeline {
 
   /** Observe final transformed bytes without reading ahead of the consumer. */
   public response(response: Response): Response {
-    if (!response.body) {
+    const { body: responseBody } = response;
+
+    if (!responseBody) {
       this.end();
 
       return response;
     }
 
-    const reader = response.body.getReader();
+    const reader = responseBody.getReader();
     let isStopped = false;
+
+    /**
+     * Release the stream reader and complete the request timeline.
+     */
     const finish = (): void => {
       isStopped = true;
       reader.releaseLock();
@@ -108,6 +142,9 @@ class RequestTimeline {
     };
     const body = new ReadableStream<Uint8Array>(
       {
+        /**
+         * Forward consumer cancellation and finish observation.
+         */
         cancel: async (reason) => {
           isStopped = true;
           this.abort(reason);
@@ -118,19 +155,23 @@ class RequestTimeline {
             finish();
           }
         },
+
+        /**
+         * Forward one chunk at a time and record completion or failure.
+         */
         pull: async (controller) => {
           try {
-            const chunk = await reader.read();
+            const { done: isDone, value } = await reader.read();
 
             if (isStopped) {
               return;
             }
 
-            if (chunk.done) {
+            if (isDone) {
               finish();
               controller.close();
             } else {
-              controller.enqueue(chunk.value);
+              controller.enqueue(value);
             }
           } catch (error) {
             if (!isStopped) {
@@ -146,6 +187,11 @@ class RequestTimeline {
 
     return new Response(body, response);
   }
+
+  /**
+   * Forward request cancellation without losing the timeline receiver.
+   */
+  protected onAbort = (): void => this.abort(this.request.signal.reason);
 }
 
 /** Keep the constructor, event array and clock reads behind the enablement check. */

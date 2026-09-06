@@ -7,6 +7,9 @@ import type RouteAssets from '@services/route-assets-memory';
 const createAssetPreparer = <TAppProps = Record<string, any>>(
   assets: RouteAssets,
 ): NonNullable<ICreateHandlerOptions<TAppProps>['prepare']> => {
+  /**
+   * Inject this request's matched assets and forward available early hints.
+   */
   return async ({ context, executionContext }) => {
     const hints = assets.injectAssets(context, Boolean(executionContext?.onEarlyHints));
 

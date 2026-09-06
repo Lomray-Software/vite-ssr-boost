@@ -9,10 +9,15 @@ const createSpaShell = (): ((html: IHtmlShell) => IHtmlShell) => {
   let source: IHtmlShell | undefined;
   let shell: IHtmlShell;
 
+  /**
+   * Rebuild changed templates and isolate the shell returned to each request.
+   */
   return (html) => {
-    if (source?.header !== html.header || source?.footer !== html.footer) {
+    const { header, footer } = html;
+
+    if (source?.header !== header || source?.footer !== footer) {
       source = { ...html };
-      shell = { header: createSpaHtml(html.header), footer: html.footer };
+      shell = { header: createSpaHtml(header), footer };
     }
 
     return { ...shell };

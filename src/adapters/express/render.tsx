@@ -271,13 +271,15 @@ async function render(
       }
     }
 
+    const { response: initialResponse } = coreContext;
+
     syncResponse(coreContext, res, {
-      headers: new Headers(coreContext.response.headers),
-      status: coreContext.response.status,
+      headers: new Headers(initialResponse.headers),
+      status: initialResponse.status,
     });
 
-    if (coreContext.response.status === 200) {
-      coreContext.response.status = undefined;
+    if (initialResponse.status === 200) {
+      initialResponse.status = undefined;
     }
 
     /**
@@ -401,8 +403,9 @@ async function render(
         prepare: async ({ context: updated, executionContext }) => {
           const legacyContext = syncContext(updated);
           const manifest = SsrManifest.get(config);
+          const { matches, isSpa } = updated;
 
-          await manifest.prepareDevAssets(updated.matches, updated.isSpa);
+          await manifest.prepareDevAssets(matches, isSpa);
 
           const hints = manifest.injectAssets(legacyContext);
 

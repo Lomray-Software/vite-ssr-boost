@@ -1,9 +1,17 @@
 export interface ICachePolicy {
   public?: boolean;
   private?: boolean;
+
+  /** Non-negative integer seconds of freshness in any cache. */
   maxAge?: number;
+
+  /** Non-negative integer seconds of freshness in shared caches. */
   sMaxAge?: number;
+
+  /** Non-negative integer seconds to serve stale content during revalidation. */
   staleWhileRevalidate?: number;
+
+  /** Non-negative integer seconds to serve stale content after an error. */
   staleIfError?: number;
   noStore?: boolean;
   noCache?: boolean;
@@ -11,6 +19,9 @@ export interface ICachePolicy {
   immutable?: boolean;
 }
 
+/**
+ * Preserve a stable wire name and output order for each supported directive.
+ */
 const directives = {
   public: 'public',
   private: 'private',
@@ -23,6 +34,10 @@ const directives = {
   mustRevalidate: 'must-revalidate',
   immutable: 'immutable',
 } as const;
+
+/**
+ * Identify directives that require duration validation.
+ */
 const seconds = new Set(['maxAge', 'sMaxAge', 'staleWhileRevalidate', 'staleIfError']);
 
 /** Build a deterministic Cache-Control field; durations are non-negative integer seconds. */
@@ -49,23 +64,38 @@ const cacheControl = (policy: ICachePolicy): string => {
     }
   }
 
-  if (policy.public && policy.private) {
+  const {
+    public: isPublic,
+    private: isPrivate,
+    noStore: isNoStore,
+    immutable: isImmutable,
+    sMaxAge,
+    noCache: isNoCache,
+    mustRevalidate: shouldRevalidate,
+    staleWhileRevalidate,
+    staleIfError,
+  } = policy;
+
+  if (isPublic && isPrivate) {
     throw new TypeError('Cache policy cannot be both public and private.');
   }
 
   if (
-    (policy.noStore &&
-      (policy.public ||
-        policy.immutable ||
+    (isNoStore &&
+      (isPublic ||
+        isImmutable ||
         [...seconds].some((name) => policy[name as keyof ICachePolicy] !== undefined))) ||
-    (policy.private && policy.sMaxAge !== undefined) ||
-    (policy.immutable && (policy.noCache || policy.mustRevalidate)) ||
-    ((policy.noCache || policy.mustRevalidate) &&
-      (policy.staleWhileRevalidate !== undefined || policy.staleIfError !== undefined))
+    (isPrivate && sMaxAge !== undefined) ||
+    (isImmutable && (isNoCache || shouldRevalidate)) ||
+    ((isNoCache || shouldRevalidate) &&
+      (staleWhileRevalidate !== undefined || staleIfError !== undefined))
   ) {
     throw new TypeError('Cache policy contains conflicting directives.');
   }
 
+  /**
+   * Emit enabled directives in their declared order.
+   */
   return Object.entries(directives)
     .flatMap(([name, directive]) => {
       const value = policy[name as keyof ICachePolicy];

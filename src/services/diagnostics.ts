@@ -172,8 +172,18 @@ const walkSerializable = (
 class Diagnostics {
   protected chunks: string[] = [];
 
+  /**
+   * Attach route context and the logger used for request diagnostics.
+   */
   public constructor(
+    /**
+     * Identify the route in request diagnostics.
+     */
     protected readonly route: string,
+
+    /**
+     * Deliver warnings and optional policy decisions through the runtime logger.
+     */
     protected readonly logger: Pick<Logger, 'warn'> & Partial<Pick<Logger, 'info'>> = new Logger(),
   ) {}
 
