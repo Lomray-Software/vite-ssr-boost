@@ -74,7 +74,19 @@ See the [server entry API](/api/server-entry#onresponse) for the full signature.
 
 The Express adapter's render-hook context now includes `request`, the Fetch `Request` used by React Router and the core. Use its `url`, `headers` and `signal` for Fetch-based request handling and cancellation. When constructing typed render-hook contexts in application code or fixtures, include this field.
 
-Managed Express request/render hooks retain the live Express `req` and `res`; keep Express-specific cookies, middleware and response takeover on those objects. `context.request` is available in render hooks, after the adapter converts the request; it is not an Express request and is not added to the earlier managed `onRequest` parameters. Fetch-core hooks use Web-standard requests and responses and do not emulate Express objects.
+`context.request` is available in render hooks, after the adapter converts the request; it is not an Express request and is not added to the earlier managed `onRequest(req, res)` parameters. Fetch-core hooks use Web-standard requests and responses and do not emulate Express objects.
+
+## Deprecated in 8.x
+
+Managed Express `context.req` and `context.res` remain available in 8.x, with removal planned for
+**9.0** after the [support policy](/reference/support) notice periods. Reading either field in
+development emits [`SSR_BOOST_DEPRECATED_REQ_RES`](/reference/diagnostics#ssr_boost_deprecated_req_res)
+once per process. Production has no accessors or warning overhead.
+
+Use `context.request` for request data, `context.response.headers` and `context.response.status`
+for response metadata before shell readiness, and React Router HTTP helpers such as `redirect()`
+in loaders/actions. Keep Express-specific middleware or response takeover in middleware or the
+earlier `onRequest(req, res)` hook; its arguments are unaffected.
 
 ## Check the upgraded application
 

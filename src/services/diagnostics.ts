@@ -2,6 +2,7 @@ import type { StaticHandlerContext } from 'react-router';
 import Logger from '@services/logger';
 
 type TDiagnosticCode =
+  | 'SSR_BOOST_DEPRECATED_REQ_RES'
   | 'SSR_BOOST_LOADER_NOT_SERIALIZABLE'
   | 'SSR_BOOST_STREAM_PROMISE_ABORTED'
   | 'SSR_BOOST_STATE_NOT_SERIALIZABLE'
@@ -184,6 +185,14 @@ class Diagnostics {
       warned.add(message);
       this.logger.warn(message, {});
     }
+  }
+
+  /** Warn once for either legacy Express field, regardless of route or hook. */
+  public deprecatedReqRes(): void {
+    this.warn(
+      'SSR_BOOST_DEPRECATED_REQ_RES',
+      'context.req and context.res are deprecated in 8.x and planned for removal in 9.0; use context.request, context.response.headers/context.response.status and React Router HTTP helpers such as redirect().',
+    );
   }
 
   /**

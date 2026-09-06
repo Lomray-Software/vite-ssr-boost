@@ -13,6 +13,7 @@ import { parse } from '@babel/parser';
 // KB = 1024 bytes. For intentional growth, measure the pinned template again and
 // set this to Math.ceil(measured gzip KB * 1.05); document the reason and new size.
 const TEMPLATE_CLIENT_GZIP_BUDGET_KB = 154;
+const TEMPLATE_HOME_MARKER = 'SPA, SSR, Mobx, Consistent Suspense, Meta tags';
 
 const projectRoot = process.cwd();
 const source = resolve(process.argv[2] ?? join(projectRoot, '..', 'vite-template'));
@@ -25,6 +26,7 @@ const acceptance = {
   baselineTtfb: undefined,
   candidateTtfb: undefined,
   chunks: [],
+  deferred: [],
 };
 const cli = join(directory, 'node_modules', '@lomray', 'vite-ssr-boost', 'cli.js');
 const runtimePath = [
@@ -128,6 +130,7 @@ const inspectStream = (origin, pathname, headers = {}) =>
     const started = performance.now();
     const request = http.get(new URL(pathname, origin), { headers }, (response) => {
       const chunks = [];
+      const chunkTimes = [];
       let firstChunkMs;
       // Count HTML bytes, not the empty gzip header that can hide buffering regressions.
       const decoded =
@@ -136,10 +139,13 @@ const inspectStream = (origin, pathname, headers = {}) =>
       decoded.on('data', (chunk) => {
         firstChunkMs ??= performance.now() - started;
         chunks.push(chunk);
+        chunkTimes.push(performance.now() - started);
       });
       decoded.on('end', () => {
         resolveStream({
           chunks: chunks.length,
+          chunkHtml: chunks.map((chunk) => chunk.toString('utf8')),
+          chunkTimes,
           firstChunkMs,
           html: Buffer.concat(chunks).toString('utf8'),
           status: response.statusCode,
@@ -254,6 +260,52 @@ const verify = async (origin, mode, base = '') => {
     )}ms/${Math.round(streamed.totalMs)}ms); buffered=${buffered.chunks} chunks`,
   );
   acceptance.chunks.push({ mode, streamed: streamed.chunks, buffered: buffered.chunks, gzip: gzipChunks });
+  await verifyDeferred(origin, mode, base);
+  if (process.env.SSR_BOOST_TEMPLATE_BROWSER === '1') {
+    execFileSync(process.execPath, [
+      join(projectRoot, 'node_modules', '@playwright', 'test', 'cli.js'),
+      'test', '--config', 'playwright.template.config.mjs',
+    ], {
+      cwd: projectRoot,
+      env: { ...process.env, TEMPLATE_BROWSER_ORIGIN: `${origin}${base}/` },
+      stdio: 'inherit',
+    });
+  }
+};
+
+const verifyDeferred = async (origin, mode, base) => {
+  const browser = await inspectEarlyStream(origin, `${base}/deferred`, `${mode} deferred`, {
+    'User-Agent': 'Mozilla/5.0',
+  });
+  const first = browser.chunkHtml[0];
+  const later = browser.chunkHtml.slice(1).join('');
+  const init = /window\.__ssrBoostStream[^<]*\.push\(\["init",/;
+  const resolveFrame = /window\.__ssrBoostStream[^<]*\.push\(\["resolve",/;
+  const users = ['Ada Lovelace', 'Grace Hopper', 'Margaret Hamilton'];
+
+  assert.match(first, /<title>Deferred data<\/title>/, `${mode} deferred first-chunk title`);
+  assert.match(first, init, `${mode} deferred first-chunk init frame`);
+  assert.match(first, /SSRBPromise/, `${mode} deferred first-chunk promise placeholder`);
+  assert.doesNotMatch(first, resolveFrame, `${mode} deferred resolved before the shell`);
+  assert.match(later, resolveFrame, `${mode} deferred later resolve frame`);
+  for (const user of users) {
+    assert.ok(!first.includes(user), `${mode} deferred ${user} arrived in the first chunk`);
+    assert.ok(later.includes(`<li>${user}</li>`), `${mode} deferred missing rendered ${user}`);
+  }
+  const resolveIndex = browser.chunkHtml.findIndex((chunk) => resolveFrame.test(chunk));
+  assert.ok(resolveIndex > 0, `${mode} deferred resolve frame must arrive in a later chunk`);
+  const settleMs = browser.chunkTimes[resolveIndex] - browser.firstChunkMs;
+  assert.ok(settleMs > 100, `${mode} deferred resolve frame was buffered with the shell`);
+
+  const bot = await inspectStream(origin, `${base}/deferred`, { 'User-Agent': 'Googlebot' });
+  assert.equal(bot.status, 200, `${mode} deferred Googlebot status`);
+  assert.match(bot.html, /<title>Deferred data<\/title>/);
+  assert.doesNotMatch(bot.html, /<!--\$\?-->/, `${mode} deferred Googlebot pending boundaries`);
+  for (const user of users) {
+    assert.ok(bot.html.includes(`<li>${user}</li>`), `${mode} deferred Googlebot missing ${user}`);
+  }
+  acceptance.deferred.push({ mode, settleMs });
+  console.info(`${mode}: deferred title + init first; resolve + 3 users later; settle ${Math.round(settleMs)}ms; Googlebot resolved, 0 pending boundaries`);
 };
 
 const measureClientGzip = async () => {
@@ -282,6 +334,8 @@ const reportAcceptance = async () => {
     `| Candidate median TTFB | ${milliseconds(acceptance.candidateTtfb)} | advisory |`,
     ...acceptance.chunks.map(({ mode, streamed, buffered, gzip }) =>
       `| ${mode} chunks (streamed / buffered / decoded gzip) | ${streamed} / ${buffered} / ${gzip ?? 'n/a'} | — |`),
+    ...acceptance.deferred.map(({ mode, settleMs }) =>
+      `| ${mode} deferred settle delay (first HTML to resolve frame) | ${milliseconds(settleMs)} | > 100 ms |`),
     '',
   ].join('\n');
   console.info(markdown);
@@ -409,7 +463,8 @@ const verifySpa = async (origin) => {
     const html = await response.text();
     assert.equal(response.status, 200, `SPA ${pathname}`);
     assert.match(html, /id="root"/);
-    assert.doesNotMatch(html, /window\.__staticRouterHydrationData|Welcome to demo app/);
+    assert.doesNotMatch(html, /window\.__staticRouterHydrationData/);
+    assert.ok(!html.includes(TEMPLATE_HOME_MARKER), `SPA ${pathname} contains server-rendered content`);
     const entry = html.match(/<script[^>]+src="([^"]+)"/);
     assert.ok(entry, `SPA ${pathname} has no client entry`);
     const script = await fetch(new URL(entry[1], origin));
@@ -463,8 +518,8 @@ const configureBasename = async () => {
   await edit('vite.config.ts', "root: 'src',", "root: 'src', base: '/acceptance/',");
   await edit(
     'src/client.ts',
-    'init: async () => {',
-    "routerOptions: { basename: '/acceptance' }, init: async () => {",
+    'init: async ({ isSSRMode }) => {',
+    "routerOptions: { basename: '/acceptance' }, init: async ({ isSSRMode }) => {",
   );
   await edit(
     'src/server.ts',
@@ -491,7 +546,7 @@ const configureTypedRoutes = async () => {
 const verifyHmr = async (origin) => {
   const filename = join(directory, 'src', 'pages', 'home', 'index.tsx');
   const original = await readFile(filename, 'utf8');
-  const current = 'SPA, SSR, Mobx, Consistent Suspense, Meta tags';
+  const current = TEMPLATE_HOME_MARKER;
   const marker = 'SSR dev reload accepted';
 
   assert.ok(original.includes(current), 'Template HMR marker source changed.');

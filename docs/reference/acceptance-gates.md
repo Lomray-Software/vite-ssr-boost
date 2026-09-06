@@ -14,13 +14,23 @@ Run these before a release. The same checks run in PR and release CI.
 | `npm run test:template` | Template SSR in dev/production, cold styles, SSR module reload, streamed and crawler HTML, gzip, static JS/CSS, redirects, HEAD, 404, subpath deployment, standalone SPA, client gzip budget and baseline TTFB comparison |
 | `npm run docs:build` | Documentation build and links |
 
-CI pins `vite-template` to `71d859cb1a6faae030fa0a561681a7de4aead810`. Locally, install its dependencies
+CI pins `vite-template` to `d15557c1d03a16a97521d38432a22cd8fe2b95c3`. Locally, install its dependencies
 in `../vite-template`, or pass its path to `node scripts/test-template.mjs`. The script works on a
-copy; it changes only that copy's configuration for the subpath test.
+copy; route typing, HMR edits and subpath configuration changes stay in that copy.
+
+In development, production and production under a basename, `/deferred` must send its title and
+promise placeholder in the first HTML chunk's `__ssrBoostStream` init frame, then a resolve frame
+and the three rendered users in later chunks. A separate Googlebot request must contain the
+resolved lists with zero pending Suspense markers (`<!--$?-->`). The summary records the delay
+from first HTML to the resolve frame; the template's loader waits 1.5 seconds.
 
 Before shipping, also check the template in a browser: hydration and console errors, client navigation,
 Suspense, crawler mode, HMR and SPA deep links. HTTP acceptance checks do not replace browser checks.
 Use `SSR_BOOST_KEEP_TEMPLATE=1 npm run test:template` to retain the test copy for inspection.
+With Chromium installed (`npx playwright install chromium`), run
+`SSR_BOOST_TEMPLATE_BROWSER=1 npm run test:template` to also test the pinned template's deferred
+page in Chromium in all three SSR modes. This checks shell interactivity, both Await/use() lists,
+init/resolve frames and hydration/console errors. Browser failures fail this opt-in gate.
 
 PR and release CI run the full suite on React/React DOM 18.2.0 and 19.2.8. The release waits for
 both versions. Template TTFB comparisons are advisory; early-stream checks retry up to three times
@@ -60,7 +70,7 @@ All sizes below use gzip level 9 and **KB = 1024 bytes**. Comparisons use unroun
 | `helpers/import-route` | 1.937 | 2.50 |
 | `interfaces/fc-route` | 0.091 | 0.25 |
 | Combined | 3.307 (3386 bytes) | 4.307 (4410 bytes) |
-| Template client total | 146.563 | 154 |
+| Template client total | 141.770 | 154 |
 
 The template gate sums the gzip size of each `build/client/assets/*.js` file after the candidate's
 production SSR build, including lazy chunks and framework/application dependencies. It excludes
@@ -71,7 +81,7 @@ use the same 154 KB limit.
 The browser table is printed and appended to `GITHUB_STEP_SUMMARY` when set. Template acceptance
 also prints and appends its client size/budget, production server readiness (process start through
 the first successful HTTP response, including readiness polling), baseline/candidate median TTFB,
-and development/production/subpath chunk counts. Decoded gzip chunks count HTML payload rather
+and development/production/subpath chunk counts and deferred settle delays. Decoded gzip chunks count HTML payload rather
 than gzip headers. Available measurements are reported even if a later acceptance check fails;
 unreached timings are marked `not measured`. Readiness and TTFB remain advisory.
 
