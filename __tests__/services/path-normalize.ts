@@ -33,10 +33,16 @@ describe('PathNormalize', () => {
       '.js',
       '.ts',
       '.tsx',
+      '.jsx',
+      '.mjs',
+      '.mts',
       '/index',
       '/index.js',
       '/index.ts',
       '/index.tsx',
+      '/index.jsx',
+      '/index.mjs',
+      '/index.mts',
     ]);
   });
 

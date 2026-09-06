@@ -1,0 +1,4 @@
+{
+  "client": "import { entry as boot } from '@lomray/vite-ssr-boost/browser/entry';\nimport { list as routes } from './routes';\nvoid boot(App, routes);\n",
+  "routes": "const appRoutes = [{ path: '/about', lazy: () => import('./About') }];\nexport { appRoutes as list };\n"
+}

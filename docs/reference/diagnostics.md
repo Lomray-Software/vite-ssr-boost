@@ -1,5 +1,7 @@
 # Development diagnostics
 
+Run [`ssr-boost doctor`](/api/cli#ssr-boost-doctor) to check project setup before investigating a runtime warning. Use `doctor --json` in automation and `doctor --bundle support.json` to collect versions, route structure, checks and recorded build codes without request data.
+
 Diagnostics catch state serialization and response-hook mistakes before they reach the browser.
 Each distinct warning is logged once per process through the existing logger, with a stable code,
 the affected route/key or file, and a link to its section below; managed development uses your
@@ -20,35 +22,31 @@ responses; invalid file-backed shells always throw, even with diagnostics disabl
 
 ### When it appears
 
-A loader or action returns a Promise, function, Map, Set, WeakMap, WeakSet, BigInt, Symbol, or class
-instance anywhere inside plain objects or arrays. The warning names the React Router route id and
-key path, such as `loaderData["details"].items[0].result`; Dates are reported as “hydrates as a string”,
-and circular references are reported too.
+A loader/action value or streamed resolution contains a function, symbol, unsupported class instance (including WeakMap/WeakSet), or circular reference. The warning identifies its route and key path. Promises, Dates, Maps, Sets, BigInts, RegExps and undefined are supported and do not trigger this warning.
 
 ### Why it matters
 
-Router hydration uses JSON, so a nested Promise or Map becomes `{}` and functions or symbols can
-disappear. BigInts and cycles make serialization throw, while Dates lose their Date methods after
-hydration.
+The [router data codec](/guide/data-streaming#supported-values) restores supported types. Unsupported values become `undefined`; custom class behavior is not transferred. Circular values are preserved within a frame but still warn so route data remains easy to inspect and reuse.
 
 ### How to fix
 
-Await loader data needed for the initial page and return plain JSON data at the reported path.
-Convert collections to arrays or objects, class instances to explicit data fields, and BigInts or
-Dates to strings with deliberate client-side reconstruction; keep streamed work in the application's
-Suspense mechanism instead of placing Promises in router hydration data.
+Return explicit data fields instead of functions or class instances, and remove cycles from your route data. Leave supported slow fields as promises and render them with Suspense and `<Await>` or React 19 `use()`.
+
+## SSR_BOOST_STREAM_PROMISE_ABORTED {#ssr_boost_stream_promise_aborted}
+
+A render timed out or was cancelled with loader/action promises still pending. The diagnostic names the route and pending count. Connected browsers receive rejection scripts before the response closes; cancelled response consumers discard queued frames. Increase `abortDelay` when the work legitimately needs longer, handle rejections with an error boundary, and pass the loader's `request.signal` to outbound fetches. The deadline starts after routing/preparation and also covers promises the React tree never reads. This diagnostic follows the development/explicit diagnostics settings above.
 
 ## SSR_BOOST_STATE_NOT_SERIALIZABLE {#ssr_boost_state_not_serializable}
 
 ### When it appears
 
-The object returned by `getState` contains one of the unsupported values listed above, including
+The object returned by `getState` contains a promise, function, symbol, bigint, Date, collection, class instance or cycle, including
 nested values inside arrays and plain objects. The warning identifies the request route and a path
 such as `$.store.items[0].createdAt`, even when the state builder would otherwise omit the value.
 
 ### Why it matters
 
-Custom state is serialized into browser scripts using JSON just like router state. A server store
+Custom state is serialized into browser scripts using JSON. Its value rules differ from router data. A server store
 containing class instances or collections can therefore hydrate with missing fields or changed types.
 
 ### How to fix

@@ -3,6 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import type { DataRouter, RouteObject } from 'react-router';
 import { createBrowserRouter, matchRoutes, RouterProvider } from 'react-router';
+import receiveStream from '@browser/stream';
 import { IS_SSR_MODE } from '@constants/common';
 import type { TRouteObject } from '@interfaces/route-object';
 
@@ -81,6 +82,7 @@ async function entry<TAppProps>(
     rootId = 'root',
   }: IEntryClientOptions<TAppProps> = {},
 ): Promise<ReactDOM.Root | void> {
+  const stream = IS_SSR_MODE ? receiveStream() : undefined;
   const documentReady = waitForDocument();
   const lazyMatches = matchRoutes(
     routes as RouteObject[],
@@ -110,6 +112,13 @@ async function entry<TAppProps>(
     ]);
   }
 
+  const hydration = Reflect.get(window, '__staticRouterHydrationData') as
+    { __ssrBoostStream?: boolean } | undefined;
+
+  if (stream && hydration?.__ssrBoostStream) {
+    Reflect.set(window, '__staticRouterHydrationData', await stream.ready);
+  }
+
   const router = createRouter(routes as RouteObject[], routerOptions);
   const root = document.getElementById(rootId) as HTMLElement;
   const appProps = (await init?.({ isSSRMode: IS_SSR_MODE, router })) as TAppProps;
@@ -128,3 +137,5 @@ async function entry<TAppProps>(
 }
 
 export default entry;
+
+export { entry };

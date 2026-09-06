@@ -1,7 +1,7 @@
 {
   "name": "@lomray/vite-ssr-boost",
   "version": "1.0.0",
-  "description": "Vite plugin for create awesome SSR or SPA applications on React.",
+  "description": "SSR and streaming for existing Vite + React Router apps in Data mode, without Framework mode",
   "type": "module",
   "exports": {
     "./node/production": {
@@ -32,7 +32,12 @@
     "vite",
     "plugin",
     "react",
-    "ssr"
+    "ssr",
+    "react-router",
+    "server-side-rendering",
+    "data-router",
+    "streaming",
+    "spa"
   ],
   "publishConfig": {
     "access": "public"
@@ -51,7 +56,7 @@
     "build": "rollup -c",
     "build:watch": "rollup -c -w",
     "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
+    "docs:build": "vitepress build docs && node scripts/build-llms.mjs",
     "docs:preview": "vitepress preview docs",
     "release": "npm run build && cd lib && npm publish",
     "lint:check": "eslint . --max-warnings=0",
@@ -64,13 +69,18 @@
     "test:bun": "bun scripts/test-bun.mjs",
     "test:template": "npm run build && node scripts/test-template.mjs",
     "test:coverage": "vitest run --coverage",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:browser": "playwright test --config playwright.config.mjs"
   },
   "dependencies": {
     "chalk": "^6.0.0",
     "commander": "^15.0.0",
+    "devalue": "^5.9.2",
+    "diff": "^9.0.0",
     "hoist-non-react-statics": "^3.3.2",
-    "json5": "^2.2.3"
+    "json5": "^2.2.3",
+    "parse5": "^8.0.1",
+    "semver": "^7.8.5"
   },
   "optionalDependencies": {
     "compression": "^1.8.1",
@@ -86,6 +96,7 @@
     "@lomray/eslint-config": "^7.0.0",
     "@lomray/eslint-config-react": "^7.0.0",
     "@lomray/prettier-config": "^3.0.0",
+    "@playwright/test": "^1.63.0",
     "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^12.3.0",
     "@testing-library/react": "^16.3.3",
@@ -97,6 +108,7 @@
     "@types/node": "^22.20.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "@types/semver": "^7.8.0",
     "@types/serve-static": "^2.2.0",
     "@types/sinon": "^22.0.0",
     "@vitest/coverage-v8": "^5.0.0",

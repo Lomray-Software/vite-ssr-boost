@@ -71,17 +71,19 @@ afterEach(() => {
 
 describe('createHandler diagnostics', () => {
   it.each(['GET', 'POST'])('identifies the route and nested %s data path', async (method) => {
-    const handler = fixture({}, undefined, { items: [{ result: Promise.resolve(1) }] });
+    const handler = fixture({}, undefined, { items: [{ result: () => 1 }] });
     await (await handler(request(method))).text();
     const kind = method === 'POST' ? 'actionData' : 'loaderData';
     expect(messages()).toContain(
-      `[ssr-boost] SSR_BOOST_LOADER_NOT_SERIALIZABLE: Route "${pathname.slice(1)}" at ${kind}["${pathname.slice(1)}"].items[0].result: Promise is not JSON-serializable. See ${docs}ssr_boost_loader_not_serializable`,
+      `[ssr-boost] SSR_BOOST_LOADER_NOT_SERIALIZABLE: Route "${pathname.slice(1)}" at ${kind}["${pathname.slice(1)}"].items[0].result: function is not JSON-serializable. See ${docs}ssr_boost_loader_not_serializable`,
     );
   });
 
-  it('warns about BigInt before JSON serialization throws', async () => {
-    await expect(fixture({}, undefined, { count: 1n })(request())).rejects.toThrow(/BigInt/);
-    expect(messages()[0]).toContain('.count: BigInt is not JSON-serializable');
+  it('supports promises and BigInt without diagnostics', async () => {
+    await (
+      await fixture({}, undefined, { count: 1n, pending: Promise.resolve(1) })(request())
+    ).text();
+    expect(messages()).toEqual([]);
   });
 
   it('checks getState, including values omitted by the state builder', async () => {
@@ -262,7 +264,7 @@ describe('createHandler diagnostics', () => {
     }
   });
 
-  it('emits all six documented codes once across requests and handler instances', async () => {
+  it('deduplicates the six state/output codes across requests and handler instances', async () => {
     pathname = '/diagnostics-proof';
     const options = {
       getHtml: () => ({ header: '<html><head></head><body>', footer: undefined as never }),
@@ -275,7 +277,7 @@ describe('createHandler diagnostics', () => {
     };
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const handler = fixture(options, ['<head></head>', '<main>body</main>'], {
-        pending: Promise.resolve(1),
+        unsupported: () => 1,
       });
       await (await handler(request())).text();
       await (await handler(request())).text();

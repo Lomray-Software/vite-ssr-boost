@@ -37,9 +37,17 @@ The entry starts preloading the matched lazy routes while it waits. It awaits do
 
 The composed response sends the header, the React body stream and then this footer. Assigning router state releases the browser entry's wait, so the custom state must already be available at that point. The entry's `init` callback can then read that state.
 
+## Streamed loader and action data
+
+The [data stream](/guide/data-streaming) publishes stable promise placeholders in router initialization. Settlement scripts can arrive before initialization or the async entry: `window.__ssrBoostStream` buffers frames until its receiver is installed. The entry decodes the initial state and reconstructs native promises before `createRouter`.
+
+In default footer mode, custom state comes first in the footer, followed by the router hydration assignment and encoded initialization. Earlier settlement frames do not release the document wait. The assignment is an internal stream marker until the entry replaces it with decoded state.
+
+With `hydration: 'early'`, custom state and router state are emitted in the shell block before React body bytes. `getState` must already have everything hydration needs at `onShellReady`. The entry waits for React's bootstrap script at the end of the parsed shell before hydrating; it then allows slow boundaries to finish independently. This works across split shell chunks and requires an async client module. `isStream: false` still waits for complete React HTML and resolved data and uses the footer.
+
 ## Custom servers and `onResponse`
 
-Keep the generated footer in the same HTML response, after the React body, and complete the response. Do not send state in a separate request or withhold the final chunk. Replacing the footer through `onShellReady` preserves the generated state scripts and their order.
+Keep the generated state and settlement scripts in the same HTML response and complete it. Default mode keeps hydration state after the React body; early mode sends it with the shell. Do not send state in a separate request or withhold the final chunk. Replacing the footer through `onShellReady` preserves the generated state scripts and their order.
 
 [`src/core/transform-html.ts`](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/src/core/transform-html.ts) applies `onResponse` to decoded HTML chunks:
 

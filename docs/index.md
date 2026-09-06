@@ -10,11 +10,11 @@ hero:
     alt: Vite SSR BOOST logo
   actions:
     - theme: brand
-      text: Create an app
-      link: /guide/getting-started#create-a-new-app
-    - theme: alt
       text: Migrate a SPA
       link: /guide/migrate-existing-spa
+    - theme: alt
+      text: Create an app
+      link: /guide/getting-started#create-a-new-app
     - theme: alt
       text: GitHub
       link: https://github.com/Lomray-Software/vite-ssr-boost
@@ -40,12 +40,13 @@ features:
 
 ## Start with the managed server
 
-Create a new app with `npm create @lomray/ssr-app@latest my-app` to start from the minimal template. For an existing app, add `SsrBoost()` to the Vite plugins, use `@lomray/vite-ssr-boost/browser/entry` in the browser entry and `@lomray/vite-ssr-boost/adapters/express/entry` in the server entry. The CLI handles development, HMR, SSR builds and SPA builds. Use the [Fetch core and runtime adapters](/guide/runtime-adapters) when your application needs to own the transport and its asset integration.
+For an existing app, add `SsrBoost()` to the Vite plugins, use `@lomray/vite-ssr-boost/browser/entry` in the browser entry and `@lomray/vite-ssr-boost/adapters/express/entry` in the server entry. Create a new app with `npm create @lomray/ssr-app@latest my-app` to start from the minimal template. The CLI handles development, HMR, SSR builds and SPA builds. Use the [Fetch core and runtime adapters](/guide/runtime-adapters) when your application needs to own the transport and its asset integration.
 
 ## Read this first
 
 - [Choosing an SSR approach](/guide/choosing) compares routing, data and server ownership.
 - [Migrate an existing SPA](/guide/migrate-existing-spa) shows the five-file change from the minimal template.
+- [Upgrade from 7 to 8](/guide/upgrade-v8) covers changed imports, hooks and the Node requirement.
 - [Example projects](/examples/) describes the template branches.
 - [FAQ](/reference/faq) answers questions about RSC, SPA output and runtimes.
 - [Getting Started](/guide/getting-started) covers installation and entry files.

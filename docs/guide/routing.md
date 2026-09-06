@@ -41,22 +41,33 @@ const routes: RouteObject[] = [
 ];
 ```
 
-The routes array may be typed with `satisfies TRouteObject[]` or `as TRouteObject[]`.
+Arrays and route objects can be wrapped with `satisfies`, `as`, parentheses or non-null assertions. The parser follows default and named import aliases, including `import boot from '.../browser/entry'` and `import { entry as boot } from '.../browser/entry'`. Both call `boot(App, routes)`.
 
-Not recommended for route analysis:
+Shared static objects, literal computed keys, explicit IDs, and imported child arrays are supported:
 
 ```tsx
-const importPath = './pages/home';
+import { childRoutes as children } from './children';
 
-const routes = [
-  {
-    path: '/home',
-    lazy: () => import(importPath),
-  },
-];
+const shared = { handle: { title: 'Account' } };
+export default [
+  { ...shared, ['id']: 'account', path: '/account', children },
+] satisfies import('react-router').RouteObject[];
 ```
 
-If route import detection matters for your build flow, keep lazy imports statically analyzable.
+Object spreads follow JavaScript override order. Static bindings and named re-exports are resolved across local modules and Vite aliases. Explicit `id` values are used for assets; generated IDs retain the original array positions, including below explicitly named parents. Routes without asset imports never renumber their siblings.
+
+Lazy values can be arrow functions or function expressions returning one literal `import()`, with optional `async`/`await` or `.then()` to select the module's `Component`. For example:
+
+```tsx
+{ path: '/account', lazy: async function () { return await import('./pages/account'); } }
+{ path: '/account', lazy: () => import('./pages/account').then(m => ({ Component: m.Account })) }
+```
+
+Runtime route factories, array spreads, computed keys that are not string literals, non-static IDs, cycles, conditional children and non-literal or multiple lazy imports produce one error naming the file, line and construct. Dynamic path helpers remain supported because paths do not select asset modules; doctor represents those paths as `null` in support bundles instead of executing application code.
+
+## Loader and action promises
+
+Return promises for slow fields, such as `{ title, slow: fetchUsers() }`, and render them inside Suspense with `<Await>` or React 19 `use()`. The server streams their settlements and the browser reconstructs promises before router creation. See [Stream loader data](/guide/data-streaming), including `hydration: 'early'` for shell interaction while boundaries are pending. Keep loaders usable in the browser for client navigations.
 
 ## `routesPath`
 

@@ -1,0 +1,11 @@
+/** Codes safe to record in a build support bundle. Never record warning payloads. */
+const DIAGNOSTIC_CODES = [
+  'SSR_BOOST_LOADER_NOT_SERIALIZABLE',
+  'SSR_BOOST_STATE_NOT_SERIALIZABLE',
+  'SSR_BOOST_OUTLET_MISSING',
+  'SSR_BOOST_HYDRATION_STATE_MISSING',
+  'SSR_BOOST_DUPLICATE_OUTPUT',
+  'SSR_BOOST_ONRESPONSE_INVALID_RETURN',
+];
+
+export default DIAGNOSTIC_CODES;

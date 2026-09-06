@@ -2,7 +2,8 @@
  * Detect route file
  */
 const isRoutesFile = (code: string): boolean =>
-  /{.*path:.*(lazy:.+import|Component:|element:)|{.*(lazy:.+import|Component:|element:).*path:/s.test(
+  /(?:\blazy|['"]lazy['"]\s*\]?)\s*:\s*(?:async\s*)?(?:function|\([^)]*\)\s*=>)/s.test(code) ||
+  /{.*(?:path|index)\s*:.*(?:Component|element)\s*:|{.*(?:Component|element)\s*:.*(?:path|index)\s*:/s.test(
     code,
   );
 

@@ -120,24 +120,30 @@ describe('Build internals', () => {
     let exitHandler!: (code: number) => void;
     let closeHandler!: (code: number) => void;
     let errorHandler!: (message: string) => void;
-    let stderrDataHandler!: (buff: Uint8Array) => void;
+    const stderrDataHandlers: ((buff: Uint8Array) => void)[] = [];
     const command = {
       on: vi.fn((event: string, handler: (...args: any[]) => void) => {
         if (event === 'exit') exitHandler = handler as never;
         if (event === 'close') closeHandler = handler as never;
         if (event === 'error') errorHandler = handler as never;
       }),
-      stdout: { pipe: vi.fn() },
+      stdout: { pipe: vi.fn(), on: vi.fn() },
       stderr: {
         pipe: vi.fn(),
         on: vi.fn((event: string, handler: (buff: Uint8Array) => void) => {
-          if (event === 'data') stderrDataHandler = handler;
+          if (event === 'data') stderrDataHandlers.push(handler);
         }),
       },
     };
 
     const result = service.promisifyProcess(command as never, true);
-    stderrDataHandler(new TextEncoder().encode('WARNING found'));
+    stderrDataHandlers.forEach((handler) =>
+      handler(new TextEncoder().encode('WARNING SSR_BOOST_OUTLET_')),
+    );
+    stderrDataHandlers.forEach((handler) =>
+      handler(new TextEncoder().encode('MISSING cookie=secret-build-data')),
+    );
+    expect([...service.diagnosticCodes]).toEqual(['SSR_BOOST_OUTLET_MISSING']);
     exitHandler(0);
     closeHandler(0);
     errorHandler('err');
@@ -173,31 +179,73 @@ describe('Build internals', () => {
     expect(processStopMock).toHaveBeenCalled();
 
     service.runPreviewMode();
-    const listener = stdout.on.mock.calls[0][1];
-    listener(new TextEncoder().encode('built in 123ms'));
+    stdout.on.mock.calls.forEach(([, listener]) =>
+      listener(new TextEncoder().encode('built in 123ms')),
+    );
     expect(createDevMarkerMock).toHaveBeenCalled();
   });
 
-  it('should run full build flow', async () => {
-    const service = prepareService({
-      focusOnly: 'all',
-      isUnlockRobots: true,
-      onFinish: vi.fn(),
-    });
-    vi.spyOn(service, 'makeConfig').mockResolvedValue(undefined);
-    vi.spyOn(service, 'clearBuildFolder').mockImplementation(() => undefined);
-    vi.spyOn(service, 'spawnBuild').mockResolvedValue(undefined);
-    vi.spyOn(service, 'buildManifest').mockImplementation(() => undefined);
-    vi.spyOn(service, 'unlockRobots').mockImplementation(() => undefined);
+  it.each([
+    {
+      label: 'empty',
+      codes: [],
+      expected: '{\n  "codes": []\n}',
+    },
+    {
+      label: 'existing split warning',
+      codes: ['SSR_BOOST_OUTLET_MISSING'],
+      expected: '{\n  "codes": [\n    "SSR_BOOST_OUTLET_MISSING"\n  ]\n}',
+    },
+    {
+      label: 'all known codes in discovery order with duplicates',
+      codes: [
+        'SSR_BOOST_LOADER_NOT_SERIALIZABLE',
+        'SSR_BOOST_STATE_NOT_SERIALIZABLE',
+        'SSR_BOOST_OUTLET_MISSING',
+        'SSR_BOOST_HYDRATION_STATE_MISSING',
+        'SSR_BOOST_DUPLICATE_OUTPUT',
+        'SSR_BOOST_ONRESPONSE_INVALID_RETURN',
+        'SSR_BOOST_OUTLET_MISSING',
+      ],
+      expected: `{
+  "codes": [
+    "SSR_BOOST_DUPLICATE_OUTPUT",
+    "SSR_BOOST_HYDRATION_STATE_MISSING",
+    "SSR_BOOST_LOADER_NOT_SERIALIZABLE",
+    "SSR_BOOST_ONRESPONSE_INVALID_RETURN",
+    "SSR_BOOST_OUTLET_MISSING",
+    "SSR_BOOST_STATE_NOT_SERIALIZABLE"
+  ]
+}`,
+    },
+  ])(
+    'should preserve diagnostic manifest bytes through the full build: $label',
+    async ({ codes, expected }) => {
+      vi.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
+      const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+      const service = prepareService({
+        focusOnly: 'all',
+        isUnlockRobots: true,
+        onFinish: vi.fn(),
+      });
+      vi.spyOn(service, 'makeConfig').mockResolvedValue(undefined);
+      vi.spyOn(service, 'clearBuildFolder').mockImplementation(() => undefined);
+      vi.spyOn(service, 'spawnBuild').mockImplementation(async () => {
+        codes.forEach((code) => service.diagnosticCodes.add(code));
+      });
+      vi.spyOn(service, 'buildManifest').mockImplementation(() => undefined);
+      vi.spyOn(service, 'unlockRobots').mockImplementation(() => undefined);
 
-    await service.build();
+      await service.build();
+      expect(write).toHaveBeenCalledWith('/root/dist/ssr-boost-diagnostics.json', expected);
 
-    expect(viteResetCacheMock).toHaveBeenCalled();
-    expect(service.spawnBuild).toHaveBeenCalled();
-    expect(service.buildManifest).toHaveBeenCalled();
-    expect(service.unlockRobots).toHaveBeenCalled();
-    expect(createDevMarkerMock).toHaveBeenCalled();
-  });
+      expect(viteResetCacheMock).toHaveBeenCalled();
+      expect(service.spawnBuild).toHaveBeenCalled();
+      expect(service.buildManifest).toHaveBeenCalled();
+      expect(service.unlockRobots).toHaveBeenCalled();
+      expect(createDevMarkerMock).toHaveBeenCalled();
+    },
+  );
 
   it('should run manifest builder directly', () => {
     const service = prepareService();
