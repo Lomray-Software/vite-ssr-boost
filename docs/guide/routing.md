@@ -58,6 +58,10 @@ const routes = [
 
 If route import detection matters for your build flow, keep lazy imports statically analyzable.
 
+## Loader and action promises
+
+Return promises for slow fields, such as `{ title, slow: fetchUsers() }`, and render them inside Suspense with `<Await>` or React 19 `use()`. The server streams their settlements and the browser reconstructs promises before router creation. See [Stream loader data](/guide/data-streaming), including `hydration: 'early'` for shell interaction while boundaries are pending. Keep loaders usable in the browser for client navigations.
+
 ## `routesPath`
 
 `routesPath` helps the plugin detect where route declarations live. Use it when your route files are not obvious from the default project shape.

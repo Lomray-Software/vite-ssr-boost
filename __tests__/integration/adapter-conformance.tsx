@@ -6,7 +6,7 @@ import Fastify from 'fastify';
 import { Hono } from 'hono';
 import React, { Suspense } from 'react';
 import type { RouteObject } from 'react-router';
-import { createStaticHandler, redirect } from 'react-router';
+import { Await, createStaticHandler, redirect, useActionData, useLoaderData } from 'react-router';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import adapterEdge from '@adapters/edge';
 import adapterExpress from '@adapters/express';
@@ -33,6 +33,19 @@ interface IRuntimeFactory {
   renderer: TRenderToStream;
 }
 
+const DeferredPage = () => {
+  const action = useActionData() as { slow: Promise<string> } | undefined;
+  const loader = useLoaderData() as { slow: Promise<string> };
+  return (
+    <Suspense fallback={<p>loader fallback</p>}>
+      <Await resolve={(action ?? loader).slow}>{(value) => <p data-deferred>{value}</p>}</Await>
+    </Suspense>
+  );
+};
+const deferredLoader = () => ({
+  slow: new Promise<string>((resolve) => setTimeout(() => resolve('adapter deferred'), 35)),
+});
+
 const Broken = (): never => {
   throw new Error('conformance render failure');
 };
@@ -44,6 +57,7 @@ const Recoverable = () => (
 
 const createSsrHandler = (renderToStream: TRenderToStream, onAbort: () => void): TSsrHandler => {
   const routes: RouteObject[] = [
+    { path: '/deferred', Component: DeferredPage, loader: deferredLoader, action: deferredLoader },
     ...[204, 205, 304].map((status) => ({
       Component: () => <ResponseStatus status={status} />,
       path: `/status-${status}`,
@@ -134,7 +148,7 @@ const createSsrHandler = (renderToStream: TRenderToStream, onAbort: () => void):
           context.response.headers.append('Set-Cookie', 'router=1; Path=/');
         }
 
-        return {};
+        return { isStream: context.request.headers.get('user-agent') !== 'Googlebot' };
       },
       onShellError: ({ error }) => `<p data-shell-error>${error.message}</p>`,
       prepare: async ({ executionContext }) => {
@@ -270,6 +284,22 @@ describe.each(factories)('$name SSR conformance', ({ renderer, start }) => {
 
   afterAll(async () => {
     await runtime.close();
+  });
+
+  it.each(['GET', 'POST'])('transfers deferred %s data through the adapter', async (method) => {
+    const response = await runtime.request('/deferred', { method });
+    const html = await response.text();
+    expect(html).toContain('SSRBPromise');
+    expect(html).toContain('["resolve",0');
+    expect(html).toContain('<p data-deferred');
+    expect(html).toContain('adapter deferred');
+  });
+
+  it('buffers deferred HTML for bots', async () => {
+    const response = await runtime.request('/deferred', { headers: { 'User-Agent': 'Googlebot' } });
+    const html = await response.text();
+    expect(html).toContain('adapter deferred');
+    expect(html).not.toContain('<!--$?-->');
   });
 
   it('streams identical HTML, status, headers and cookies', async () => {

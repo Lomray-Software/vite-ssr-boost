@@ -44,6 +44,8 @@ const renderToStream: TRenderToStream = (node, options) => {
   let hasShellSettled = false;
   let hasAborted = false;
   const rendered = renderToPipeableStream(node, {
+    nonce: options.nonce,
+    bootstrapScriptContent: options.bootstrapScriptContent,
     onAllReady: resolveAll,
     onError: options.onError,
 

@@ -13,3 +13,6 @@ cache
 .env.*
 docs/.vitepress/dist
 docs/.vitepress/cache
+
+playwright-report
+test-results

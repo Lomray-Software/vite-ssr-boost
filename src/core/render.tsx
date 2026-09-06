@@ -6,12 +6,12 @@ import StreamError from '@constants/stream-error';
 import { ServerProvider } from '@context/server';
 import type { IServerContext } from '@context/server';
 import composeHtml from '@core/compose-html';
+import DataStream from '@core/data-stream';
 import headResponse from '@core/head-response';
 import { mergeResponseHeaders } from '@core/headers';
 import transformHtml from '@core/transform-html';
 import type { ISsrExecutionContext } from '@core/types';
 import buildCustomState from '@helpers/build-custom-state';
-import buildRouterState from '@helpers/build-router-state';
 import type { IObtainStreamErrorOut } from '@helpers/obtain-stream-error';
 import obtainStreamError from '@helpers/obtain-stream-error';
 import type Diagnostics from '@services/diagnostics';
@@ -40,6 +40,8 @@ export interface ISsrRequestContext<TAppProps = Record<string, any>> {
 }
 
 export interface IRenderStreamOptions {
+  nonce?: string;
+  bootstrapScriptContent?: string;
   onError: (error: unknown) => void;
   signal: AbortSignal;
 }
@@ -79,6 +81,10 @@ export interface ICoreRenderParams<TAppProps = Record<string, any>> {
 }
 
 export interface ICoreRenderOptions<TAppProps = Record<string, any>> {
+  /** Hydrate the parsed shell while deferred boundaries are still pending. */
+  hydration?: 'early' | 'footer';
+  nonce?: string;
+  bootstrapScriptContent?: string;
   /**
    * React rendering deadline in milliseconds, starting after router preparation.
    */
@@ -157,7 +163,8 @@ const createShellErrorResponse = <TAppProps,>(
  */
 const prepareHtmlResponse = <TAppProps,>(
   context: ISsrRequestContext<TAppProps>,
-  { getState, onShellReady }: ICoreRenderOptions<TAppProps>,
+  { getState, onShellReady, hydration, nonce }: ICoreRenderOptions<TAppProps>,
+  dataStream: DataStream,
 ): IHtmlResponse => {
   const serverResponse = context.serverContext!.response;
 
@@ -169,15 +176,27 @@ const prepareHtmlResponse = <TAppProps,>(
   }
 
   const shell = onShellReady?.({ context }) ?? {};
-  const routerState = buildRouterState(context.routerContext!, context.diagnostics);
-  const customState = buildCustomState(getState?.({ context }), context.diagnostics);
-  const header = shell.header || context.html.header;
+  const isEarly = hydration === 'early' && context.isStream;
+  const customState = buildCustomState(
+    getState?.({ context }),
+    context.diagnostics,
+    nonce,
+    Boolean(isEarly),
+  );
+  let header = shell.header || context.html.header;
   const shellFooter = shell.footer || context.html.footer;
 
   context.diagnostics?.inspectShell({ header, footer: shellFooter });
 
   // Router state unblocks the browser entry, so custom state must already be available.
-  const footer = customState + routerState + shellFooter;
+  let footer = shellFooter;
+
+  if (isEarly) {
+    header += customState + dataStream.state(true);
+  } else {
+    footer = customState + dataStream.state(false) + dataStream.take() + footer;
+  }
+
   const headers = new Headers(context.response.headers);
 
   return { header, footer, headers, status: context.response.status };
@@ -192,6 +211,9 @@ const render = async <TAppProps,>(
   {
     abortDelay = 15_000,
     getState,
+    hydration = 'footer',
+    nonce,
+    bootstrapScriptContent,
     onError,
     onResponse,
     onRouterReady,
@@ -211,8 +233,14 @@ const render = async <TAppProps,>(
   }
 
   context.routerContext = queried;
+  const dataStream = new DataStream(queried, context.diagnostics, nonce);
 
-  await prepare?.({ context, executionContext });
+  try {
+    await prepare?.({ context, executionContext });
+  } catch (error) {
+    dataStream.cancel();
+    throw error;
+  }
 
   const { isStream = true } = (await onRouterReady?.({ context })) ?? {};
 
@@ -271,6 +299,7 @@ const render = async <TAppProps,>(
     abortReason = reason;
     cleanup();
     context.didError ??= StreamError.RenderCancel;
+    dataStream.abort();
     renderController.abort(reason);
     output?.abort(reason);
   };
@@ -291,6 +320,11 @@ const render = async <TAppProps,>(
 
   try {
     output = await renderToStream(node, {
+      nonce,
+      bootstrapScriptContent:
+        hydration === 'early' && isStream
+          ? `(window.__ssrBoostStream = window.__ssrBoostStream || []).push(["shell"]);${bootstrapScriptContent ?? ''};document.currentScript?.remove();`
+          : bootstrapScriptContent,
       /**
        * Classify expected cancellation separately from unexpected React errors.
        */
@@ -320,9 +354,9 @@ const render = async <TAppProps,>(
       output.abort(abortReason);
     }
 
-    void output.allReady.then(clearAbortTimer, clearAbortTimer);
+    void Promise.all([output.allReady, dataStream.done]).then(clearAbortTimer, clearAbortTimer);
 
-    await (isStream ? output.shellReady : output.allReady);
+    await (isStream ? output.shellReady : Promise.all([output.allReady, dataStream.done]));
   } catch (error) {
     abort(error);
     await output?.stream.cancel(error).catch(() => undefined);
@@ -343,10 +377,16 @@ const render = async <TAppProps,>(
       );
     }
 
-    const { header, footer, headers, status } = prepareHtmlResponse(context, {
-      getState,
-      onShellReady,
-    });
+    const { header, footer, headers, status } = prepareHtmlResponse(
+      context,
+      {
+        getState,
+        onShellReady,
+        hydration,
+        nonce,
+      },
+      dataStream,
+    );
 
     if (context.request.method === 'HEAD' || [204, 205, 304].includes(status)) {
       abort();
@@ -358,7 +398,7 @@ const render = async <TAppProps,>(
       });
     }
 
-    const body = composeHtml(header, output.stream, footer, abort, cleanup);
+    const body = composeHtml(header, output.stream, footer, abort, cleanup, dataStream);
     const transformed = transformHtml(
       body,
       onResponse ? (html, isEnd) => onResponse({ context, html, isEnd }) : undefined,

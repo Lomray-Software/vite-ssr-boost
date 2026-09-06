@@ -57,6 +57,7 @@ export default defineConfig({
           { text: 'Choosing an SSR Approach', link: '/guide/choosing' },
           { text: 'Rendering Modes', link: '/guide/rendering-modes' },
           { text: 'Routing', link: '/guide/routing' },
+          { text: 'Stream loader data', link: '/guide/data-streaming' },
           { text: 'Server Lifecycle', link: '/guide/server-lifecycle' },
           { text: 'Runtime Adapters', link: '/guide/runtime-adapters' },
           { text: 'Deployment', link: '/guide/deployment' },

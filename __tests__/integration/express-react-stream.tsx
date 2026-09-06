@@ -6,7 +6,7 @@ import type { PropsWithChildren } from 'react';
 import React, { Suspense } from 'react';
 import express from 'express';
 import compression from 'compression';
-import { redirect } from 'react-router';
+import { Await, redirect, useLoaderData } from 'react-router';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import StreamError from '@constants/stream-error';
 import entry from '@adapters/express/entry';
@@ -134,8 +134,32 @@ describe('Express real React stream contract', () => {
       req.end();
     });
 
+  it('streams loader promises and early hydration through the managed entry', async () => {
+    const { body } = await request('/deferred');
+    expect(body).toContain('managed deferred');
+    expect(body).toContain('SSRBPromise');
+    expect(body).toContain('["resolve",0');
+    expect(body).toContain('["shell"]');
+    expect(body.indexOf('window.__staticRouterHydrationData')).toBeLessThan(body.indexOf('<main>'));
+    expect(body).toContain('nonce="managed-nonce"');
+  });
+
   beforeAll(async () => {
     const prepared = entry(App, [
+      {
+        path: '/deferred',
+        loader: () => ({
+          slow: new Promise<string>((resolve) => setTimeout(() => resolve('managed deferred'), 50)),
+        }),
+        Component: () => {
+          const { slow } = useLoaderData() as { slow: Promise<string> };
+          return (
+            <Suspense fallback={<p>pending loader</p>}>
+              <Await resolve={slow}>{(value) => <p data-loader>{value}</p>}</Await>
+            </Suspense>
+          );
+        },
+      },
       { path: '/timeout', Component: RecoverablePage },
       { path: '/disconnect', Component: RecoverablePage },
       { path: '/multipart', action: multipartAction, Component: () => <p>multipart rendered</p> },
@@ -197,6 +221,8 @@ describe('Express real React stream contract', () => {
         },
         {
           abortDelay: req.path === '/timeout' ? 50 : 2_000,
+          hydration: req.path === '/deferred' ? 'early' : 'footer',
+          nonce: 'managed-nonce',
           ...(req.path === '/multipart'
             ? {
                 getBody: () => {

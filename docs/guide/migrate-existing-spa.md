@@ -145,7 +145,7 @@ Run `npm run develop` for development. Run `npm run build` and then `npm run sta
 
 ## Data loading
 
-Loader results are serialized with `JSON.stringify` into `window.__staticRouterHydrationData`, so a loader must return plain data for the first paint. Nested promises become `{}`; `<Await>` or `use()` cannot hydrate those loader promises. For streamed or deferred data, follow the [prod branch pattern](https://github.com/Lomray-Software/vite-template/tree/prod): component-level Suspense with a request-scoped cache, `getState`, `@lomray/consistent-suspense` and `@lomray/react-mobx-manager`.
+Loader and action promises stream by default in Data mode. Return `{ fast, slow: fetchSlow() }` and consume `slow` inside Suspense with `<Await>` or React 19 `use()`. The browser reconstructs native promises before creating the router; client navigation loaders keep their native promises. See [Stream loader data](/guide/data-streaming) for the supported value matrix, errors and opt-in `hydration: 'early'`. Custom `getState` snapshots still use JSON.
 
 The [users page](https://github.com/Lomray-Software/vite-template/blob/example/minimal/src/pages/users/index.tsx) shows a loader that waits for its data before returning. Keep loader code usable in the browser for client navigation; call an API for server-only operations.
 

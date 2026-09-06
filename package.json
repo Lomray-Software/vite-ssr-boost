@@ -69,11 +69,13 @@
     "test:bun": "bun scripts/test-bun.mjs",
     "test:template": "npm run build && node scripts/test-template.mjs",
     "test:coverage": "vitest run --coverage",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:browser": "playwright test --config playwright.config.mjs"
   },
   "dependencies": {
     "chalk": "^6.0.0",
     "commander": "^15.0.0",
+    "devalue": "^5.9.2",
     "hoist-non-react-statics": "^3.3.2",
     "json5": "^2.2.3"
   },
@@ -91,6 +93,7 @@
     "@lomray/eslint-config": "^7.0.0",
     "@lomray/eslint-config-react": "^7.0.0",
     "@lomray/prettier-config": "^3.0.0",
+    "@playwright/test": "^1.63.0",
     "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^12.3.0",
     "@testing-library/react": "^16.3.3",

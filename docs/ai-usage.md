@@ -29,7 +29,7 @@ A Fetch transport owns its development server, bundling, static assets and route
 
 ## Data loading contract
 
-Loader results are serialized with `JSON.stringify` into `window.__staticRouterHydrationData`, so a loader must return plain data for the first paint. Nested promises become `{}`; `<Await>` or `use()` cannot hydrate those loader promises. For streamed or deferred data, follow the [prod branch pattern](https://github.com/Lomray-Software/vite-template/tree/prod): component-level Suspense with a request-scoped cache, `getState`, `@lomray/consistent-suspense` and `@lomray/react-mobx-manager`.
+Loader and action promises stream by default in Data mode. Return `{ fast, slow: fetchSlow() }` and consume `slow` inside Suspense with `<Await>` or React 19 `use()`. The browser reconstructs native promises before creating the router; client navigation loaders keep their native promises. See [Stream loader data](/guide/data-streaming) for the supported value matrix, errors and opt-in `hydration: 'early'`. Custom `getState` snapshots still use JSON.
 
 ## Application guidance
 
@@ -45,7 +45,8 @@ Loader results are serialized with `JSON.stringify` into `window.__staticRouterH
 
 - The browser entry resolves matched lazy routes and waits for the SSR state before creating the router and hydrating.
 - `data-force-spa="1"` on the root forces SPA mounting.
-- Rendering aborts on timeout or request cancellation.
+- Rendering and pending router promises abort on timeout or request cancellation.
+- Early hydration requires an async client entry and custom state available at `onShellReady`; buffered bot rendering waits for all promises.
 - CLI focus selection uses `--focus-only`; use `--focus-only client` for SPA build and start.
 - Plugin `entrypoint` configures additional build surfaces.
 - The package does not implement RSC, Server Actions or file-system routing conventions.

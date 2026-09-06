@@ -6,7 +6,9 @@ import { build } from 'esbuild';
 // KB means 1024 bytes throughout. Recalibrate only for an intentional size change:
 // per entry = ceil(measured KB * 1.25 * 4) / 4; combined = measured KB + 1.
 const BROWSER_GZIP_BUDGETS_KB = {
-  'browser/entry': 1,
+  // B1: 3127 measured bytes, up from 685. Hard cap: at most 3 KiB growth.
+  'browser/entry': (685 + 3 * 1024) / 1024,
+  'browser/stream': 3.25,
   'components/navigate': 0.5,
   'components/only-client': 0.5,
   'components/render-client': 2.25,
@@ -19,7 +21,7 @@ const BROWSER_GZIP_BUDGETS_KB = {
   'helpers/import-route': 2.5,
   'interfaces/fc-route': 0.25,
 };
-const COMBINED_GZIP_BUDGET_KB = 4410 / 1024; // 3386 measured bytes + 1024 bytes.
+const COMBINED_GZIP_BUDGET_KB = 6817 / 1024; // 5793 measured bytes + 1024 bytes.
 
 const projectRoot = process.cwd();
 const lib = resolve(projectRoot, 'lib');
