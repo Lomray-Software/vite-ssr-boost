@@ -18,6 +18,12 @@ const COLD_START_RATIO = 2;
 const RSS_RATIO = 1.6;
 
 /**
+ * Allow eight MiB of retained heap growth beyond the plain baseline after sustained load;
+ * resident memory is reported but not budgeted because V8 keeps freed pages resident.
+ */
+const RETAINED_GROWTH_ALLOWANCE = 8 * 1024 ** 2;
+
+/**
  * Compare the middle sample without rounding away budget failures.
  */
 const median = (samples) => [...samples].sort((left, right) => left - right)[Math.floor(samples.length / 2)];
@@ -76,7 +82,7 @@ const createProductionMemoryProbe = async (port) => {
       SSR_BOOST_ACCEPTANCE_PORT: String(port),
       SSR_BOOST_ACCEPTANCE_PID: pidFile,
       SSR_BOOST_ACCEPTANCE_MEMORY: memoryFile,
-      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require ${JSON.stringify(hook)}`,
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --expose-gc --require ${JSON.stringify(hook)}`,
     },
 
     /** Remove the private PID and memory samples after the server stops. */
@@ -204,13 +210,28 @@ const measureProductionColdStart = async ({ directory, getPort }) => {
 /**
  * Fail independently on startup latency and resident memory overhead.
  */
-const assertProductionBudgets = ({ coldStart, baselineRss, candidateRss }) => {
+const assertProductionBudgets = ({
+  coldStart,
+  baselineRss,
+  candidateRss,
+  baselineRetained,
+  candidateRetained,
+  baselineLoadRetained,
+  candidateLoadRetained,
+}) => {
   const { candidateMs, baselineMs } = coldStart;
 
   assert.ok(candidateMs <= baselineMs * COLD_START_RATIO,
     `Production cold start ${candidateMs.toFixed(1)} ms exceeds ${COLD_START_RATIO} × plain baseline ${baselineMs.toFixed(1)} ms.`);
   assert.ok(candidateRss <= baselineRss * RSS_RATIO,
     `Production RSS ${(candidateRss / 1024 ** 2).toFixed(2)} MiB exceeds ${RSS_RATIO} × plain baseline ${(baselineRss / 1024 ** 2).toFixed(2)} MiB.`);
+
+  const baselineGrowth = baselineLoadRetained - baselineRetained;
+  const candidateGrowth = candidateLoadRetained - candidateRetained;
+
+  assert.ok(Number.isFinite(baselineGrowth) && Number.isFinite(candidateGrowth), 'Retained heap samples are missing.');
+  assert.ok(candidateGrowth <= baselineGrowth + RETAINED_GROWTH_ALLOWANCE,
+    `Production retained heap growth after 10,000 additional requests ${(candidateGrowth / 1024 ** 2).toFixed(2)} MiB exceeds plain baseline growth ${(baselineGrowth / 1024 ** 2).toFixed(2)} MiB + 8 MiB.`);
 };
 
 export { createProductionMemoryProbe, configureProductionMeasurements, startProductionMeasurement, measureProductionColdStart, assertProductionBudgets };

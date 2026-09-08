@@ -308,7 +308,10 @@ receives chunks in either mode; a chunk is not guaranteed to contain a complete 
 `abortDelay` limits React rendering, starting after loaders and request hooks finish. Pass
 `request.signal` to loader fetches to cancel their work on disconnect. Node, Express and Fastify
 stop quietly if a loader rejects after the client disconnects; other handler errors still reach
-the framework's error handler. Shell failures return 500;
+the framework's error handler. Once the handler finishes writing or cancelling its response,
+these adapters abort the request signal and remove transport listeners, releasing Fetch signal
+followers without waiting for garbage collection. Cleanup uses a `null` abort reason; an earlier
+disconnect keeps its original abort reason. Shell failures return 500;
 errors after the shell has been sent keep the committed status and let React recover on the client.
 HEAD and 204/205/304 responses have no body. Set redirects and statuses before the shell is sent;
 components inside a suspended boundary cannot change headers after that point.

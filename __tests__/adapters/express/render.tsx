@@ -169,6 +169,43 @@ describe('legacy Express render adapter', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  /**
+   * Preserve reusable hook headers while emitting each response's cookies independently.
+   */
+  it('does not consume cookies from Headers shared by a shell hook', async () => {
+    const sharedHeaders = new Headers({ 'X-Shared': 'yes' });
+
+    sharedHeaders.append('Set-Cookie', 'one=1; Path=/');
+    sharedHeaders.append('Set-Cookie', 'two=2; Path=/');
+
+    const { default: coreRender } =
+      await vi.importActual<typeof import('@core/render')>('@core/render');
+    const handler = createStaticHandler([{ path: '*', Component: () => 'BODY' }]);
+
+    for (let index = 0; index < 2; index += 1) {
+      const { config, context, res } = createContext();
+
+      coreRenderMock.mockImplementationOnce(coreRender);
+      writeFetchResponseMock.mockImplementationOnce(async (_, response: Response) => {
+        await response.text();
+      });
+      await render({ App, handler }, config as never, context as never, {
+
+        /**
+         * Reuse application-owned metadata across otherwise independent requests.
+         */
+        onShellReady: ({ context: hookContext }) => {
+          hookContext.response.headers = sharedHeaders;
+
+          return {};
+        },
+      });
+
+      expect(res.getHeaders()['set-cookie']).toEqual(['one=1; Path=/', 'two=2; Path=/']);
+      expect(sharedHeaders.getSetCookie()).toEqual(['one=1; Path=/', 'two=2; Path=/']);
+    }
+  });
+
   it('supports Fetch request and response metadata without a deprecation warning', async () => {
     const { config, context, logger, res } = createContext();
     const { default: coreRender } =

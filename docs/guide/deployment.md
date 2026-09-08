@@ -12,6 +12,24 @@ The package CLI covers the main operational flows:
 - `ssr-boost build-amplify`
 - `ssr-boost build-vercel`
 
+### Choosing a runtime
+
+The managed Express server (`ssr-boost start`) is the convenient default: it supplies the
+production launcher, lifecycle hooks, static files and compression, with opt-in Early Hints.
+
+The [public benchmark's Runtimes section](https://github.com/Lomray-Software/ssr-benchmarks#runtimes)
+serves the same built app through every transport. In that benchmark, the Fetch adapters on
+`node:http`, Fastify and Hono have less overhead than the managed Express server; Bun with
+`Bun.serve`, Hono or Elysia achieves the highest throughput and lowest memory. Compare variants
+within the same run; application work and compression affect the tradeoff.
+
+Custom transports own production startup, static delivery and compression setup, and give up
+the managed production CLI lifecycle and live Express `req`/`res` hooks. You can still use the
+managed CLI for development and builds. The Node and Fastify adapters retain Early Hints when
+the transport supports them and offer opt-in streaming compression. The Hono and Bun Fetch
+paths do not emit Early Hints through these adapters; configure compression in the adapter,
+framework or hosting layer. See [runtime adapters](/guide/runtime-adapters) for integration examples.
+
 ## Build output shape
 
 A normal build creates separate client and server outputs under your Vite `outDir`.
@@ -69,7 +87,9 @@ from timing runs because tracing changes startup costs.
 For repeatable acceptance measurements, run `node scripts/test-template.mjs /path/to/vite-template`
 from the library checkout after `npm run build`. Its cold-start measurement includes the npm
 launcher and waits for a complete HTTP 200, with five fresh processes and 25 ms polling. It also
-samples `process.memoryUsage()` in the listening server after TTFB, without forced GC. Both are
+samples `process.memoryUsage()` in the listening server after TTFB and again after 10,000 additional
+home requests, recording resident memory first and the retained heap after two forced collections.
+Startup, RSS and retained-heap growth are
 compared with a plain ESM Express + `renderToPipeableStream` process using the same installed
 dependencies. See [acceptance gates](/reference/acceptance-gates) for the enforced budgets.
 

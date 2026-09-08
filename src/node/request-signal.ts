@@ -26,11 +26,16 @@ const createRequestSignal = (req: TIncomingMessage, res: TServerResponse): IRequ
   };
 
   /**
-   * Remove transport listeners after the handler finishes.
+   * Release transport listeners and Fetch signal followers when the handler finishes.
    */
   const dispose = (): void => {
     req.off('aborted', abort);
     res.off('close', onClose);
+
+    /**
+     * Completion is not a transport failure and needs no per-request error stack.
+     */
+    controller.abort(null);
   };
 
   req.once('aborted', abort);
