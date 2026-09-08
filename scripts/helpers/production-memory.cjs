@@ -22,10 +22,18 @@ net.Server.prototype.listen = function (...args) {
     fs.writeFileSync(SSR_BOOST_ACCEPTANCE_PID, JSON.stringify({ pid: process.pid }));
 
     /**
-     * Report the server's resident memory without forcing garbage collection.
+     * Report resident memory as-is, then the retained heap after forced collections when GC is exposed.
      */
     process.on('SIGUSR2', () => {
-      fs.writeFileSync(SSR_BOOST_ACCEPTANCE_MEMORY, JSON.stringify({ pid: process.pid, ...process.memoryUsage() }));
+      const sample = { pid: process.pid, ...process.memoryUsage() };
+
+      if (typeof global.gc === 'function') {
+        global.gc();
+        global.gc();
+        sample.afterGc = process.memoryUsage();
+      }
+
+      fs.writeFileSync(SSR_BOOST_ACCEPTANCE_MEMORY, JSON.stringify(sample));
     });
   });
 

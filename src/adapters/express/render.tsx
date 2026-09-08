@@ -131,11 +131,12 @@ const prepareResponse = (context: ISsrRequestContext, res: ExpressResponse): voi
 const syncResponse = (
   context: ISsrRequestContext,
   res: ExpressResponse,
-  previous: ISsrRequestContext['response'],
+  previous?: ISsrRequestContext['response'],
 ): void => {
-  // Apply Fetch metadata edits before reading legacy metadata back. Unchanged
-  // Fetch values must not overwrite edits made through the live Express response.
-  if (!res.headersSent && !res.writableEnded) {
+  /**
+   * Preserve live Express edits when the shell hook leaves Fetch metadata unchanged.
+   */
+  if (previous && !res.headersSent && !res.writableEnded) {
     if (context.response.status !== previous.status) {
       res.status(context.response.status ?? 200);
     }
@@ -230,28 +231,28 @@ async function render(
     abortDelay = 15000,
   }: IRenderOptions,
 ): Promise<void> {
-  const { appProps, html: shellHtml, req, res } = initialContext;
+  const { req, res } = initialContext;
   const Logger = config.getLogger();
   const requestSignal = createRequestSignal(req, res);
+
   try {
-    const context: IRequestContext = Object.assign(initialContext, {
-      request: createRenderRequest(req, requestSignal.signal, getBody),
+    const request = createRenderRequest(req, requestSignal.signal, getBody);
+
+    /**
+     * Share mutable request state with the core so legacy hooks need no field copies.
+     */
+    const context: IRequestContext & ISsrRequestContext = Object.assign(initialContext, {
+      request,
       response: { headers: new Headers() },
-    });
-    const coreContext: ISsrRequestContext = {
-      appProps,
       diagnostics: isDiagnosticsEnabled(!config.isProd)
-        ? new Diagnostics(new URL(context.request.url).pathname, Logger)
+        ? new Diagnostics(new URL(request.url).pathname, Logger)
         : undefined,
-      html: shellHtml,
-      request: context.request,
-      response: context.response,
-    };
+    });
 
     // Keep plain data properties in production, even with diagnostics forced on.
     // Adapter internals retain req/res locals so only consumer reads warn.
-    if (!config.isProd && coreContext.diagnostics) {
-      const { diagnostics } = coreContext;
+    if (!config.isProd && context.diagnostics) {
+      const { diagnostics } = context;
 
       for (const name of ['req', 'res'] as const) {
         let value = context[name];
@@ -271,34 +272,14 @@ async function render(
       }
     }
 
-    const { response: initialResponse } = coreContext;
+    const { response: initialResponse } = context;
 
-    syncResponse(coreContext, res, {
-      headers: new Headers(initialResponse.headers),
-      status: initialResponse.status,
-    });
+    syncResponse(context, res);
 
     if (initialResponse.status === 200) {
       initialResponse.status = undefined;
     }
 
-    /**
-     * Keep legacy hooks attached to their original mutable request context.
-     */
-    const syncContext = (updated: ISsrRequestContext): IRequestContext => {
-      context.request = updated.request;
-      context.response = updated.response;
-      context.didError = updated.didError;
-      context.html = updated.html;
-      context.isStream = updated.isStream;
-      context.isSpa = updated.isSpa;
-      context.matches = updated.matches;
-      context.routerContext = updated.routerContext;
-      context.serverContext = updated.serverContext;
-      context.timeline = updated.timeline;
-
-      return context;
-    };
     const response = await coreRender(
       {
         /**
@@ -312,7 +293,7 @@ async function render(
         spaShell,
         renderToStream,
       },
-      coreContext,
+      context,
       {
         abortDelay,
         hydration,
@@ -325,17 +306,15 @@ async function render(
         /**
          * Read custom state through the legacy request context.
          */
-        getState: getState
-          ? ({ context: updated }) => getState({ context: syncContext(updated) })
-          : undefined,
+        getState: getState ? () => getState({ context }) : undefined,
 
         /**
          * Preserve legacy error hooks and keep expected aborts at info level.
          */
-        onError: ({ context: updated, error }) => {
+        onError: ({ error }) => {
           const { code, message } = error;
 
-          onError?.({ context: syncContext(updated), error });
+          onError?.({ context, error });
           Logger.info(chalk.red(`Stream error. Code: ${code}`));
 
           if (
@@ -359,40 +338,32 @@ async function render(
          * Forward HTML chunks and the end signal through the legacy request context.
          */
         onResponse: onResponse
-          ? ({ context: updated, html, isEnd }) =>
-              onResponse({ context: syncContext(updated), html, isEnd })
+          ? ({ html, isEnd }) => onResponse({ context, html, isEnd })
           : undefined,
 
         /**
          * Expose router state before the legacy hook chooses a rendering mode.
          */
-        onRouterReady: onRouterReady
-          ? ({ context: updated }) => onRouterReady({ context: syncContext(updated) })
-          : undefined,
+        onRouterReady: onRouterReady ? () => onRouterReady({ context }) : undefined,
 
         /**
          * Let the legacy hook replace the default shell-error response.
          */
-        onShellError: onShellError
-          ? ({ context: updated, error }) => onShellError({ context: syncContext(updated), error })
-          : undefined,
+        onShellError: onShellError ? ({ error }) => onShellError({ context, error }) : undefined,
 
         /**
          * Synchronize response metadata around the legacy shell hook.
          */
-        onShellReady: ({ context: updated }) => {
-          const legacyContext = syncContext(updated);
+        onShellReady: () => {
+          prepareResponse(context, res);
 
-          prepareResponse(updated, res);
+          const { response: shellResponse } = context;
+          const { headers, status } = shellResponse;
+          const previous = onShellReady ? { headers: new Headers(headers), status } : undefined;
 
-          const previous = {
-            headers: new Headers(updated.response.headers),
-            status: updated.response.status,
-          };
+          const shell = onShellReady?.({ context });
 
-          const shell = onShellReady?.({ context: legacyContext });
-
-          syncResponse(updated, res, previous);
+          syncResponse(context, res, previous);
 
           return shell ?? {};
         },
@@ -400,13 +371,12 @@ async function render(
         /**
          * Prepare Vite assets and send requested early hints before rendering.
          */
-        prepare: async ({ context: updated, executionContext }) => {
-          const legacyContext = syncContext(updated);
-          const { matches, isSpa } = updated;
+        prepare: async ({ executionContext }) => {
+          const { matches, isSpa, hasEarlyHints } = context;
           const manifest = await getRouteAssets(config, matches, isSpa);
-          const hints = manifest.injectAssets(legacyContext, Boolean(legacyContext.hasEarlyHints));
+          const hints = manifest.injectAssets(context, Boolean(hasEarlyHints));
 
-          if (legacyContext.hasEarlyHints) {
+          if (hasEarlyHints) {
             await emitEarlyHints(executionContext, hints);
           }
         },
@@ -419,8 +389,6 @@ async function render(
         onEarlyHints: (headers) => writeEarlyHints(res, headers),
       },
     );
-
-    syncContext(coreContext);
 
     await writeResponse(res, response);
   } finally {

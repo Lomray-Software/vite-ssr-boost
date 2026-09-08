@@ -49,6 +49,7 @@ Both pinned and `SSR_BOOST_TEMPLATE_CURRENT=1` acceptance enforce these limits i
 | --- | --- |
 | Production cold start | At most **2 ×** the plain baseline median measured in the same run |
 | Production server RSS after TTFB | At most **1.6 ×** the plain baseline RSS measured in the same run |
+| Production retained heap growth after 10,000 additional requests | At most the plain baseline's retained-heap delta **+ 8 MiB**, both measured after forced GC |
 
 The plain baseline is an ESM Express server rendering one React element with
 `react-dom/server`'s `renderToPipeableStream`, using the template's installed Express/React versions.
@@ -60,7 +61,17 @@ caches stay warm, matching the public benchmark's process-cold methodology.
 RSS comes from `process.memoryUsage()` in the listening Node process, immediately after the
 existing TTFB run (two warm-up requests and seven samples). The candidate also exercises the
 existing production HTTP checks before TTFB. The runner records the listening PID and requests a
-sample by signal; it does not measure npm's RSS, add an application endpoint or force GC.
+sample by signal; it does not measure npm's RSS or add an application endpoint, and it records RSS before the forced collections used for the retained-heap rows.
+
+After each server's TTFB sample, the runner completes exactly 10,000 additional `/` requests
+with the TTFB run's browser user agent, identity encoding and ten HTTP/1.1 keep-alive connections,
+consumes every body, then samples memory again in the same process. Every response must be HTTP
+200. Both servers run with `--expose-gc`; each memory sample records resident memory as-is and
+then the heap in use after two forced collections. The budget compares the retained-heap deltas
+(after load minus after TTFB) because resident memory also grows with GC timing and allocator
+high-water marks: a plain Express server gains tens of MiB of RSS over 10,000 requests while its
+retained heap stays flat. The RSS rows after load stay in the summary as advisory values;
+**1 MiB = 1,048,576 bytes**. Use heap snapshots to attribute a retained-heap regression.
 
 The step summary prints both candidate/baseline cold-start medians and RSS values alongside the
 existing advisory **Production server ready** line, which retains the direct CLI spawn and its

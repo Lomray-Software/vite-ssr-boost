@@ -10,6 +10,7 @@ import { createGunzip, gzipSync } from 'node:zlib';
 import { stripVTControlCharacters } from 'node:util';
 import { parse } from '@babel/parser';
 import { createProductionMemoryProbe, configureProductionMeasurements, startProductionMeasurement, measureProductionColdStart, assertProductionBudgets } from './helpers/production-budget.mjs';
+import measureProductionLoad from './helpers/production-load.mjs';
 
 // KB = 1024 bytes. For intentional growth, measure the pinned template again and
 // set this to Math.ceil(measured gzip KB * 1.05); document the reason and new size.
@@ -28,6 +29,12 @@ const acceptance = {
   coldStart: undefined,
   baselineRss: undefined,
   candidateRss: undefined,
+  baselineLoadRss: undefined,
+  candidateLoadRss: undefined,
+  baselineRetained: undefined,
+  candidateRetained: undefined,
+  baselineLoadRetained: undefined,
+  candidateLoadRetained: undefined,
   baselineTtfb: undefined,
   candidateTtfb: undefined,
   baselineDeferredTtfb: undefined,
@@ -368,6 +375,10 @@ const reportAcceptance = async () => {
     `| Production cold start (npm, median of 5) | ${milliseconds(acceptance.coldStart?.candidateMs)} | ≤ 2 × baseline |`,
     `| Plain server RSS after TTFB | ${memory(acceptance.baselineRss)} | baseline |`,
     `| Production server RSS after TTFB | ${memory(acceptance.candidateRss)} | ≤ 1.6 × baseline |`,
+    `| Plain server RSS after 10,000 additional requests | ${memory(acceptance.baselineLoadRss)} | advisory |`,
+    `| Production server RSS after 10,000 additional requests | ${memory(acceptance.candidateLoadRss)} | advisory |`,
+    `| Plain retained heap after GC (after TTFB / after 10,000 requests / delta) | ${memory(acceptance.baselineRetained)} / ${memory(acceptance.baselineLoadRetained)} / ${memory(acceptance.baselineLoadRetained === undefined ? undefined : acceptance.baselineLoadRetained - acceptance.baselineRetained)} | baseline delta |`,
+    `| Production retained heap after GC (after TTFB / after 10,000 requests / delta) | ${memory(acceptance.candidateRetained)} / ${memory(acceptance.candidateLoadRetained)} / ${memory(acceptance.candidateLoadRetained === undefined ? undefined : acceptance.candidateLoadRetained - acceptance.candidateRetained)} | ≤ baseline delta + 8 MiB |`,
     `| Baseline median TTFB | ${milliseconds(acceptance.baselineTtfb)} | advisory |`,
     `| Candidate median TTFB | ${milliseconds(acceptance.candidateTtfb)} | advisory |`,
     `| Baseline /deferred median HTML TTFB | ${milliseconds(acceptance.baselineDeferredTtfb)} | advisory |`,
@@ -796,7 +807,15 @@ try {
     const candidateTtfb = await measureTtfb(origin);
     acceptance.candidateTtfb = candidateTtfb.home;
     acceptance.candidateDeferredTtfb = candidateTtfb.deferred;
-    acceptance.candidateRss = (await memory()).rss;
+    const candidateSample = await memory();
+
+    acceptance.candidateRss = candidateSample.rss;
+    acceptance.candidateRetained = candidateSample.afterGc?.heapUsed;
+    await measureProductionLoad(origin, BROWSER_USER_AGENT);
+    const candidateLoadSample = await memory();
+
+    acceptance.candidateLoadRss = candidateLoadSample.rss;
+    acceptance.candidateLoadRetained = candidateLoadSample.afterGc?.heapUsed;
     const allowedTtfb = baselineTtfb.home + Math.max(35, baselineTtfb.home * 0.5);
 
     if (candidateTtfb.home > allowedTtfb) {
@@ -815,7 +834,15 @@ try {
 
   try {
     await measureTtfb(plain.origin);
-    acceptance.baselineRss = (await plain.memory()).rss;
+    const baselineSample = await plain.memory();
+
+    acceptance.baselineRss = baselineSample.rss;
+    acceptance.baselineRetained = baselineSample.afterGc?.heapUsed;
+    await measureProductionLoad(plain.origin, BROWSER_USER_AGENT);
+    const baselineLoadSample = await plain.memory();
+
+    acceptance.baselineLoadRss = baselineLoadSample.rss;
+    acceptance.baselineLoadRetained = baselineLoadSample.afterGc?.heapUsed;
   } finally {
     await plain.stop();
   }

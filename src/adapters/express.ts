@@ -49,8 +49,11 @@ const adapterExpress = (
         .catch(onError)
         .finally(requestSignal.dispose);
     } catch (error) {
-      requestSignal.dispose();
-      onError(error);
+      try {
+        onError(error);
+      } finally {
+        requestSignal.dispose();
+      }
     }
   };
 };
