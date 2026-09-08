@@ -86,6 +86,8 @@ Deferred router data needs no additional state library. Keep footer hydration by
 
 **Fetch handler.** Import `createHandler` from `@lomray/vite-ssr-boost/core/handler` and connect it through `adapters/node`, `adapters/express`, `adapters/fastify`, `adapters/hono` or `adapters/edge`. Your transport owns the development server, static assets and route-asset injection; follow [Runtime adapters](./docs/guide/runtime-adapters.md) when you need this control.
 
+Both paths are measured weekly in the public [ssr-benchmarks](https://github.com/Lomray-Software/ssr-benchmarks) repository: the same application on vite-ssr-boost, React Router Framework mode, Vike, TanStack Start and Next.js, and a runtime matrix that serves the boost build through Express, `node:http`, Fastify, Hono and Bun. See [Benchmarks](./docs/reference/benchmarks.md) for what is measured and how to reproduce it.
+
 ## Not a fit when
 
 - You need an implementation of React Server Components and Server Actions.
@@ -158,7 +160,7 @@ The [example projects guide](./docs/examples/index.md) explains the wiring in ea
 Test SSR routes without a server with `@lomray/vite-ssr-boost/testing`; see the [Vitest and Playwright guide](https://lomray-software.github.io/vite-ssr-boost/guide/testing).
 
 - [Documentation site](https://lomray-software.github.io/vite-ssr-boost/), [comparison guide](./docs/guide/choosing.md) and [FAQ](./docs/reference/faq.md).
-- [Hydration order and streaming](./docs/reference/hydration-and-streaming.md).
+- [Hydration order and streaming](./docs/reference/hydration-and-streaming.md) and [Benchmarks](./docs/reference/benchmarks.md).
 - API: [Plugin](./docs/api/plugin.md), [Browser entry](./docs/api/browser-entry.md), [Server entry](./docs/api/server-entry.md), [Node production](./docs/api/node-production.md), [Components and helpers](./docs/api/components-and-helpers.md) and [CLI](./docs/api/cli.md).
 
 ## AI agents
