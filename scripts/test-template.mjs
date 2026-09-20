@@ -1,5 +1,15 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { appendFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import {
+  appendFile,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -9,14 +19,21 @@ import assert from 'node:assert/strict';
 import { createGunzip, gzipSync } from 'node:zlib';
 import { stripVTControlCharacters } from 'node:util';
 import { parse } from '@babel/parser';
-import { createProductionMemoryProbe, configureProductionMeasurements, startProductionMeasurement, measureProductionColdStart, assertProductionBudgets } from './helpers/production-budget.mjs';
+import {
+  createProductionMemoryProbe,
+  configureProductionMeasurements,
+  startProductionMeasurement,
+  measureProductionColdStart,
+  assertProductionBudgets,
+} from './helpers/production-budget.mjs';
 import measureProductionLoad from './helpers/production-load.mjs';
 
 // KB = 1024 bytes. For intentional growth, measure the pinned template again and
 // set this to Math.ceil(measured gzip KB * 1.05); document the reason and new size.
 const TEMPLATE_CLIENT_GZIP_BUDGET_KB = 154;
 const TEMPLATE_HOME_MARKER = 'SPA, SSR, Mobx, Consistent Suspense, Meta tags';
-const BROWSER_USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
+const BROWSER_USER_AGENT =
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 
 const projectRoot = process.cwd();
 const source = resolve(process.argv[2] ?? join(projectRoot, '..', 'vite-template'));
@@ -72,7 +89,9 @@ const getPort = async () => {
 };
 
 const recordDiagnostics = (output) => {
-  for (const [, code] of stripVTControlCharacters(output).matchAll(/\b(SSR_BOOST_[A-Z_]+)(?=:|\])/g)) {
+  for (const [, code] of stripVTControlCharacters(output).matchAll(
+    /\b(SSR_BOOST_[A-Z_]+)(?=:|\])/g,
+  )) {
     if (code === 'SSR_BOOST_SSR_POLICY') acceptance.policyInfo += 1;
     else acceptance.diagnosticsWarnings += 1;
   }
@@ -85,8 +104,14 @@ const start = (args, env = {}) => {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
-  child.stdout.on('data', (chunk) => { output += chunk; process.stdout.write(chunk); });
-  child.stderr.on('data', (chunk) => { output += chunk; process.stderr.write(chunk); });
+  child.stdout.on('data', (chunk) => {
+    output += chunk;
+    process.stdout.write(chunk);
+  });
+  child.stderr.on('data', (chunk) => {
+    output += chunk;
+    process.stderr.write(chunk);
+  });
   child.closed = once(child, 'close').then((result) => {
     recordDiagnostics(output);
     return result;
@@ -209,7 +234,8 @@ const measureTtfb = async (origin) => {
   }
 
   /** Keep unrounded medians for the advisory latency comparison. */
-  const median = (values) => values.sort((left, right) => left - right)[Math.floor(values.length / 2)];
+  const median = (values) =>
+    values.sort((left, right) => left - right)[Math.floor(values.length / 2)];
 
   return { home: median(samples['/']), deferred: median(samples['/deferred']) };
 };
@@ -297,17 +323,28 @@ const verify = async (origin, mode, base = '') => {
       streamed.firstChunkMs,
     )}ms/${Math.round(streamed.totalMs)}ms); buffered=${buffered.chunks} chunks`,
   );
-  acceptance.chunks.push({ mode, streamed: streamed.chunks, buffered: buffered.chunks, gzip: gzipChunks });
+  acceptance.chunks.push({
+    mode,
+    streamed: streamed.chunks,
+    buffered: buffered.chunks,
+    gzip: gzipChunks,
+  });
   await verifyDeferred(origin, mode, base);
   if (process.env.SSR_BOOST_TEMPLATE_BROWSER === '1') {
-    execFileSync(process.execPath, [
-      join(projectRoot, 'node_modules', '@playwright', 'test', 'cli.js'),
-      'test', '--config', 'playwright.template.config.mjs',
-    ], {
-      cwd: projectRoot,
-      env: { ...process.env, TEMPLATE_BROWSER_ORIGIN: `${origin}${base}/` },
-      stdio: 'inherit',
-    });
+    execFileSync(
+      process.execPath,
+      [
+        join(projectRoot, 'node_modules', '@playwright', 'test', 'cli.js'),
+        'test',
+        '--config',
+        'playwright.template.config.mjs',
+      ],
+      {
+        cwd: projectRoot,
+        env: { ...process.env, TEMPLATE_BROWSER_ORIGIN: `${origin}${base}/` },
+        stdio: 'inherit',
+      },
+    );
   }
 };
 
@@ -343,27 +380,38 @@ const verifyDeferred = async (origin, mode, base) => {
     assert.ok(bot.html.includes(`<li>${user}</li>`), `${mode} deferred Googlebot missing ${user}`);
   }
   acceptance.deferred.push({ mode, settleMs });
-  console.info(`${mode}: deferred title + init first; resolve + 3 users later; settle ${Math.round(settleMs)}ms; Googlebot resolved, 0 pending boundaries`);
+  console.info(
+    `${mode}: deferred title + init first; resolve + 3 users later; settle ${Math.round(settleMs)}ms; Googlebot resolved, 0 pending boundaries`,
+  );
 };
 
 const measureClientGzip = async () => {
   const assets = join(directory, 'build', 'client', 'assets');
-  const scripts = (await readdir(assets, { withFileTypes: true }))
-    .filter((file) => file.isFile() && file.name.endsWith('.js'));
+  const scripts = (await readdir(assets, { withFileTypes: true })).filter(
+    (file) => file.isFile() && file.name.endsWith('.js'),
+  );
   assert.ok(scripts.length, 'Template production build has no client JavaScript assets.');
-  const sizes = await Promise.all(scripts.map(async (file) =>
-    gzipSync(await readFile(join(assets, file.name)), { level: 9 }).length));
+  const sizes = await Promise.all(
+    scripts.map(
+      async (file) => gzipSync(await readFile(join(assets, file.name)), { level: 9 }).length,
+    ),
+  );
   acceptance.clientGzipKb = sizes.reduce((total, bytes) => total + bytes, 0) / 1024;
-  console.info(`template client gzip total: ${acceptance.clientGzipKb.toFixed(3)} KB / ${TEMPLATE_CLIENT_GZIP_BUDGET_KB} KB budget (${scripts.length} JS assets)`);
-  assert.ok(acceptance.clientGzipKb <= TEMPLATE_CLIENT_GZIP_BUDGET_KB,
-    `Template client gzip size exceeds ${TEMPLATE_CLIENT_GZIP_BUDGET_KB} KB budget.`);
+  console.info(
+    `template client gzip total: ${acceptance.clientGzipKb.toFixed(3)} KB / ${TEMPLATE_CLIENT_GZIP_BUDGET_KB} KB budget (${scripts.length} JS assets)`,
+  );
+  assert.ok(
+    acceptance.clientGzipKb <= TEMPLATE_CLIENT_GZIP_BUDGET_KB,
+    `Template client gzip size exceeds ${TEMPLATE_CLIENT_GZIP_BUDGET_KB} KB budget.`,
+  );
 };
 
 const reportAcceptance = async () => {
-  const milliseconds = (value) => value === undefined ? 'not measured' : `${value.toFixed(3)} ms`;
+  const milliseconds = (value) => (value === undefined ? 'not measured' : `${value.toFixed(3)} ms`);
 
   /** Format resident memory independently of heap size. */
-  const memory = (value) => value === undefined ? 'not measured' : `${(value / 1024 ** 2).toFixed(2)} MiB`;
+  const memory = (value) =>
+    value === undefined ? 'not measured' : `${(value / 1024 ** 2).toFixed(2)} MiB`;
   const markdown = [
     `## Template acceptance (${useCurrentDependencies ? 'current' : 'pinned'} runtime dependencies)`,
     '',
@@ -383,16 +431,21 @@ const reportAcceptance = async () => {
     `| Candidate median TTFB | ${milliseconds(acceptance.candidateTtfb)} | advisory |`,
     `| Baseline /deferred median HTML TTFB | ${milliseconds(acceptance.baselineDeferredTtfb)} | advisory |`,
     `| Candidate /deferred median HTML TTFB | ${milliseconds(acceptance.candidateDeferredTtfb)} | advisory: <= 1.5 × candidate / |`,
-    ...acceptance.chunks.map(({ mode, streamed, buffered, gzip }) =>
-      `| ${mode} chunks (streamed / buffered / decoded gzip) | ${streamed} / ${buffered} / ${gzip ?? 'n/a'} | — |`),
-    ...acceptance.deferred.map(({ mode, settleMs }) =>
-      `| ${mode} deferred settle delay (first HTML to resolve frame) | ${milliseconds(settleMs)} | > 100 ms |`),
+    ...acceptance.chunks.map(
+      ({ mode, streamed, buffered, gzip }) =>
+        `| ${mode} chunks (streamed / buffered / decoded gzip) | ${streamed} / ${buffered} / ${gzip ?? 'n/a'} | — |`,
+    ),
+    ...acceptance.deferred.map(
+      ({ mode, settleMs }) =>
+        `| ${mode} deferred settle delay (first HTML to resolve frame) | ${milliseconds(settleMs)} | > 100 ms |`,
+    ),
     `| SSR_BOOST_SSR_POLICY info lines | ${acceptance.policyInfo} | informational |`,
     `| Other SSR_BOOST_ diagnostics | ${acceptance.diagnosticsWarnings} | 0 |`,
     '',
   ].join('\n');
   console.info(markdown);
-  if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `${markdown}\n`);
+  if (process.env.GITHUB_STEP_SUMMARY)
+    await appendFile(process.env.GITHUB_STEP_SUMMARY, `${markdown}\n`);
 };
 
 const crawlModules = async (origin) => {
@@ -518,7 +571,10 @@ const verifySpa = async (origin) => {
     assert.equal(response.status, 200, `SPA ${pathname}`);
     assert.match(html, /id="root"/);
     assert.doesNotMatch(html, /window\.__staticRouterHydrationData/);
-    assert.ok(!html.includes(TEMPLATE_HOME_MARKER), `SPA ${pathname} contains server-rendered content`);
+    assert.ok(
+      !html.includes(TEMPLATE_HOME_MARKER),
+      `SPA ${pathname} contains server-rendered content`,
+    );
     const entry = html.match(/<script[^>]+src="([^"]+)"/);
     assert.ok(entry, `SPA ${pathname} has no client entry`);
     const script = await fetch(new URL(entry[1], origin));
@@ -530,8 +586,9 @@ const verifySpa = async (origin) => {
 };
 
 const startEjected = (port, env = {}) => {
-  const child = spawn(process.execPath, [join('build', 'server', 'start.js')], {
-    cwd: directory,
+  // A foreign cwd proves the entry finds the build next to itself.
+  const child = spawn(process.execPath, [join(directory, 'build', 'server', 'start.js')], {
+    cwd: tmpdir(),
     env: { ...process.env, PATH: runtimePath, PORT: String(port), ...env },
     stdio: ['ignore', 'inherit', 'inherit'],
   });
@@ -563,7 +620,8 @@ const verifyEjected = async () => {
 };
 
 const verifyIncremental = async (origin, mode) => {
-  const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+  const userAgent =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
   const details = await fetch(`${origin}/details`, { headers: { 'User-Agent': userAgent } });
   const shell = await details.text();
   assert.equal(details.status, 200, `${mode} SPA /details`);
@@ -586,12 +644,16 @@ const verifyIncremental = async (origin, mode) => {
   const botHtml = await bot.text();
   assert.match(botHtml, /window\.__staticRouterHydrationData/);
   assert.doesNotMatch(botHtml, /data-force-spa="1"/);
-  const head = await fetch(`${origin}/details`, { method: 'HEAD', headers: { 'User-Agent': userAgent } });
+  const head = await fetch(`${origin}/details`, {
+    method: 'HEAD',
+    headers: { 'User-Agent': userAgent },
+  });
   assert.equal(head.status, 200);
   assert.equal(await head.text(), '');
-  console.info(`${mode} incremental SSR: /details SPA shell + assets, / SSR, Googlebot /details SSR, HEAD passed`);
+  console.info(
+    `${mode} incremental SSR: /details SPA shell + assets, / SSR, Googlebot /details SSR, HEAD passed`,
+  );
 };
-
 
 /**
  * Prove the packed server can respond without loading source configuration or tooling.
@@ -605,10 +667,23 @@ const verifyProductionImports = async () => {
 
   await writeFile(filename, "throw new Error('Production must not evaluate vite.config.ts');\n");
   await rename(join(directory, 'build'), relocated);
-  const server = start(['start', '--port', String(port), '--build-dir', relocated, '--module-preload', '--host', '--focus-only', 'app'], {
-    NODE_ENV: 'production',
-    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${JSON.stringify(hook)}`,
-  });
+  const server = start(
+    [
+      'start',
+      '--port',
+      String(port),
+      '--build-dir',
+      relocated,
+      '--module-preload',
+      '--host',
+      '--focus-only',
+      'app',
+    ],
+    {
+      NODE_ENV: 'production',
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${JSON.stringify(hook)}`,
+    },
+  );
 
   try {
     const origin = `http://127.0.0.1:${port}`;
@@ -618,7 +693,9 @@ const verifyProductionImports = async () => {
 
     assert.equal(response.status, 200);
     await response.arrayBuffer();
-    console.info('production imports: relocated build + start flags passed; no Vite, CLI command tree, Babel, config evaluation or source-path helpers');
+    console.info(
+      'production imports: relocated build + start flags passed; no Vite, CLI command tree, Babel, config evaluation or source-path helpers',
+    );
   } finally {
     await stop(server);
     await writeFile(filename, original);
@@ -636,14 +713,22 @@ const verifyMissingBuild = async () => {
     let result;
 
     try {
-      execFileSync(process.execPath, [cli, 'start'], { cwd: empty, env: process.env, timeout: 10_000, encoding: 'utf8' });
+      execFileSync(process.execPath, [cli, 'start'], {
+        cwd: empty,
+        env: process.env,
+        timeout: 10_000,
+        encoding: 'utf8',
+      });
       assert.fail('Production started without a build.');
     } catch (error) {
       result = error;
     }
 
     assert.equal(result.status, 1);
-    assert.match(stripVTControlCharacters(String(result.stderr)), /Before starting the server, you need to create a build: ssr-boost build or provide path to build dir: ssr-boost start --build-dir build/);
+    assert.match(
+      stripVTControlCharacters(String(result.stderr)),
+      /Before starting the server, you need to create a build: ssr-boost build or provide path to build dir: ssr-boost start --build-dir build/,
+    );
     console.info('production missing build: existing error preserved');
   } finally {
     await rm(empty, { force: true, recursive: true });
@@ -652,7 +737,8 @@ const verifyMissingBuild = async () => {
 
 const verifyIncrementalServer = async (command) => {
   const port = await getPort();
-  if (command === 'dev') await writeFile(join(directory, '.env.development.local'), `VITE_PORT=${port}\n`);
+  if (command === 'dev')
+    await writeFile(join(directory, '.env.development.local'), `VITE_PORT=${port}\n`);
   const server = start([command, '--port', String(port)], {
     SSR_BOOST_SSR_ROUTES: '!/details',
     SSR_BOOST_DIAGNOSTICS: '1',
@@ -668,9 +754,11 @@ const verifyIncrementalServer = async (command) => {
 
 // Install the publishable package with its dependencies after measuring the original baseline.
 const installCandidate = async () => {
-  execFileSync('npm', [
-    'pack', join(projectRoot, 'lib'), '--ignore-scripts', '--pack-destination', directory,
-  ], { cwd: projectRoot, stdio: 'ignore', env: { ...process.env, HUSKY: '0' } });
+  execFileSync(
+    'npm',
+    ['pack', join(projectRoot, 'lib'), '--ignore-scripts', '--pack-destination', directory],
+    { cwd: projectRoot, stdio: 'ignore', env: { ...process.env, HUSKY: '0' } },
+  );
   const archives = (await readdir(directory)).filter((filename) => filename.endsWith('.tgz'));
 
   assert.equal(archives.length, 1, 'npm pack must produce exactly one archive.');
@@ -679,10 +767,18 @@ const installCandidate = async () => {
   const dependencyRoot = useCurrentDependencies ? projectRoot : directory;
 
   for (const name of [
-    'vite', 'react', 'react-dom', 'react-router',
-    '@babel/generator', '@babel/parser', '@babel/traverse', '@babel/types',
+    'vite',
+    'react',
+    'react-dom',
+    'react-router',
+    '@babel/generator',
+    '@babel/parser',
+    '@babel/traverse',
+    '@babel/types',
   ]) {
-    const metadata = JSON.parse(await readFile(join(dependencyRoot, 'node_modules', name, 'package.json'), 'utf8'));
+    const metadata = JSON.parse(
+      await readFile(join(dependencyRoot, 'node_modules', name, 'package.json'), 'utf8'),
+    );
 
     packages.push(`${name}@${metadata.version}`);
   }
@@ -691,11 +787,15 @@ const installCandidate = async () => {
     packages.push('vite-plugin-devtools-json@1.1.0');
   }
 
-  execFileSync('npm', ['install', '--no-save', '--ignore-scripts', '--no-audit', '--no-fund', ...packages], {
-    cwd: directory,
-    env: { ...process.env, PATH: runtimePath },
-    stdio: 'inherit',
-  });
+  execFileSync(
+    'npm',
+    ['install', '--no-save', '--ignore-scripts', '--no-audit', '--no-fund', ...packages],
+    {
+      cwd: directory,
+      env: { ...process.env, PATH: runtimePath },
+      stdio: 'inherit',
+    },
+  );
   console.info(`Template runtime dependencies: ${packages.slice(1).join(', ')}`);
 };
 
@@ -727,9 +827,15 @@ const configureTypedRoutes = async () => {
   const declarationIndex = original.indexOf(declaration);
   const arrayEnd = original.lastIndexOf('];');
 
-  assert.match(original, /import type \{ TRouteObject \} from '@lomray\/vite-ssr-boost\/interfaces\/route-object'/);
+  assert.match(
+    original,
+    /import type \{ TRouteObject \} from '@lomray\/vite-ssr-boost\/interfaces\/route-object'/,
+  );
   assert.ok(declarationIndex !== -1, 'Template routes declaration changed.');
-  assert.ok(arrayEnd > declarationIndex, 'Template routes array terminator must follow its declaration.');
+  assert.ok(
+    arrayEnd > declarationIndex,
+    'Template routes array terminator must follow its declaration.',
+  );
   const typedRoutes = `${original.slice(0, arrayEnd)}] satisfies TRouteObject[];${original.slice(arrayEnd + 2)}`;
   await writeFile(filename, typedRoutes.replace(declaration, 'const routes = ['));
   console.info('Template routes: satisfies TRouteObject[] enabled for candidate acceptance');
@@ -778,7 +884,10 @@ try {
     await cp(join(source, filename), destination, { recursive: true });
   }
 
-  await cp(join(source, 'node_modules'), join(directory, 'node_modules'), { recursive: true, verbatimSymlinks: true });
+  await cp(join(source, 'node_modules'), join(directory, 'node_modules'), {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
   await configureProductionMeasurements(directory);
 
   await run(['build']);
@@ -794,7 +903,9 @@ try {
     baselineTtfb = await measureTtfb(origin);
     acceptance.baselineTtfb = baselineTtfb.home;
     acceptance.baselineDeferredTtfb = baselineTtfb.deferred;
-    console.info(`baseline production median HTML TTFB: / ${baselineTtfb.home.toFixed(3)}ms; /deferred ${baselineTtfb.deferred.toFixed(3)}ms`);
+    console.info(
+      `baseline production median HTML TTFB: / ${baselineTtfb.home.toFixed(3)}ms; /deferred ${baselineTtfb.deferred.toFixed(3)}ms`,
+    );
   } finally {
     await stop(baseline);
   }
@@ -826,9 +937,16 @@ try {
   await measureClientGzip();
 
   const prodPort = await getPort();
-  const { environment: memoryEnvironment, memory, dispose } = await createProductionMemoryProbe(prodPort);
+  const {
+    environment: memoryEnvironment,
+    memory,
+    dispose,
+  } = await createProductionMemoryProbe(prodPort);
   const prodStarted = performance.now();
-  const prod = start(['start', '--port', String(prodPort)], { ...memoryEnvironment, NODE_ENV: 'production' });
+  const prod = start(['start', '--port', String(prodPort)], {
+    ...memoryEnvironment,
+    NODE_ENV: 'production',
+  });
 
   try {
     const origin = `http://127.0.0.1:${prodPort}`;
@@ -852,18 +970,26 @@ try {
     const allowedTtfb = baselineTtfb.home + Math.max(35, baselineTtfb.home * 0.5);
 
     if (candidateTtfb.home > allowedTtfb) {
-      console.warn(`Advisory: production TTFB exceeded ${Math.round(allowedTtfb)}ms; shared-runner timing does not block release.`);
+      console.warn(
+        `Advisory: production TTFB exceeded ${Math.round(allowedTtfb)}ms; shared-runner timing does not block release.`,
+      );
     }
     console.info(
       `production median HTML TTFB: / ${baselineTtfb.home.toFixed(3)}ms -> ${candidateTtfb.home.toFixed(3)}ms; /deferred ${baselineTtfb.deferred.toFixed(3)}ms -> ${candidateTtfb.deferred.toFixed(3)}ms`,
     );
-    console.info(`Advisory: streamed shell ratio: ${(candidateTtfb.deferred / candidateTtfb.home).toFixed(3)}x / 1.5x target`);
+    console.info(
+      `Advisory: streamed shell ratio: ${(candidateTtfb.deferred / candidateTtfb.home).toFixed(3)}x / 1.5x target`,
+    );
   } finally {
     await stop(prod);
     await dispose();
   }
 
-  const plain = await startProductionMeasurement({ directory, port: await getPort(), baseline: true });
+  const plain = await startProductionMeasurement({
+    directory,
+    port: await getPort(),
+    baseline: true,
+  });
 
   try {
     await measureTtfb(plain.origin);
@@ -881,7 +1007,9 @@ try {
   }
 
   acceptance.coldStart = await measureProductionColdStart({ directory, getPort });
-  console.info(`production cold start samples (ms): plain ${acceptance.coldStart.baseline.map((value) => value.toFixed(1)).join(', ')}; candidate ${acceptance.coldStart.candidate.map((value) => value.toFixed(1)).join(', ')}`);
+  console.info(
+    `production cold start samples (ms): plain ${acceptance.coldStart.baseline.map((value) => value.toFixed(1)).join(', ')}; candidate ${acceptance.coldStart.candidate.map((value) => value.toFixed(1)).join(', ')}`,
+  );
   assertProductionBudgets(acceptance);
 
   await verifyProductionImports();
@@ -922,8 +1050,15 @@ try {
     await stop(spa);
   }
   await verifyEjected();
-  assert.ok(acceptance.policyInfo > 0, 'Incremental SSR must emit policy information with diagnostics enabled.');
-  assert.equal(acceptance.diagnosticsWarnings, 0, 'Template emitted unexpected SSR_BOOST_ diagnostics.');
+  assert.ok(
+    acceptance.policyInfo > 0,
+    'Incremental SSR must emit policy information with diagnostics enabled.',
+  );
+  assert.equal(
+    acceptance.diagnosticsWarnings,
+    0,
+    'Template emitted unexpected SSR_BOOST_ diagnostics.',
+  );
 } finally {
   if (keepTemplate) {
     console.info(`Template retained for browser checks: ${directory}`);

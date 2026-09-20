@@ -115,6 +115,9 @@ describe('Build internals', () => {
     expect(writeFileSync).toHaveBeenCalled();
     // ONLY_CLIENT must reach run-prod through an option it still accepts.
     expect(writeFileSync.mock.calls[1][1]).toContain("focusOnly: ONLY_CLIENT === '1' ? 'client'");
+    expect(writeFileSync.mock.calls[1][1]).toContain(
+      "buildDir: fileURLToPath(new URL('..', import.meta.url))",
+    );
   });
 
   it('should promisify process and detect warnings', async () => {
