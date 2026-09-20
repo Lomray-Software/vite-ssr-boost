@@ -296,7 +296,7 @@ class Build {
         isHost: IS_HOST === '1',
         isPrintInfo: true,
         port: PORT,
-        onlyClient: ONLY_CLIENT === '1',
+        focusOnly: ONLY_CLIENT === '1' ? 'client' : 'app',
       });\n`;
 
     fs.writeFileSync(entrypoint, script, {

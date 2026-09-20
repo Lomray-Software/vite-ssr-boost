@@ -6,6 +6,7 @@ import type { ParseResult } from '@babel/parser';
 import babelTraverse from '@babel/traverse';
 import type * as TraverseTypes from '@babel/traverse';
 import type {
+  ArrayExpression,
   Expression,
   Node as BabelNode,
   File as BabelFile,
@@ -178,16 +179,8 @@ class ParseRoutes {
     const next = new Set([...ancestors, node]);
     const results: TRoutesTree[] = [];
 
-    node.elements.forEach((element, index) => {
-      if (!element) {
-        throw sourceError(file, node, 'empty route array entry; use route objects');
-      }
-
-      if (element.type === 'SpreadElement') {
-        throw sourceError(file, element, 'route array spread; declare array entries explicitly');
-      }
-
-      const properties = sources.properties({ node: element, file });
+    this.arrayEntries(sources, node, file, next).forEach((entry, index) => {
+      const properties = sources.properties(entry);
       const route: TRoutesTree = { index, import: '', children: [] };
       const id = properties.get('id');
       const routePath = properties.get('path');
@@ -245,6 +238,43 @@ class ParseRoutes {
     });
 
     return results;
+  }
+
+  /**
+   * Inline static array spreads so positions match the runtime route ids.
+   */
+  private arrayEntries(
+    sources: SourceFiles,
+    node: ArrayExpression,
+    file: string,
+    ancestors: Set<BabelNode>,
+  ): ISourceValue[] {
+    return node.elements.flatMap((element) => {
+      if (!element) {
+        throw sourceError(file, node, 'empty route array entry; use route objects');
+      }
+
+      if (element.type !== 'SpreadElement') {
+        return [{ node: element, file }];
+      }
+
+      const spread = sources.resolve({ node: element.argument, file });
+
+      if (spread.node.type !== 'ArrayExpression' || ancestors.has(spread.node)) {
+        throw sourceError(
+          file,
+          element.argument,
+          'route array spread; spread a static, non-circular array or use a pathless group route',
+        );
+      }
+
+      return this.arrayEntries(
+        sources,
+        spread.node,
+        spread.file,
+        new Set([...ancestors, spread.node]),
+      );
+    });
   }
 
   private assetPath(specifier: string, file: string): string {
