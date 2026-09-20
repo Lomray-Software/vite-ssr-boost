@@ -393,22 +393,18 @@ export const inspectProject = (options: IDoctorOptions = {}): IDoctorReport => {
 
   check(
     'scripts',
-    'Set dev (or develop)="ssr-boost dev", build="ssr-boost build", start:ssr="ssr-boost start".',
+    'Add scripts that run "ssr-boost dev", "ssr-boost build" and "ssr-boost start"; any script names work.',
     () => {
-      const scripts = pkg.scripts ?? {};
-      const missing = [
-        ['dev', scripts.dev ?? scripts.develop],
-        ['build', scripts.build],
-        ['start', scripts['start:ssr'] ?? scripts.start],
-      ].filter(
-        ([command, value]) =>
-          !new RegExp(`(?:^|\\s)ssr-boost\\s+${command}(?:\\s|$)`).test(value ?? ''),
+      const scripts = Object.values(pkg.scripts ?? {});
+      const missing = ['dev', 'build', 'start'].filter(
+        (command) =>
+          !scripts.some((value) =>
+            new RegExp(`(?:^|\\s)ssr-boost\\s+${command}(?:\\s|$)`).test(value),
+          ),
       );
 
       if (missing.length) {
-        throw new Error(
-          `Scripts missing ssr-boost commands: ${missing.map(([command]) => command).join(', ')}`,
-        );
+        throw new Error(`Scripts missing ssr-boost commands: ${missing.join(', ')}`);
       }
 
       return 'Development, build, and SSR start scripts use ssr-boost';

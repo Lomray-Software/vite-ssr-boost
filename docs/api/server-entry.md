@@ -18,8 +18,9 @@ Options:
 interface IEntryServerOptions<TAppProps> {
   ssr?: ISsrPolicy;
   abortDelay?: number;
-  init?: (params: { config: ServerConfig }) =>
-    IEntrypointOptions<TAppProps> | Promise<IEntrypointOptions<TAppProps>>;
+  init?: (params: {
+    config: ServerConfig;
+  }) => IEntrypointOptions<TAppProps> | Promise<IEntrypointOptions<TAppProps>>;
   loggerProd?: Logger;
   loggerDev?: Logger;
   middlewares?: {
@@ -50,8 +51,7 @@ interface ISsrPolicy {
   mode?: 'all' | 'include' | 'exclude';
   routes?: (string | RegExp)[];
   bots?: 'ssr' | 'policy';
-  decide?: (params: { request: Request; url: URL; isBot: boolean }) =>
-    'ssr' | 'spa' | undefined;
+  decide?: (params: { request: Request; url: URL; isBot: boolean }) => 'ssr' | 'spa' | undefined;
 }
 
 entryServer(App, routes, {
@@ -176,3 +176,21 @@ Set either option to `false` when you want it disabled.
 ## Logging
 
 Use `loggerProd` and `loggerDev` to provide custom Vite-compatible loggers instead of the package default logger.
+
+The default production logger is public, so you can extend it instead of reimplementing the Vite `Logger` interface:
+
+```ts
+import type { LogErrorOptions } from 'vite';
+import Logger from '@lomray/vite-ssr-boost/services/logger';
+
+class JsonLogger extends Logger {
+  public error(msg: string, options?: LogErrorOptions): void {
+    console.error(JSON.stringify({ level: 'error', msg, stack: options?.error?.stack }));
+  }
+}
+
+export default entryServer(App, routes, { loggerProd: new JsonLogger({ logLevel: 2 }) });
+```
+
+Constructor options: `logLevel` (`1` errors, `2` warnings, `3` info, default `3`) and `logFilter(params)`, which returns `true` to drop a record.
+`@lomray/vite-ssr-boost/helpers/serialize-errors` is public too: it serializes React Router errors the same way the built-in renderer does, without stack traces.

@@ -287,6 +287,7 @@ class Build {
   protected eject(): void {
     const entrypoint = `${this.buildDir}/server/start.js`;
     const script =
+      "import { fileURLToPath } from 'node:url';\n" +
       `import runProd from '${PLUGIN_NAME}/cli/run-prod.js';\n\n` +
       'const VERSION = process.env.VERSION || "1.0.0";\n' +
       'const PORT = process.env.PORT || 3000;\n' +
@@ -298,6 +299,7 @@ class Build {
         isPrintInfo: true,
         port: PORT,
         focusOnly: ONLY_CLIENT === '1' ? 'client' : 'app',
+        buildDir: fileURLToPath(new URL('..', import.meta.url)),
       });\n`;
 
     fs.writeFileSync(entrypoint, script, {
