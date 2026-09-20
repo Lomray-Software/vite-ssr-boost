@@ -105,6 +105,6 @@ export function Component() {
 
 The API must authenticate the request; an SSR same-origin fetch does not forward the incoming cookies automatically. Pass only credentials needed by your own API on the server, and keep secrets out of shared route modules. Stream noncritical action fields with an object containing promises and `useActionData`/`Await`, using the same loader contract.
 
-Use `throw new Response('Not found', { status: 404 })` for missing resources and `redirect('/target', 302)` for HTTP redirects. When adding a catch-all component, preserve the template's `ResponseStatus` behavior so the server does not turn missing pages into 200s. Keep static route IDs/arrays and literal lazy imports; do not generate routes with runtime factories or array spreads.
+Use `throw new Response('Not found', { status: 404 })` for missing resources and `redirect('/target', 302)` for HTTP redirects. When adding a catch-all component, preserve the template's `ResponseStatus` behavior so the server does not turn missing pages into 200s. Keep static route IDs/arrays and literal lazy imports; do not generate routes with runtime factories or spreads of non-static arrays (spreading a static array is fine).
 
 See [routing](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/docs/guide/routing.md), [streaming](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/docs/guide/data-streaming.md), and [testing](https://github.com/Lomray-Software/vite-ssr-boost/blob/prod/docs/guide/testing.md).

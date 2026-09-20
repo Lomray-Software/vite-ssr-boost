@@ -63,7 +63,7 @@ Lazy values can be arrow functions or function expressions returning one literal
 { path: '/account', lazy: () => import('./pages/account').then(m => ({ Component: m.Account })) }
 ```
 
-Runtime route factories, array spreads, computed keys that are not string literals, non-static IDs, cycles, conditional children and non-literal or multiple lazy imports produce one error naming the file, line and construct. Dynamic path helpers remain supported because paths do not select asset modules; doctor represents those paths as `null` in support bundles instead of executing application code.
+Array spreads of static arrays (`[...commonRoutes, { ... }]`, local or imported) are inlined at their runtime positions, so generated route IDs match React Router. Runtime route factories, spreads of anything else (conditionals, calls; use a pathless group route instead), computed keys that are not string literals, non-static IDs, cycles, conditional children and non-literal or multiple lazy imports produce one error naming the file, line and construct. Dynamic path helpers remain supported because paths do not select asset modules; doctor represents those paths as `null` in support bundles instead of executing application code.
 
 ## Loader and action promises
 

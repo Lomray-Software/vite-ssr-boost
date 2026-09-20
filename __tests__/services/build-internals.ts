@@ -113,6 +113,8 @@ describe('Build internals', () => {
     expect(rmSync).toHaveBeenCalled();
     expect(readFileSync).toHaveBeenCalled();
     expect(writeFileSync).toHaveBeenCalled();
+    // ONLY_CLIENT must reach run-prod through an option it still accepts.
+    expect(writeFileSync.mock.calls[1][1]).toContain("focusOnly: ONLY_CLIENT === '1' ? 'client'");
   });
 
   it('should promisify process and detect warnings', async () => {
