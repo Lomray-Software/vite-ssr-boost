@@ -73,6 +73,40 @@ describe('ordinary route declarations', () => {
     ]);
   });
 
+  it('inlines static array spreads at the runtime route positions', async () => {
+    const { root, parser, config } = setup();
+    writeFixture(root, 'shared.ts', "export const shared = [{ lazy: () => import('./Shared') }];");
+    writeRouteFixture(root, {
+      routes: `import { shared } from './shared';
+const local = [...shared, { id: 'named', lazy: () => import('./Named') }];
+export default [
+  { path: '/', children: [...shared, { lazy: () => import('./Last') }] },
+  ...local,
+  { lazy: () => import('./About') },
+];`,
+    });
+    const manifest = SsrManifest.get(config) as unknown as {
+      getRoutesTreeIds: (tree: ReturnType<ParseRoutes['parse']>) => Record<string, string>;
+    };
+    const lazy = () => Promise.resolve({});
+    const local = [{ lazy }, { id: 'named', lazy }];
+    const { createStaticHandler } = await import('react-router');
+    const collect = (items: { id: string; lazy?: unknown; children?: never[] }[]): string[] =>
+      items.flatMap(({ id, lazy: isLazy, children = [] }) => [
+        ...(isLazy ? [id] : []),
+        ...collect(children),
+      ]);
+    const { dataRoutes } = createStaticHandler([
+      { path: '/', children: [{ lazy }, { lazy }] },
+      ...local.map((route, index) => ({ ...route, path: `/${index}` })),
+      { path: '/about', lazy },
+    ]);
+
+    expect(Object.keys(manifest.getRoutesTreeIds(parser.parse())).sort()).toEqual(
+      collect(dataRoutes as never).sort(),
+    );
+  });
+
   it.each([
     ['export default makeRoutes();', 'routes array'],
     ['export default [{ ...makeShared() }];', 'object spread'],
@@ -84,7 +118,10 @@ describe('ordinary route declarations', () => {
     ['export default [{ id: Math.random() }];', 'route id'],
     ['const shared = { ...shared }; export default [shared];', 'object spread'],
     ['const routes = [{ children: routes }]; export default routes;', 'routes array'],
-    ['const routes = [...others]; export default routes;', 'route array spread'],
+    ['export default [...makeOthers()];', 'route array spread'],
+    ['export default [...(flag ? [] : [])];', 'route array spread'],
+    ['const routes = [...routes]; export default routes;', 'route array spread'],
+    ['const a = [...b]; const b = [{ children: [...a] }]; export default a;', 'route array spread'],
     ['export default [{ children: missing }];', 'unresolved binding missing'],
     ['const routes = other; const other = routes; export default routes;', 'circular binding'],
     ['export default {};', 'routes array'],
