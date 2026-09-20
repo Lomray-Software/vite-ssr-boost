@@ -12,6 +12,10 @@
       "types": "./node/production.d.ts",
       "default": "./node/production.js"
     },
+    "./logger": {
+      "types": "./logger.d.ts",
+      "default": "./logger.js"
+    },
     "./*.js": {
       "types": "./*.d.ts",
       "default": "./*.js"

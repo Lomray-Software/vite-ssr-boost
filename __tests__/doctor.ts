@@ -1,16 +1,9 @@
 // @vitest-environment node
-import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { copyFixture, writeFixture } from '@__helpers__/project-fixture';
-import runDoctor, {
-  inspectProject,
-  reactCopies,
-  resolveNpmCli,
-  supportBundle,
-  TESTED_MATRIX,
-} from '@cli/doctor';
+import runDoctor, { inspectProject, reactCopies, supportBundle, TESTED_MATRIX } from '@cli/doctor';
 import runInit from '@cli/init';
 import { libraryPackage } from '@cli/project';
 
@@ -40,13 +33,6 @@ const mutate = (root: string, file: string, edit: (text: string) => string) =>
 const check = (root: string, name: string) =>
   inspectProject({ root }).checks.find((row) => row.name === name)!;
 
-beforeEach(() => {
-  vi.spyOn(childProcess, 'execFileSync').mockReturnValue(
-    JSON.stringify({
-      dependencies: { react: { version: '19.2.8' }, 'react-dom': { version: '19.2.8' } },
-    }),
-  );
-});
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
@@ -57,56 +43,6 @@ afterEach(() => {
 });
 
 describe('doctor', () => {
-  it.each([
-    { label: 'npm_execpath before either bundled layout', available: [0, 1, 2], selected: 0 },
-    { label: 'Unix runtime layout before Windows layout', available: [1, 2], selected: 1 },
-    { label: 'Windows runtime layout', available: [2], selected: 2 },
-    { label: 'bare npm only when no CLI exists', available: [], selected: undefined },
-  ])('resolves $label and preserves the React-copy result', ({ available, selected }) => {
-    const candidates = [
-      path.resolve('/npm-execpath/bin/npm-cli.js'),
-      path.join(
-        path.dirname(process.execPath),
-        '..',
-        'lib',
-        'node_modules',
-        'npm',
-        'bin',
-        'npm-cli.js',
-      ),
-      path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    ];
-    vi.stubEnv('npm_execpath', candidates[0]);
-    vi.spyOn(fs, 'existsSync').mockImplementation((file) =>
-      available.some((index) => file === candidates[index]),
-    );
-    const npmCli = selected === undefined ? undefined : candidates[selected];
-    expect(resolveNpmCli()).toBe(npmCli);
-    const root = path.resolve('/app');
-    expect(reactCopies(root)).toEqual({ react: 1, 'react-dom': 1 });
-    const args = ['ls', 'react', 'react-dom', '--json', '--all', '--long'];
-    expect(childProcess.execFileSync).toHaveBeenCalledWith(
-      npmCli ? process.execPath : 'npm',
-      npmCli ? [npmCli, ...args] : args,
-      expect.objectContaining({ cwd: root, shell: false }),
-    );
-  });
-
-  it('uses the runtime npm when npm_execpath is unset', () => {
-    vi.stubEnv('npm_execpath', undefined);
-    const npmCli = path.join(
-      path.dirname(process.execPath),
-      '..',
-      'lib',
-      'node_modules',
-      'npm',
-      'bin',
-      'npm-cli.js',
-    );
-    vi.spyOn(fs, 'existsSync').mockImplementation((file) => file === npmCli);
-    expect(resolveNpmCli()).toBe(npmCli);
-  });
-
   it('keeps the published matrix synchronized with the actual CI matrix', () => {
     const workflow = fs.readFileSync('.github/workflows/react-compatibility.yml', 'utf8');
     const rows = [
@@ -262,27 +198,70 @@ describe('doctor', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('counts physical duplicate React copies, including equal versions, and ignores deduped references', () => {
+  it('counts one React copy in a symlinked pnpm layout and reports a nested duplicate', () => {
     const root = fixture();
-    vi.mocked(childProcess.execFileSync).mockReturnValue(
-      JSON.stringify({
-        dependencies: {
-          react: { version: '19.2.8', path: `${root}/react` },
-          'react-dom': {
-            version: '19.2.8',
-            path: `${root}/dom`,
-            dependencies: { react: { version: '19.2.8', path: `${root}/react` } },
-          },
-          component: { dependencies: { react: { version: '19.2.8', path: `${root}/duplicate` } } },
-        },
-      }),
+    const store = path.join(root, 'node_modules', '.pnpm');
+    const link = (target: string, file: string) => {
+      fs.rmSync(path.join(root, file), { recursive: true, force: true });
+      fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+      fs.symlinkSync(path.join(store, target), path.join(root, file), 'dir');
+    };
+
+    for (const name of ['react', 'react-dom']) {
+      writeFixture(
+        root,
+        `node_modules/.pnpm/${name}@19.2.8/node_modules/${name}/package.json`,
+        JSON.stringify({
+          name,
+          version: '19.2.8',
+          peerDependencies: name === 'react-dom' ? { react: '^19.2.8' } : {},
+        }),
+      );
+      link(`${name}@19.2.8/node_modules/${name}`, `node_modules/${name}`);
+    }
+
+    link(
+      'react@19.2.8/node_modules/react',
+      'node_modules/.pnpm/react-dom@19.2.8/node_modules/react',
     );
-    expect(reactCopies(root)).toEqual({ react: 2, 'react-dom': 1 });
-    expect(check(root, 'react-copies').status).toBe('error');
-    vi.mocked(childProcess.execFileSync).mockImplementation(() => {
-      throw new Error('npm unavailable');
+    expect(reactCopies(root)).toEqual({
+      react: [fs.realpathSync(path.join(store, 'react@19.2.8/node_modules/react'))],
+      'react-dom': [fs.realpathSync(path.join(store, 'react-dom@19.2.8/node_modules/react-dom'))],
     });
-    expect(check(root, 'react-copies').status).toBe('error');
+    expect(check(root, 'react-copies').status).toBe('ok');
+
+    mutate(root, 'package.json', (text) => {
+      const pkg = JSON.parse(text) as { dependencies: Record<string, string> };
+
+      return JSON.stringify({ ...pkg, dependencies: { ...pkg.dependencies, component: '1.0.0' } });
+    });
+    writeFixture(
+      root,
+      'node_modules/component/package.json',
+      JSON.stringify({ name: 'component', version: '1.0.0', dependencies: { react: '19.2.8' } }),
+    );
+    writeFixture(
+      root,
+      'node_modules/component/node_modules/react/package.json',
+      JSON.stringify({ name: 'react', version: '19.2.8' }),
+    );
+    expect(reactCopies(root).react).toHaveLength(2);
+
+    const result = check(root, 'react-copies');
+
+    expect(result.status).toBe('error');
+    expect(result.message).toContain('React copies: 2; React DOM copies: 1');
+    expect(result.message).toContain(
+      path.join('node_modules', 'component', 'node_modules', 'react'),
+    );
+
+    mutate(root, 'vite.config.ts', (text) =>
+      text.replace('plugins:', "resolve: { dedupe: ['react', 'react-dom'] },\n  plugins:"),
+    );
+    expect(check(root, 'react-copies')).toMatchObject({
+      status: 'warn',
+      message: expect.stringContaining('resolve.dedupe keeps one copy') as string,
+    });
   });
 
   it('reports robots policies and size budgets as information without editing them', () => {
