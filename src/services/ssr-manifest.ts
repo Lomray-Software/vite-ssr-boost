@@ -289,6 +289,7 @@ class SsrManifest extends RouteAssets {
 
     const postfixes = this.pathNormalize.getImportPostfix();
     const result: Record<string, IAsset[]> = {};
+    const unresolved: string[] = [];
 
     // find route assets
     Object.entries(routesPaths).forEach(([routeId, routePath]) => {
@@ -300,8 +301,31 @@ class SsrManifest extends RouteAssets {
       const routeFile = `${routePath}${routePostfix || ''}`;
       const routeMeta = manifest[routeFile];
 
+      // No entry and a source file: the route is also imported statically and lives in another chunk.
+      if (!routeMeta && !this.pathNormalize.findAppFile(path.resolve(this.root, routePath ?? ''))) {
+        unresolved.push(`${routeId} (${routePath})`);
+      }
+
       result[routeId] = this.sortAssets(Object.values(this.getRouteAssets(manifest, routeMeta)));
     });
+
+    // A server-only build has no client manifest to check against.
+    if (unresolved.length && Object.keys(manifest).length) {
+      throw new Error(
+        `Lazy routes not found in the client build or on disk: ${unresolved.join(', ')}. ` +
+          'Their CSS and JS would not be linked in the server HTML. Check the lazy import paths and aliases.',
+      );
+    }
+
+    const routes = Object.values(result);
+    const withStyles = routes.filter((assets) =>
+      assets.some(({ url }) => this.getAssetType(url) === AssetType.style),
+    ).length;
+
+    console.info(
+      `Routes manifest: ${routes.length} lazy routes, ${withStyles} with linked CSS, ` +
+        `${routes.filter((assets) => !assets.length).length} without assets of their own`,
+    );
 
     const json = JSON.stringify(result, null, 2);
 
