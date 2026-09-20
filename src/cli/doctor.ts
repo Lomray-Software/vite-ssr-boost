@@ -1,4 +1,3 @@
-import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -48,73 +47,71 @@ export const TESTED_MATRIX = [
   { react: '19.2.8', router: '8.3.1', vite: '8.2.2' },
 ];
 
-interface INpmTree {
-  version?: string;
-  path?: string;
-  deduped?: boolean;
-  dependencies?: Record<string, INpmTree>;
-}
+const PACKAGE_FILE = 'package.json';
 
-/** Prefer npm's own CLI, then the npm bundled beside the current Node runtime. */
-export const resolveNpmCli = (): string | undefined => {
-  const directory = path.dirname(process.execPath);
-  const candidates = [
-    process.env.npm_execpath,
-    path.join(directory, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    path.join(directory, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-  ];
+type TReactCopies = Record<'react' | 'react-dom', Set<string>>;
 
-  return candidates.find((candidate) => candidate && fs.existsSync(candidate));
+/** Resolve a package the way Node does from a directory, ignoring "exports". */
+const packageDirectory = (from: string, name: string): string | undefined => {
+  for (let directory = from; ; directory = path.dirname(directory)) {
+    const candidate = path.join(directory, 'node_modules', name);
+
+    if (fs.existsSync(path.join(candidate, PACKAGE_FILE))) {
+      return fs.realpathSync(candidate);
+    }
+
+    if (directory === path.dirname(directory)) {
+      return undefined;
+    }
+  }
 };
 
-/** Inspect npm's dependency tree, counting physical copies rather than dependants. */
-export const reactCopies = (root: string): { react: number; 'react-dom': number } => {
-  let output: string;
+/**
+ * Count physical React copies reachable from the app's dependencies.
+ * Real paths are compared, so npm, Yarn and symlinked pnpm layouts give the same answer.
+ */
+export const reactCopies = (root: string): { react: string[]; 'react-dom': string[] } => {
+  const copies: TReactCopies = { react: new Set(), 'react-dom': new Set() };
+  const visited = new Set<string>();
+  const visit = (directory: string, names: string[]): void => {
+    for (const name of names) {
+      const location = packageDirectory(directory, name);
 
-  try {
-    const npmCli = resolveNpmCli();
-    const args = ['ls', 'react', 'react-dom', '--json', '--all', '--long'];
-
-    output = childProcess.execFileSync(
-      npmCli ? process.execPath : 'npm',
-      npmCli ? [npmCli, ...args] : args,
-      {
-        cwd: root,
-        shell: false,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 20_000,
-        maxBuffer: 8 * 1024 * 1024,
-      },
-    );
-  } catch (error) {
-    const failed = error as { stdout?: string; signal?: string };
-
-    if (!failed.stdout || failed.signal) {
-      throw new Error(
-        'npm ls failed; install dependencies and rerun npm ls react react-dom --json.',
-      );
-    }
-
-    output = String(failed.stdout);
-  }
-
-  const copies = { react: new Set<string>(), 'react-dom': new Set<string>() };
-  const visit = (node: INpmTree, directory: string): void => {
-    for (const [name, dependency] of Object.entries(node.dependencies ?? {})) {
-      const location = dependency.path ?? path.join(directory, 'node_modules', name);
-
-      if ((name === 'react' || name === 'react-dom') && dependency.version && !dependency.deduped) {
-        copies[name].add(fs.existsSync(location) ? fs.realpathSync(location) : location);
+      if (!location || visited.has(location)) {
+        continue;
       }
 
-      visit(dependency, location);
+      visited.add(location);
+
+      if (name === 'react' || name === 'react-dom') {
+        copies[name].add(location);
+      }
+
+      const { dependencies, peerDependencies } = readPackage(path.join(location, PACKAGE_FILE));
+
+      visit(location, Object.keys({ ...dependencies, ...peerDependencies }));
     }
   };
+  const { dependencies, devDependencies } = readPackage(path.join(root, PACKAGE_FILE));
 
-  visit(JSON.parse(output) as INpmTree, root);
+  visit(fs.realpathSync(root), Object.keys({ ...dependencies, ...devDependencies }));
 
-  return { react: copies.react.size, 'react-dom': copies['react-dom'].size };
+  return { react: [...copies.react], 'react-dom': [...copies['react-dom']] };
+};
+
+/** Packages listed in a statically readable resolve.dedupe; empty when the config cannot be read. */
+const viteDedupe = (root: string): string[] => {
+  try {
+    const resolve = objectProperty(readConfig(root).node, 'resolve');
+    const dedupe =
+      resolve?.type === 'ObjectExpression' ? objectProperty(resolve, 'dedupe') : undefined;
+
+    return dedupe?.type === 'ArrayExpression'
+      ? dedupe.elements.flatMap((element) => stringValue(element ?? undefined) ?? [])
+      : [];
+  } catch {
+    return [];
+  }
 };
 
 /** Match React Router's position-based fallback IDs, even below an explicitly named parent. */
@@ -156,12 +153,12 @@ export const inspectProject = (options: IDoctorOptions = {}): IDoctorReport => {
   let pkg: IPackage = {};
 
   check('package', 'Run doctor in the app directory or set --root.', () => {
-    pkg = readPackage(path.join(root, 'package.json'));
+    pkg = readPackage(path.join(root, PACKAGE_FILE));
 
     return 'package.json is readable';
   });
 
-  const require = createRequire(path.join(root, 'package.json'));
+  const require = createRequire(path.join(root, PACKAGE_FILE));
   const packages = [PLUGIN_NAME, 'react', 'react-dom', 'react-router', 'vite'];
   const ownPackage = libraryPackage();
   const engines: Record<string, string> = { [PLUGIN_NAME]: ownPackage.engines!.node! };
@@ -270,15 +267,40 @@ export const inspectProject = (options: IDoctorOptions = {}): IDoctorReport => {
     },
   );
 
-  check('react-copies', 'Run npm dedupe and align React/React DOM dependency versions.', () => {
-    const copies = reactCopies(root);
+  check(
+    'react-copies',
+    'Align React and React DOM versions across dependencies and workspace packages, then dedupe with your package manager (npm dedupe, pnpm dedupe, yarn dedupe).',
+    () => {
+      const copies = reactCopies(root);
+      const locations = [...copies.react, ...copies['react-dom']];
+      const summary =
+        `React copies: ${copies.react.length}; React DOM copies: ${copies['react-dom'].length} ` +
+        `(${locations.map((location) => path.relative(root, location)).join(', ') || 'none installed'})`;
 
-    if (copies.react !== 1 || copies['react-dom'] !== 1) {
-      throw new Error(`React copies: ${copies.react}; React DOM copies: ${copies['react-dom']}`);
-    }
+      if (copies.react.length === 1 && copies['react-dom'].length === 1) {
+        return 'One physical copy each of React and React DOM';
+      }
 
-    return 'One physical copy each of React and React DOM';
-  });
+      const dedupe = viteDedupe(root);
+
+      // Vite resolves deduped packages from the app root, so bundled code shares one copy.
+      if (
+        !copies.react.length ||
+        !copies['react-dom'].length ||
+        !['react', 'react-dom'].every((name) => dedupe.includes(name))
+      ) {
+        throw new Error(summary);
+      }
+
+      return `${summary}; resolve.dedupe keeps one copy of each in the bundle`;
+    },
+  );
+
+  const copiesCheck = checks[checks.length - 1];
+
+  if (copiesCheck.message.includes('resolve.dedupe')) {
+    copiesCheck.status = 'warn';
+  }
 
   let config: TProjectConfig | undefined;
 
