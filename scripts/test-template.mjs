@@ -529,6 +529,39 @@ const verifySpa = async (origin) => {
   console.info('SPA: root, deep links, fallback and client assets passed');
 };
 
+const startEjected = (port, env = {}) => {
+  const child = spawn(process.execPath, [join('build', 'server', 'start.js')], {
+    cwd: directory,
+    env: { ...process.env, PATH: runtimePath, PORT: String(port), ...env },
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
+  child.closed = once(child, 'close');
+  return child;
+};
+
+// The ejected entry is generated from a string template; boot it so a broken import cannot ship.
+const verifyEjected = async () => {
+  await run(['build', '--eject']);
+
+  for (const [env, check] of [
+    [{}, (origin) => verify(origin, 'production ejected')],
+    [{ ONLY_CLIENT: '1' }, verifySpa],
+  ]) {
+    const port = await getPort();
+    const server = startEjected(port, env);
+
+    try {
+      const origin = `http://127.0.0.1:${port}`;
+
+      await waitUntilReady(origin, server);
+      await check(origin);
+    } finally {
+      await stop(server);
+    }
+  }
+  console.info('Ejected entry: SSR and ONLY_CLIENT=1 passed');
+};
+
 const verifyIncremental = async (origin, mode) => {
   const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
   const details = await fetch(`${origin}/details`, { headers: { 'User-Agent': userAgent } });
@@ -888,6 +921,7 @@ try {
   } finally {
     await stop(spa);
   }
+  await verifyEjected();
   assert.ok(acceptance.policyInfo > 0, 'Incremental SSR must emit policy information with diagnostics enabled.');
   assert.equal(acceptance.diagnosticsWarnings, 0, 'Template emitted unexpected SSR_BOOST_ diagnostics.');
 } finally {

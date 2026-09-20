@@ -6,6 +6,7 @@ import type { ResolvedConfig } from 'vite';
 import { resolveConfig } from 'vite';
 import DIAGNOSTIC_CODES from '@cli/diagnostic-codes';
 import viteResetCache from '@cli/helpers/vite-reset-cache';
+import PLUGIN_NAME from '@constants/plugin-name';
 import createFocusOnly from '@helpers/create-focus-only';
 import { createDevMarker } from '@helpers/dev-marker';
 import type { IPluginConfig } from '@helpers/plugin-config';
@@ -286,7 +287,7 @@ class Build {
   protected eject(): void {
     const entrypoint = `${this.buildDir}/server/start.js`;
     const script =
-      "import runProd from '@lomray/vite-ssr-boost/cli/run-prod.js';\n\n" +
+      `import runProd from '${PLUGIN_NAME}/cli/run-prod.js';\n\n` +
       'const VERSION = process.env.VERSION || "1.0.0";\n' +
       'const PORT = process.env.PORT || 3000;\n' +
       'const IS_HOST = process.env.IS_HOST || "0";\n' +
@@ -310,7 +311,7 @@ class Build {
   protected createServerless(): void {
     const entrypoint = `${this.buildDir}/server/serverless.js`;
     const script =
-      "import runServerless from '@lomray/vite-ssr-boost/cli/run-serverless.js';\n\n" +
+      `import runServerless from '${PLUGIN_NAME}/cli/run-serverless.js';\n\n` +
       `export default await runServerless({ version: process.env.VERSION || "1.0.0" });\n`;
 
     fs.writeFileSync(entrypoint, script, {
