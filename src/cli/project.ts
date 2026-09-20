@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Node, ObjectExpression } from '@babel/types';
+import type { Node, ObjectExpression, ReturnStatement } from '@babel/types';
 import JSON5 from 'json5';
 import { parse as parseHtml } from 'parse5';
 import type { DefaultTreeAdapterTypes } from 'parse5';
@@ -95,8 +95,20 @@ export const readConfig = (root: string) => {
     node = unwrap(node.arguments[0])!;
   }
 
-  if (node?.type === 'ArrowFunctionExpression') {
-    node = unwrap(node.body)!;
+  if (node?.type === 'ArrowFunctionExpression' || node?.type === 'FunctionExpression') {
+    const { body } = node;
+
+    // defineConfig(({ mode }) => { ...; return { ... }; })
+    node =
+      body.type === 'BlockStatement'
+        ? unwrap(
+            body.body
+              .filter(
+                (statement): statement is ReturnStatement => statement.type === 'ReturnStatement',
+              )
+              .pop()?.argument,
+          )!
+        : unwrap(body)!;
   }
 
   if (node?.type !== 'ObjectExpression') {

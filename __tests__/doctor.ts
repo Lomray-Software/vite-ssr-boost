@@ -129,6 +129,26 @@ describe('doctor', () => {
     expect(report.adapter).toBe('express');
   });
 
+  it('reads a function config with a block body and accepts custom script names', () => {
+    const root = fixture();
+    mutate(root, 'vite.config.ts', (code) =>
+      code
+        .replace('defineConfig({', 'defineConfig(({ mode }) => {\n  void mode;\n  return {')
+        .replace(/\}\)\s*$/, '};\n})\n'),
+    );
+    mutate(root, 'package.json', (code) => {
+      const pkg = JSON.parse(code);
+      const { dev, build, 'start:ssr': start, ...scripts } = pkg.scripts;
+      return JSON.stringify({
+        ...pkg,
+        scripts: { ...scripts, 'start:dev': dev, 'build:boost': build, serve: start },
+      });
+    });
+    const { checks, routes } = inspectProject({ root });
+    expect(checks.filter((row) => row.status !== 'ok')).toEqual([]);
+    expect(routes).toHaveLength(2);
+  });
+
   it.each(Object.keys(installed))('reports a missing %s version as an error', (name) => {
     const root = fixture();
     fs.rmSync(path.join(root, 'node_modules', name), { recursive: true });
