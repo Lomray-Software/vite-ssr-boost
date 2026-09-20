@@ -152,8 +152,33 @@ describe('SsrManifest', () => {
 
     manifest.buildRoutesManifest();
 
-    expect(writeFileSync).toHaveBeenCalledWith('/root/dist/server/assets-manifest.json', expect.any(String), { encoding: 'utf-8' });
-    expect(writeFileSync).toHaveBeenCalledWith('/root/dist/client/assets-manifest.json', writeFileSync.mock.calls[0][1], { encoding: 'utf-8' });
+    expect(writeFileSync).toHaveBeenCalledWith(
+      '/root/dist/server/assets-manifest.json',
+      expect.any(String),
+      { encoding: 'utf-8' },
+    );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      '/root/dist/client/assets-manifest.json',
+      writeFileSync.mock.calls[0][1],
+      { encoding: 'utf-8' },
+    );
+  });
+
+  it('fails the build when a lazy route is neither in the client manifest nor on disk', () => {
+    vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+    const manifest = SsrManifest.get(createConfig(), {
+      buildDir: 'dist',
+    }) as unknown as TSsrManifestPrivate;
+    manifest.pathNormalize.getImportPostfix = vi.fn(() => ['', '.ts']);
+    manifest.pathNormalize.getAppPath = vi.fn((val: string) => val);
+    parseMock.mockReturnValue([{ import: 'src/pages/missing', children: [], index: 0 }]);
+    vi.spyOn(manifest, 'loadClientManifest').mockReturnValue({
+      'src/routes': { file: 'route.js' },
+    });
+
+    expect(() => manifest.buildRoutesManifest()).toThrow(
+      'Lazy routes not found in the client build or on disk: 0 (src/pages/missing)',
+    );
   });
 
   it('keeps server-only builds working without a client output directory', () => {
