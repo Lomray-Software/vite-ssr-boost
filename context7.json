@@ -35,7 +35,7 @@
     "For v8, import the default createHandler from @lomray/vite-ssr-boost/core/handler for Fetch-based servers.",
     "For v8, use @lomray/vite-ssr-boost/browser/entry for hydration or SPA mounting.",
     "The @lomray/vite-ssr-boost/node/entry path was removed in 8.0.0. Never generate v8 examples importing it; consult the v7.1.0 index only for v7 applications.",
-    "Use React Router Data mode with route objects. Loader data must be JSON-serializable: nested promises become {}, and Await/use cannot hydrate loader promises."
+    "For v8, loader and action promises stream to the browser by default in Data mode: return them inside the loader result and read them with Suspense and <Await>, or React 19 use(). Nested promises and promises introduced by resolved values are supported; custom getState snapshots still use JSON and must contain no promises or rich values. The v7 line has no promise streaming: loader data there must be JSON-serializable."
   ],
   "previousVersions": [{ "tag": "v7.1.0" }]
 }
