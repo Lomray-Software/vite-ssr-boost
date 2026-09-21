@@ -177,11 +177,11 @@ Set either option to `false` when you want it disabled.
 
 Use `loggerProd` and `loggerDev` to provide custom Vite-compatible loggers instead of the package default logger.
 
-The default production logger is public, so you can extend it instead of reimplementing the Vite `Logger` interface:
+The default production logger is public API under `@lomray/vite-ssr-boost/logger`, so you can extend it instead of reimplementing the Vite `Logger` interface:
 
 ```ts
 import type { LogErrorOptions } from 'vite';
-import Logger from '@lomray/vite-ssr-boost/services/logger';
+import { Logger } from '@lomray/vite-ssr-boost/logger';
 
 class JsonLogger extends Logger {
   public error(msg: string, options?: LogErrorOptions): void {
@@ -193,4 +193,10 @@ export default entryServer(App, routes, { loggerProd: new JsonLogger({ logLevel:
 ```
 
 Constructor options: `logLevel` (`1` errors, `2` warnings, `3` info, default `3`) and `logFilter(params)`, which returns `true` to drop a record.
-`@lomray/vite-ssr-boost/helpers/serialize-errors` is public too: it serializes React Router errors the same way the built-in renderer does, without stack traces.
+The same entry exports `LogLevels`, the `ILoggerOptions` and `ILogParams` types, and `serializeErrors`, which serializes React Router errors the way the built-in renderer does, without stack traces:
+
+```ts
+import { serializeErrors } from '@lomray/vite-ssr-boost/logger';
+```
+
+Import from this entry rather than from `services/*` or `helpers/*`: those paths are internal layout and can move between releases.

@@ -1,17 +1,17 @@
 import type { LogErrorOptions, Logger as ViteLogger, LogOptions } from 'vite';
 
-const LogLevels = {
+export const LogLevels = {
   error: 1,
   warn: 2,
   info: 3,
 };
 
-interface ILoggerOptions {
+export interface ILoggerOptions {
   logLevel?: number;
   logFilter?: (params: ILogParams) => boolean;
 }
 
-interface ILogParams {
+export interface ILogParams {
   level: keyof typeof LogLevels;
   msg?: string;
   options?: LogErrorOptions;
