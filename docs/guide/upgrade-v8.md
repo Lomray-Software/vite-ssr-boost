@@ -90,4 +90,6 @@ earlier `onRequest(req, res)` hook; its arguments are unaffected.
 
 ## Check the upgraded application
 
-Run development and production builds, then check hydration, lazy-route JS/CSS, redirects, unmatched-route 404s, error middleware and any HTML transform. If you use parsed request bodies, streaming or cancellation, exercise those paths too. Loader results must remain JSON-serializable for first-paint hydration; nested promises are not hydrated by `<Await>` or `use()`. See the [data-loading contract](/guide/migrate-existing-spa#data-loading).
+Run development and production builds, then check hydration, lazy-route JS/CSS, redirects, unmatched-route 404s, error middleware and any HTML transform. If you use parsed request bodies, streaming or cancellation, exercise those paths too.
+
+In the current documented release, loader and action promises stream by default. Return deferred fields inside the result object and consume them with Suspense and `<Await>`, or React 19 `use()`. Custom `getState` snapshots still use JSON and must not contain promises or rich values. See [Stream loader data](/guide/data-streaming) for the supported value contract, and consult the matching version documentation for older releases.
