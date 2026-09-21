@@ -208,7 +208,7 @@ export type { ICreateHandlerOptions, IHtmlShell, IRequestInit, ISsrPolicy };
 
 export default createHandler;
 
-export type { IAdmissionOptions, IAdmissionEvent } from '@core/admission';
+export type { IAdmissionOptions, IAdmissionEvent, TAdmissionOverload } from '@core/admission';
 
 export type {
   IRequestGuardOptions,

@@ -7,11 +7,14 @@ export interface IAdmissionEvent {
   durationMs?: number;
 }
 
+export type TAdmissionOverload =
+  'reject' | 'spa' | Response | ((request: Request) => Response | Promise<Response>);
+
 export interface IAdmissionOptions {
   /** Positive safe integer; a valid SSR_MAX_CONCURRENCY overrides this value. */
   maxConcurrency?: number;
   /** Respond immediately at capacity. Default: reject. */
-  overload?: 'reject' | 'spa';
+  overload?: TAdmissionOverload;
   /** Best-effort lifecycle observation. */
   onEvent?: (event: IAdmissionEvent) => void;
 }
@@ -62,7 +65,7 @@ class Admission {
   }
 
   /** Select the immediate overload response. */
-  public get overload(): 'reject' | 'spa' {
+  public get overload(): TAdmissionOverload {
     return this.options.overload ?? 'reject';
   }
 
@@ -162,15 +165,25 @@ class Admission {
   }
 
   /** Minimal overload response, including HEAD semantics. */
-  public reject(request: Request): Response {
-    return new Response(request.method === 'HEAD' ? null : 'Service Unavailable', {
-      status: 503,
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'private, no-store',
-        'Retry-After': '1',
-      },
+  public async reject(request: Request): Promise<Response> {
+    const { overload } = this;
+    const headers = new Headers({
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'private, no-store',
+      'Retry-After': '1',
     });
+    let body: BodyInit | null = 'Service Unavailable';
+
+    // A branded overload page keeps its own type and headers, but stays a private 503.
+    if (typeof overload === 'function' || overload instanceof Response) {
+      const custom = (typeof overload === 'function' ? await overload(request) : overload).clone();
+
+      custom.headers.forEach((value, name) => headers.set(name, value));
+      headers.set('Cache-Control', 'private, no-store');
+      body = await custom.arrayBuffer();
+    }
+
+    return new Response(request.method === 'HEAD' ? null : body, { status: 503, headers });
   }
 
   /** Instrumentation must not interrupt rendering or release. */

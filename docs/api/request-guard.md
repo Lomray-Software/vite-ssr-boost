@@ -24,7 +24,7 @@ Checks run before `onRequest`, HTML loading, SSR policy and route loaders. The f
 | `blockDotfiles`            | `true`                    | Blocks dotfile segments such as `/.env` and `/.git/config`; `/.well-known/*` is exempt                                   |
 | `notFound`                 | `'render'`                | Missing-route behavior below                                                                                             |
 | `admission.maxConcurrency` | unset                     | No controller, counters, listeners or timers unless enabled by this option or a valid environment override               |
-| `admission.overload`       | `'reject'`                | Immediate overload response; no queue                                                                                    |
+| `admission.overload`       | `'reject'`                | Immediate overload response, no queue: `'reject'`, `'spa'`, a `Response` or a function returning one                     |
 
 Invalid percent encoding, control characters, backslashes, doubled slashes and `.`/`..` segments are rejected before and after decoding. Node, Express and Fastify preserve raw targets before Fetch URL normalization. Fetch-native transports can only validate the URL their runtime exposes; a previously normalized target cannot be recovered.
 
@@ -86,7 +86,7 @@ A valid `SSR_MAX_CONCURRENCY` overrides the configured limit. It is read once at
 
 A slot is acquired after the request hook and the SSR/SPA decision, before route loaders run, so a rejected request costs neither a render nor backend calls. Guard rejections, SPA shells, cached hits and request-hook bypasses do not acquire slots. Slots release exactly once on completion of the final response stream, cancellation/disconnect, loader or render failure, HEAD/bodyless responses and redirects.
 
-At capacity, `'reject'` returns a plain 503 `Service Unavailable`, `Retry-After: 1` and `private, no-store`. `'spa'` returns the SPA shell with 200 for humans, so the client router takes over; detected bots still receive the plain 503. Events are `admitted`, `rejected`, `finish`, `abort`, and `error`; terminal events include `durationMs`. Throwing event hooks do not affect responses.
+At capacity, `'reject'` returns a plain 503 `Service Unavailable`, `Retry-After: 1` and `private, no-store`. `'spa'` returns the SPA shell with 200 for humans, so the client router takes over; detected bots still receive the plain 503. A `Response`, or `(request) => Response | Promise<Response>`, serves your own overload page: it keeps its body, content type and headers, and is always sent as a 503 with `Retry-After: 1` and `private, no-store`. Keep that page static; it is served exactly when the server has no capacity to render. Events are `admitted`, `rejected`, `finish`, `abort`, and `error`; terminal events include `durationMs`. Throwing event hooks do not affect responses.
 
 ## Hardening preset
 

@@ -52,13 +52,13 @@ describe('Admission (ported reference lifecycle)', () => {
 
   it('returns a minimal no-store overload response', async () => {
     const controller = new Admission(1);
-    const response = controller.reject(documentRequest());
+    const response = await controller.reject(documentRequest());
     expect(response.status).toBe(503);
     expect(await response.text()).toBe('Service Unavailable');
     expect(response.headers.get('Retry-After')).toBe('1');
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(response.headers.get('Content-Type')).toBe('text/plain; charset=utf-8');
-    expect(controller.reject(documentRequest('/', { method: 'HEAD' })).body).toBeNull();
+    expect((await controller.reject(documentRequest('/', { method: 'HEAD' }))).body).toBeNull();
   });
 
   it.each([0, -1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1])(
@@ -258,6 +258,31 @@ describe('real render admission', () => {
     );
     expect(bot.status).toBe(503);
     expect(await bot.text()).toBe('Service Unavailable');
+    expect(fixture.renderToStream).toHaveBeenCalledOnce();
+    await first.text();
+  });
+
+  it('serves a custom overload page as a private 503 for every consumer', async () => {
+    const overload = vi.fn(
+      () =>
+        new Response('<h1>Busy</h1>', {
+          headers: { 'Content-Type': 'text/html', 'X-Page': 'busy' },
+        }),
+    );
+    const fixture = handlerFixture({ admission: { maxConcurrency: 1, overload } });
+    const first = await fixture.fetch(documentRequest());
+
+    for (const method of ['GET', 'HEAD']) {
+      const response = await fixture.fetch(documentRequest('/', { method }));
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get('Content-Type')).toBe('text/html');
+      expect(response.headers.get('X-Page')).toBe('busy');
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(response.headers.get('Retry-After')).toBe('1');
+      expect(await response.text()).toBe(method === 'HEAD' ? '' : '<h1>Busy</h1>');
+    }
+
     expect(fixture.renderToStream).toHaveBeenCalledOnce();
     await first.text();
   });
