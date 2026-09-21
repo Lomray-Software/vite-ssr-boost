@@ -13,6 +13,7 @@ import {
 } from '@cli/project';
 import type { IPackage, TProjectConfig } from '@cli/project';
 import PLUGIN_NAME from '@constants/plugin-name';
+import { resolveSsrMaxConcurrency } from '@core/admission';
 import ParseRoutes from '@services/parse-routes';
 import type { TRoutesTree } from '@services/parse-routes';
 import ServerConfig from '@services/server-config';
@@ -448,6 +449,23 @@ export const inspectProject = (options: IDoctorOptions = {}): IDoctorReport => {
       return /^Disallow:\s*\/\s*$/im.test(fs.readFileSync(file, 'utf8'))
         ? 'robots.txt blocks crawling at / (report only)'
         : 'robots.txt contains a custom/allow policy (report only)';
+    },
+    true,
+  );
+
+  check(
+    'ssr-admission',
+    'Set SSR_MAX_CONCURRENCY to a positive safe integer to bound concurrent SSR renders.',
+    () => {
+      const value = process.env.SSR_MAX_CONCURRENCY;
+
+      if (value === undefined) {
+        return 'SSR_MAX_CONCURRENCY is not set (admission environment override disabled)';
+      }
+
+      return resolveSsrMaxConcurrency(value) === undefined
+        ? 'SSR_MAX_CONCURRENCY is set but invalid (override ignored)'
+        : 'SSR_MAX_CONCURRENCY is set and valid';
     },
     true,
   );

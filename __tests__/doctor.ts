@@ -43,6 +43,20 @@ afterEach(() => {
 });
 
 describe('doctor', () => {
+  it.each([
+    [undefined, 'not set'],
+    ['', 'set but invalid'],
+    ['-1', 'set but invalid'],
+    ['1.5', 'set but invalid'],
+    ['9007199254740992', 'set but invalid'],
+    ['24', 'set and valid'],
+  ])('reports SSR_MAX_CONCURRENCY=%s as informational', (value, message) => {
+    vi.stubEnv('SSR_MAX_CONCURRENCY', value);
+    const result = check(fixture(), 'ssr-admission');
+    expect(result).toMatchObject({ status: 'ok', info: true });
+    expect(result.message).toContain(message);
+  });
+
   it('keeps the published matrix synchronized with the actual CI matrix', () => {
     const workflow = fs.readFileSync('.github/workflows/react-compatibility.yml', 'utf8');
     const rows = [

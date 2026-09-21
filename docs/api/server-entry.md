@@ -17,6 +17,9 @@ Options:
 ```ts
 interface IEntryServerOptions<TAppProps> {
   ssr?: ISsrPolicy;
+  requestGuard?: IRequestGuardOptions | false;
+  notFound?: TNotFoundOptions;
+  admission?: IAdmissionOptions;
   abortDelay?: number;
   init?: (params: {
     config: ServerConfig;
@@ -41,6 +44,10 @@ The entry returns a render definition consumed by the runtime server. It include
 - `abortDelay`
 - optional loggers
 - optional middleware config
+
+## Request guard, 404 modes and admission
+
+The request guard is enabled by default, before `onRequest` and HTML loading. Configure `requestGuard`, `notFound` and `admission` at the entry level (also available on Fetch handlers). See [Request guard and admission](/api/request-guard) for defaults, the behavior-change notice, anonymous cached 404s and a hardening preset.
 
 ## `ssr`
 

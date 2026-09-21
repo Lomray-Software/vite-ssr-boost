@@ -1,6 +1,6 @@
 import { isbot } from 'isbot';
 import { pathToRegexp } from 'path-to-regexp';
-import type { StaticHandler } from 'react-router';
+import type { RouterState, StaticHandler } from 'react-router';
 import { matchPath } from 'react-router';
 import type Diagnostics from '@services/diagnostics';
 
@@ -172,7 +172,11 @@ class SsrPolicy {
   /**
    * Crawler protection wins over both runtime decisions and environment rollback rules.
    */
-  public select(request: Request, diagnostics?: Diagnostics): TRenderMode {
+  public select(
+    request: Request,
+    diagnostics?: Diagnostics,
+    matches?: RouterState['matches'],
+  ): TRenderMode {
     if (!this.active) {
       return 'ssr';
     }
@@ -203,12 +207,25 @@ class SsrPolicy {
     const pattern =
       excluded?.pattern ??
       matched[0]?.pattern ??
+      (matches?.length
+        ? this.paths.find(({ id }) => id === matches[matches.length - 1].route.id)?.path
+        : undefined) ??
       [...this.paths].reverse().find(({ path }) => matchPath(path, url.pathname))?.path ??
       '(unmatched URL)';
 
     diagnostics?.policyDecision(String(pattern), mode, source);
 
     return mode;
+  }
+
+  /** Reuse crawler detection for 404 and overload fallbacks, even with all-route SSR. */
+  public isBot(request: Request): boolean {
+    return isbot(request.headers.get('user-agent'));
+  }
+
+  /** Keep crawlers on SSR when the configured bot policy requires it. */
+  public shouldRenderBot(request: Request): boolean {
+    return this.bots === 'ssr' && this.isBot(request);
   }
 
   /**

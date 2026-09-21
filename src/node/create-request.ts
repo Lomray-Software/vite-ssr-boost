@@ -1,3 +1,4 @@
+import requestTargets from '@core/request-target';
 import createHeaders from '@node/create-headers';
 import type { TIncomingMessage } from '@node/http';
 
@@ -50,7 +51,11 @@ const createRequest = (req: TIncomingMessage, options: ICreateRequestOptions = {
     init.duplex = 'half';
   }
 
-  return new Request(url, init);
+  const request = new Request(url, init);
+
+  requestTargets.set(request, target);
+
+  return request;
 };
 
 export type { ICreateRequestOptions };
