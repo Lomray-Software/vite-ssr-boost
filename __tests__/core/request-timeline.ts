@@ -29,7 +29,11 @@ it('records one JSON line in development with the environment override and no di
   vi.stubEnv('NODE_ENV', 'development');
   const log = vi.spyOn(console, 'info');
   const handler = createHandler(
-    { createApp: vi.fn(), handler: {} as never, renderToStream: vi.fn() },
+    {
+      createApp: vi.fn(),
+      handler: { dataRoutes: [{ id: 'root', path: '*' }] } as never,
+      renderToStream: vi.fn(),
+    },
     {
       diagnostics: false,
       getHtml: vi.fn(),
@@ -91,7 +95,11 @@ it('logs failures during request initialization once and cleans up listeners', a
   const controller = new AbortController();
   const log = vi.spyOn(console, 'info');
   const handler = createHandler(
-    { createApp: vi.fn(), handler: {} as never, renderToStream: vi.fn() },
+    {
+      createApp: vi.fn(),
+      handler: { dataRoutes: [{ id: 'root', path: '*' }] } as never,
+      renderToStream: vi.fn(),
+    },
     {
       getHtml: vi.fn(),
       onRequest: () => {

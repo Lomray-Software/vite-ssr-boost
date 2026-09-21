@@ -112,31 +112,25 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
     app.use(/(.*)/, (req, res, next) => {
       void (async () => {
         try {
-          const [{ render, onRequest, ...renderParams }, clientHtml] = await Promise.all([
-            prepareServer.loadEntrypoint(),
-            prepareServer.loadHtml(req),
-          ]);
-          const { appProps, hasEarlyHints, shouldSkip, shouldCancel } =
-            (onRequest ? await onRequest(req, res) : undefined) ?? {};
-          const [header, footer] = clientHtml;
-
-          if (shouldCancel || res.writableEnded || res.headersSent) {
-            return;
-          }
-
-          if (shouldSkip) {
-            return next();
-          }
-
+          const { render, onRequest, ...renderParams } = await prepareServer.loadEntrypoint();
           const renderInput: Parameters<TRender>[1] = {
             req,
             res,
-            hasEarlyHints,
-            appProps: appProps ?? {},
-            html: { header, footer },
+            appProps: {},
+            html: { header: '', footer: '' },
           };
 
-          await render(config, renderInput, renderParams);
+          await render(config, renderInput, {
+            ...renderParams,
+            onRequest,
+            onSkip: next,
+            /** Load and transform the template only after the Fetch guard allows it. */
+            getHtml: async () => {
+              const [header, footer] = await prepareServer.loadHtml(req);
+
+              return { header, footer };
+            },
+          });
         } catch (e) {
           config
             .getLogger()

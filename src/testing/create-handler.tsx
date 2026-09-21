@@ -4,7 +4,7 @@ import type { RouteObject } from 'react-router';
 import { createStaticHandler } from 'react-router';
 import createHandler from '@core/handler';
 import type { ICreateHandlerOptions, IHtmlShell } from '@core/handler';
-import type { TRenderToStream } from '@core/render';
+import type { TRenderToStream, ISsrRequestContext } from '@core/render';
 import type { TRouteObject } from '@interfaces/route-object';
 import type { ILoadHtmlShellOptions } from '@node/production';
 import type RequestTimeline from '@services/request-timeline';
@@ -75,6 +75,51 @@ const testHandlerFactory =
       return { ...shell };
     };
 
+    const requestOptions = new WeakMap<
+      Request,
+      {
+        isStream?: boolean;
+        onContext: (context: ISsrRequestContext<TAppProps>) => void;
+      }
+    >();
+
+    const fetch = createHandler<TAppProps>(
+      {
+        handler,
+        renderToStream,
+
+        /**
+         * Wrap matched content with the optional test application.
+         */
+        createApp: (children, context) =>
+          App ? <App server={context.appProps}>{children}</App> : children,
+      },
+      {
+        ...options,
+        basename: routerOptions?.basename ?? options.basename,
+        getHtml,
+
+        /**
+         * Retain the request timeline before forwarding context observation.
+         */
+        onContext: (params) => {
+          requestOptions.get(params.context.request)?.onContext(params.context);
+          onContext?.(params);
+        },
+
+        /**
+         * Apply a per-request streaming override after the application hook.
+         */
+        onRouterReady: async (params) => {
+          const result = await onRouterReady?.(params);
+
+          const isStream = requestOptions.get(params.context.request)?.isStream;
+
+          return isStream === undefined ? (result ?? {}) : { ...result, isStream };
+        },
+      },
+    );
+
     return {
       /**
        * Render one cancellable request and collect its response assertions.
@@ -142,39 +187,13 @@ const testHandlerFactory =
 
         try {
           combined.throwIfAborted();
-          const fetch = createHandler<TAppProps>(
-            {
-              handler,
-              renderToStream,
-
-              /**
-               * Wrap matched content with the optional test application.
-               */
-              createApp: (children, context) =>
-                App ? <App server={context.appProps}>{children}</App> : children,
+          requestOptions.set(request, {
+            isStream,
+            /** Retain the timeline for this test request only. */
+            onContext: (context) => {
+              ({ timeline } = context);
             },
-            {
-              ...options,
-              getHtml,
-
-              /**
-               * Retain the request timeline before forwarding context observation.
-               */
-              onContext: (params) => {
-                ({ timeline } = params.context);
-                onContext?.(params);
-              },
-
-              /**
-               * Apply a per-request streaming override after the application hook.
-               */
-              onRouterReady: async (params) => {
-                const result = await onRouterReady?.(params);
-
-                return isStream === undefined ? (result ?? {}) : { ...result, isStream };
-              },
-            },
-          );
+          });
           const pending = fetch(request);
 
           /**
