@@ -1,4 +1,5 @@
 type TRequestStage =
+  | 'guard.reject'
   | 'router.query'
   | 'prepare'
   | 'shell.ready'

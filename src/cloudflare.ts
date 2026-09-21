@@ -4,6 +4,7 @@ import type { RouteObject } from 'react-router';
 import { createStaticHandler } from 'react-router';
 import createHandler from '@core/handler';
 import type { ICreateHandlerOptions, IHtmlShell } from '@core/handler';
+import HandlerRuntime from '@core/handler-runtime';
 import headResponse from '@core/head-response';
 import type { ISsrExecutionContext } from '@core/types';
 import renderToStream from '@edge/render-to-stream';
@@ -171,6 +172,10 @@ export const createWorkerHandler = <
   ...options
 }: TWorkerHandlerOptions<TEnv, TAppProps>): TWorkerHandler<TEnv> => {
   const handler = createStaticHandler(routes as RouteObject[], routerOptions);
+  const runtime = new HandlerRuntime(handler.dataRoutes, {
+    ...options,
+    basename: routerOptions?.basename ?? options.basename,
+  });
   const prepareAssets = createAssetPreparer<TAppProps>(new RouteAssets(manifest, modulePreload));
   const shell =
     indexHtml === undefined ? undefined : splitHtmlShell(indexHtml, 'indexHtml', outlet);
@@ -235,13 +240,15 @@ export const createWorkerHandler = <
         /**
          * Resolve a request shell from the configured source.
          */
-        getHtml: () =>
-          getHtml ? getHtml(request, env, ctx) : { header: shell![0], footer: shell![1] },
+        getHtml: (renderRequest) =>
+          getHtml ? getHtml(renderRequest, env, ctx) : { header: shell![0], footer: shell![1] },
 
         /**
          * Expose Worker bindings and lifetime hooks to request initialization.
          */
-        onRequest: onRequest ? () => onRequest({ request, executionContext }) : undefined,
+        onRequest: onRequest
+          ? ({ request: renderRequest }) => onRequest({ request: renderRequest, executionContext })
+          : undefined,
 
         /**
          * Inject route assets before running application preparation.
@@ -281,6 +288,7 @@ export const createWorkerHandler = <
           ...(await onRouterReady?.(params)),
         }),
       },
+      runtime,
     );
 
     return render(request, executionContext);

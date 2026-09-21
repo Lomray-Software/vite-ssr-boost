@@ -8,8 +8,8 @@ import type { ServeStaticOptions } from 'serve-static';
 import type { Logger } from 'vite';
 import type { IRenderOptions, TRender } from '@adapters/express/render';
 import render from '@adapters/express/render';
-import createSpaShell from '@core/spa-shell';
-import SsrPolicy from '@core/ssr-policy';
+import HandlerRuntime from '@core/handler-runtime';
+import type { IHandlerRuntimeOptions } from '@core/handler-runtime';
 import type { ISsrPolicy } from '@core/ssr-policy';
 import type { TRouteObject } from '@interfaces/route-object';
 import type ServerApi from '@services/server-api';
@@ -69,11 +69,10 @@ export interface IAppServerProps<T = Record<string, any>> {
 
 export type TApp<T> = FC<PropsWithChildren<Record<string, any> & IAppServerProps<T>>>;
 
-export interface IEntryServerOptions<TAppProps = Record<string, any>> extends Pick<
-  IPrepareRenderOut,
-  'loggerProd' | 'loggerDev' | 'middlewares'
-> {
-  ssr?: ISsrPolicy;
+export interface IEntryServerOptions<TAppProps = Record<string, any>>
+  extends
+    Omit<IHandlerRuntimeOptions, 'basename'>,
+    Pick<IPrepareRenderOut, 'loggerProd' | 'loggerDev' | 'middlewares'> {
   abortDelay?: number;
   init?: (params: {
     config: ServerConfig;
@@ -87,14 +86,27 @@ export interface IEntryServerOptions<TAppProps = Record<string, any>> extends Pi
 function entry<TAppProps>(
   App: TApp<TAppProps>,
   routes: TRouteObject[],
-  { init, routerOptions, ssr, ...rest }: IEntryServerOptions<TAppProps> = {},
+  {
+    init,
+    routerOptions,
+    ssr,
+    requestGuard,
+    notFound,
+    admission,
+    ...rest
+  }: IEntryServerOptions<TAppProps> = {},
 ): IPrepareRenderOut<TAppProps> {
   const handler = createStaticHandler(routes as RouteObject[], routerOptions);
-  const policy = new SsrPolicy(ssr, handler.dataRoutes, routerOptions?.basename);
-  const spaShell = createSpaShell();
+  const runtime = new HandlerRuntime(handler.dataRoutes, {
+    ssr,
+    requestGuard,
+    notFound,
+    admission,
+    basename: routerOptions?.basename,
+  });
 
   return {
-    render: render.bind(null, { handler, App, policy, spaShell }) as TRender,
+    render: render.bind(null, { handler, App, runtime }) as TRender,
     init,
     routes,
     ...rest,
@@ -104,3 +116,13 @@ function entry<TAppProps>(
 export default entry;
 
 export type { ISsrPolicy };
+
+export type {
+  IAdmissionOptions,
+  IAdmissionEvent,
+  IRequestGuardOptions,
+  IRequestGuardDecisionContext,
+  TRequestGuardReason,
+  TNotFoundOptions,
+  ICachedNotFoundOptions,
+} from '@core/handler';

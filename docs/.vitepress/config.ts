@@ -73,6 +73,7 @@ export default defineConfig({
           { text: 'Plugin', link: '/api/plugin' },
           { text: 'Browser Entry', link: '/api/browser-entry' },
           { text: 'Server Entry', link: '/api/server-entry' },
+          { text: 'Request Guard and Admission', link: '/api/request-guard' },
           { text: 'Node Production', link: '/api/node-production' },
           { text: 'Testing', link: '/api/testing' },
           { text: 'Components And Helpers', link: '/api/components-and-helpers' },

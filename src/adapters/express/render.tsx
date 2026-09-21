@@ -3,13 +3,15 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from 'exp
 import React from 'react';
 import type { RouterState, StaticHandlerContext, StaticHandler } from 'react-router';
 import createFetchRequest from '@adapters/express/create-request';
-import type { TApp } from '@adapters/express/entry';
+import type { TApp, IEntrypointOptions } from '@adapters/express/entry';
 import getRouteAssets from '@adapters/express/route-assets';
 import StreamError from '@constants/stream-error';
 import type { IServerContext } from '@context/server';
 import emitEarlyHints from '@core/early-hints';
+import createHandler from '@core/handler';
+import type { IHtmlShell } from '@core/handler';
+import type HandlerRuntime from '@core/handler-runtime';
 import { getHeaderEntries, getSetCookieHeaders } from '@core/headers';
-import coreRender from '@core/render';
 import type { ICoreRenderOptions, ISsrRequestContext } from '@core/render';
 import type createSpaShell from '@core/spa-shell';
 import type SsrPolicy from '@core/ssr-policy';
@@ -48,6 +50,8 @@ export type TRender<TAppProps = Record<any, any>> = (
 
 export interface IRenderParams<TAppProps = Record<string, any>> {
   App: TApp<TAppProps>;
+  /** Startup state shared across legacy transport hook closures. */
+  runtime?: HandlerRuntime;
   handler: StaticHandler;
   policy?: SsrPolicy;
   spaShell?: ReturnType<typeof createSpaShell>;
@@ -57,6 +61,12 @@ export interface IRenderOptions<TAppProps = Record<string, any>> extends Pick<
   ICoreRenderOptions<TAppProps>,
   'documentHeaders' | 'sessionCookie' | 'protectPrivate'
 > {
+  /** Initialize legacy request props after the Fetch guard. */
+  onRequest?: IEntrypointOptions<TAppProps>['onRequest'];
+  /** Continue middleware when the request hook explicitly skips SSR. */
+  onSkip?: () => void;
+  /** Defer template loading until after request validation. */
+  getHtml?: () => IHtmlShell | Promise<IHtmlShell>;
   hydration?: 'early' | 'footer';
   nonce?: string;
   bootstrapScriptContent?: string;
@@ -211,10 +221,13 @@ const writeResponse = async (res: ExpressResponse, response: Response): Promise<
  * Render application
  */
 async function render(
-  { App, handler, policy, spaShell }: IRenderParams,
+  { App, handler, policy, spaShell, runtime }: IRenderParams,
   config: ServerConfig,
   initialContext: Omit<IRequestContext, 'request' | 'response'>,
   {
+    onRequest,
+    onSkip,
+    getHtml,
     onRouterReady,
     onShellReady,
     onResponse,
@@ -238,63 +251,98 @@ async function render(
   try {
     const request = createRenderRequest(req, requestSignal.signal, getBody);
 
-    /**
-     * Share mutable request state with the core so legacy hooks need no field copies.
-     */
-    const context: IRequestContext & ISsrRequestContext = Object.assign(initialContext, {
-      request,
-      response: { headers: new Headers() },
-      diagnostics: isDiagnosticsEnabled(!config.isProd)
-        ? new Diagnostics(new URL(request.url).pathname, Logger)
-        : undefined,
-    });
+    let context: IRequestContext & ISsrRequestContext;
+    let legacyRequest = req;
+    let shouldWrite = true;
 
-    // Keep plain data properties in production, even with diagnostics forced on.
-    // Adapter internals retain req/res locals so only consumer reads warn.
-    if (!config.isProd && context.diagnostics) {
-      const { diagnostics } = context;
-
-      for (const name of ['req', 'res'] as const) {
-        let value = context[name];
-
-        Object.defineProperty(context, name, {
-          configurable: true,
-          enumerable: true,
-          get: () => {
-            diagnostics.deprecatedReqRes();
-
-            return value;
-          },
-          set: (next: typeof value) => {
-            value = next;
-          },
-        });
-      }
-    }
-
-    const { response: initialResponse } = context;
-
-    syncResponse(context, res);
-
-    if (initialResponse.status === 200) {
-      initialResponse.status = undefined;
-    }
-
-    const response = await coreRender(
+    const fetch = createHandler(
       {
         /**
          * Preserve the legacy App server props and live Express request.
          */
         createApp: (children, updated) => (
-          <App server={{ ...updated.appProps, req }}>{children}</App>
+          <App server={{ ...updated.appProps, req: legacyRequest }}>{children}</App>
         ),
         handler,
+        requestContext: initialContext as IRequestContext & ISsrRequestContext,
         policy,
         spaShell,
         renderToStream,
       },
-      context,
       {
+        /** Run the legacy hook with anonymous headers on a cached 404 miss. */
+        onRequest: async ({ request: renderRequest }) => {
+          if (renderRequest !== request) {
+            legacyRequest = Object.assign(Object.create(req) as ExpressRequest, {
+              headers: Object.fromEntries(renderRequest.headers),
+              method: renderRequest.method,
+              cookies: {},
+              signedCookies: {},
+            });
+          }
+
+          const { appProps, hasEarlyHints, shouldSkip, shouldCancel } =
+            (await onRequest?.(legacyRequest, res)) ?? {};
+
+          if (shouldSkip || shouldCancel || res.writableEnded || res.headersSent) {
+            shouldWrite = false;
+
+            if (shouldSkip) {
+              onSkip?.();
+            }
+
+            return new Response(null, { status: 204 });
+          }
+
+          initialContext.hasEarlyHints = hasEarlyHints ?? initialContext.hasEarlyHints;
+          const metadata = {
+            response: { headers: new Headers(), status: undefined as number | undefined },
+          };
+
+          syncResponse(metadata as ISsrRequestContext, res);
+
+          return {
+            appProps: appProps ?? initialContext.appProps,
+            headers: metadata.response.headers,
+            status: metadata.response.status === 200 ? undefined : metadata.response.status,
+          };
+        },
+        getHtml: getHtml ?? (() => initialContext.html),
+        /** Share the initialized Fetch context with legacy hooks. */
+        onContext: ({ context: updated }) => {
+          context = Object.assign(updated, {
+            req: legacyRequest,
+            res,
+            hasEarlyHints: initialContext.hasEarlyHints,
+          });
+          context.diagnostics = isDiagnosticsEnabled(!config.isProd)
+            ? new Diagnostics(new URL(updated.request.url).pathname, Logger)
+            : undefined;
+
+          // Keep plain data properties in production, even with diagnostics forced on.
+          // Adapter internals retain req/res locals so only consumer reads warn.
+          if (!config.isProd && context.diagnostics) {
+            const { diagnostics } = context;
+
+            for (const name of ['req', 'res'] as const) {
+              let value = context[name];
+
+              Object.defineProperty(context, name, {
+                configurable: true,
+                enumerable: true,
+                get: () => {
+                  diagnostics.deprecatedReqRes();
+
+                  return value;
+                },
+                set: (next: typeof value) => {
+                  value = next;
+                },
+              });
+            }
+          }
+        },
+        routerRequestContext: initialContext,
         abortDelay,
         hydration,
         nonce,
@@ -380,17 +428,21 @@ async function render(
             await emitEarlyHints(executionContext, hints);
           }
         },
-        routerRequestContext: context,
       },
-      {
-        /**
-         * Deliver early hints through the existing Express response.
-         */
-        onEarlyHints: (headers) => writeEarlyHints(res, headers),
-      },
+      runtime,
     );
+    const response = await fetch(request, {
+      /**
+       * Deliver early hints through the existing Express response.
+       */
+      onEarlyHints: (headers) => writeEarlyHints(res, headers),
+    });
 
-    await writeResponse(res, response);
+    if (shouldWrite) {
+      await writeResponse(res, response);
+    } else {
+      await response.body?.cancel();
+    }
   } finally {
     requestSignal.dispose();
   }

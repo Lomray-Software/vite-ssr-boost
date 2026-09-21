@@ -84,6 +84,8 @@ Deferred router data needs no additional state library. Keep footer hydration by
 
 **Managed CLI (default).** Use `ssr-boost dev` for Express with Vite development and HMR, then `ssr-boost build` and `ssr-boost start` for production assets and SSR. The server entry is `@lomray/vite-ssr-boost/adapters/express/entry`, with hooks for requests, rendering and responses.
 
+**Request protection.** The default-on [request guard](./docs/api/request-guard.md) validates document methods and targets before hooks, with configurable 404 modes and optional SSR concurrency limits.
+
 **Fetch handler.** Import `createHandler` from `@lomray/vite-ssr-boost/core/handler` and connect it through `adapters/node`, `adapters/express`, `adapters/fastify`, `adapters/hono` or `adapters/edge`. Your transport owns the development server, static assets and route-asset injection; follow [Runtime adapters](./docs/guide/runtime-adapters.md) when you need this control.
 
 Both paths are measured weekly in the public [ssr-benchmarks](https://github.com/Lomray-Software/ssr-benchmarks) repository: the same application on vite-ssr-boost, React Router Framework mode, Vike, TanStack Start and Next.js, and a runtime matrix that serves the boost build through Express, `node:http`, Fastify, Hono and Bun. See [Benchmarks](./docs/reference/benchmarks.md) for what is measured and how to reproduce it.
