@@ -58,7 +58,8 @@ export interface IPrepareRenderOut<TAppProps = Record<string, any>> {
 
     /**
      * basename should be same as vite 'base' config.
-     * Without an explicit `dotfiles` option `/.well-known/` is served and other dot paths are ignored.
+     * Without an explicit `dotfiles` option `/.well-known/` is served (an extensionless request
+     * there also resolves the `.json` file) and other dot paths are ignored.
      */
     expressStatic?: (ServeStaticOptions & { basename?: string }) | false;
   };
