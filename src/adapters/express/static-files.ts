@@ -71,6 +71,8 @@ const ssrStaticFiles = (root: string, options: ServeStaticOptions): RequestHandl
  * serve-static skips dotfiles unless told otherwise, but `/.well-known/` (app links,
  * security.txt, ACME challenges) must reach the client: without an explicit `dotfiles`
  * option that prefix alone is served, other dot paths stay hidden.
+ * Well-known files are requested without an extension (apple-app-site-association) while
+ * tooling keeps them as `.json` on disk, so that prefix also resolves `name` to `name.json`.
  */
 const staticFiles = (root: string, options: ServeStaticOptions, isSPA = false): RequestHandler => {
   const serve = isSPA ? express.static(root, options) : ssrStaticFiles(root, options);
@@ -79,7 +81,11 @@ const staticFiles = (root: string, options: ServeStaticOptions, isSPA = false): 
     return serve;
   }
 
-  const serveWellKnown = express.static(root, { ...options, dotfiles: 'allow' });
+  const serveWellKnown = express.static(root, {
+    ...options,
+    dotfiles: 'allow',
+    extensions: options.extensions ?? ['json'],
+  });
 
   return (request, response, next) => {
     const pathname = getPathname(request.url);

@@ -21,6 +21,7 @@ describe('production static prefixes', () => {
     await writeFile(path.join(root, 'about.html'), 'extension-fallback');
     await mkdir(path.join(root, '.well-known'));
     await writeFile(path.join(root, '.well-known', 'assetlinks.json'), '[]');
+    await writeFile(path.join(root, '.well-known', 'apple-app-site-association.json'), '{}');
     await writeFile(path.join(root, '.env'), 'secret');
   });
 
@@ -94,6 +95,25 @@ describe('production static prefixes', () => {
       expect(stat).not.toHaveBeenCalledWith(expect.stringContaining('.env'), expect.anything());
     },
   );
+
+  it('resolves extensionless /.well-known/ requests to the .json file', async () => {
+    const origin = await start();
+    const association = await fetch(`${origin}/.well-known/apple-app-site-association`);
+    expect(association.headers.get('content-type')).toBe('application/json; charset=utf-8');
+    expect(await association.text()).toBe('{}');
+    const explicit = await fetch(`${origin}/.well-known/apple-app-site-association.json`);
+    expect(explicit.headers.get('content-type')).toBe('application/json; charset=utf-8');
+    expect(await (await fetch(`${origin}/.well-known/assetlinks`)).text()).toBe('[]');
+    expect(await (await fetch(`${origin}/.well-known/missing`)).text()).toBe('SSR');
+    expect(await (await fetch(`${origin}/health`)).text()).toBe('extensionless');
+    server?.closeAllConnections();
+    await new Promise<void>((resolve) => server!.close(() => resolve()));
+
+    const disabled = await start({ extensions: [] });
+    expect(await (await fetch(`${disabled}/.well-known/apple-app-site-association`)).text()).toBe(
+      'SSR',
+    );
+  });
 
   it('honours an explicit dotfiles option for /.well-known/ as well', async () => {
     const denied = await start({ dotfiles: 'deny', fallthrough: false });
