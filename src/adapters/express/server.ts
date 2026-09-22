@@ -97,10 +97,11 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
 
       app.use(
         basename!,
-        (isSPA ? express.static : staticFiles)(path.resolve(`${root}/${publicDir}`), {
-          ...expressStaticOpts,
-          index: isSPA ? undefined : false,
-        }),
+        staticFiles(
+          path.resolve(`${root}/${publicDir}`),
+          { ...expressStaticOpts, index: isSPA ? undefined : false },
+          isSPA,
+        ),
       );
     }
   }

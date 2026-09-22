@@ -243,6 +243,14 @@ export default defineConfig({
 });
 ```
 
+## Dotfiles and `/.well-known/`
+
+`serve-static` skips dot paths, so `public/.env` or `public/.git` never leave the server. The
+`/.well-known/` prefix is the exception: Apple app site association, Android asset links,
+`security.txt` and ACME challenges live there, and the production server serves it from `public/`
+out of the box. Setting `expressStatic.dotfiles` yourself (`'allow'`, `'deny'` or `'ignore'`)
+applies to every dot path, `/.well-known/` included.
+
 ## Custom entrypoints
 
 You can define additional entrypoints in plugin config. This is a strong fit for:

@@ -57,7 +57,8 @@ export interface IPrepareRenderOut<TAppProps = Record<string, any>> {
     compression?: CompressionOptions | false;
 
     /**
-     * basename should be same as vite 'base' config
+     * basename should be same as vite 'base' config.
+     * Without an explicit `dotfiles` option `/.well-known/` is served and other dot paths are ignored.
      */
     expressStatic?: (ServeStaticOptions & { basename?: string }) | false;
   };
