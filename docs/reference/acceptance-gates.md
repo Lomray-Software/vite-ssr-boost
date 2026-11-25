@@ -33,8 +33,8 @@ With Chromium installed (`npx playwright install chromium`), run
 page in Chromium in all three SSR modes. This checks shell interactivity, both Await/use() lists,
 init/resolve frames and hydration/console errors. Browser failures fail this opt-in gate.
 
-PR and release CI run the full suite on React/React DOM 18.2.0 and 19.2.8. The release waits for
-both versions. Template TTFB comparisons are advisory, including the streamed/home ratio.
+PR and release CI run the full suite on React/React DOM 18.2.0, 19.2.8 and 19.3.1. The release
+waits for every version. Template TTFB comparisons are advisory, including the streamed/home ratio.
 The ratio compares 11 alternating pairs after three warm-up pairs, using the first decoded
 HTML chunk with the same browser user agent and identity encoding. A ratio above 1.5 is printed
 without failing acceptance; early-stream checks retry up to three times

@@ -46,6 +46,7 @@ export const TESTED_MATRIX = [
   { react: '18.2.0', router: '7.18.3', vite: '6.4.3' },
   { react: '19.2.8', router: '7.18.3', vite: '7.3.6' },
   { react: '19.2.8', router: '8.3.1', vite: '8.2.2' },
+  { react: '19.3.1', router: '8.5.3', vite: '8.3.8' },
 ];
 
 const PACKAGE_FILE = 'package.json';

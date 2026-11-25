@@ -134,6 +134,7 @@ The package is tested against the current and previous major of React, React Rou
 | `18.2.0`          | `7.18.3`     | `6.4.3` |
 | `19.2.8`          | `7.18.3`     | `7.3.6` |
 | `19.2.8`          | `8.3.1`      | `8.2.2` |
+| `19.3.1`          | `8.5.3`      | `8.3.8` |
 
 [package.json](./package.json) declares Node `>=22.12.0` and these peer ranges:
 
