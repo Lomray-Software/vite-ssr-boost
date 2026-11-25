@@ -47,7 +47,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Audit dependencies
-        run: npm audit --audit-level=low
+        run: npm run audit:check
 
       - name: Commit lint PR title
         run: printf '%s\n' "$PR_TITLE" | npx --no-install commitlint -g commitlint.config.js
