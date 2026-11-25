@@ -46,6 +46,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      - name: Test the audit gate
+        run: npm run audit:test
+
       - name: Audit dependencies
         run: npm run audit:check
 
