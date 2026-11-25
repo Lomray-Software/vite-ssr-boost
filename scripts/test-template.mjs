@@ -28,9 +28,6 @@ import {
 } from './helpers/production-budget.mjs';
 import measureProductionLoad from './helpers/production-load.mjs';
 
-// KB = 1024 bytes. For intentional growth, measure the pinned template again and
-// set this to Math.ceil(measured gzip KB * 1.05); document the reason and new size.
-const TEMPLATE_CLIENT_GZIP_BUDGET_KB = 154;
 const TEMPLATE_HOME_MARKER = 'SPA, SSR, Mobx, Consistent Suspense, Meta tags';
 const BROWSER_USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
@@ -40,6 +37,13 @@ const source = resolve(process.argv[2] ?? join(projectRoot, '..', 'vite-template
 const directory = await mkdtemp(join(tmpdir(), 'vite-ssr-boost-template-'));
 const keepTemplate = process.env.SSR_BOOST_KEEP_TEMPLATE === '1';
 const useCurrentDependencies = process.env.SSR_BOOST_TEMPLATE_CURRENT === '1';
+// KB = 1024 bytes. For intentional growth, measure the affected run again and set its
+// budget to Math.ceil(measured gzip KB * 1.05); document the reason and new size.
+// The pinned run guards the package against the pinned template dependencies. The current
+// run installs the repository's own React, React Router and Vite, whose client runtime grows
+// with upstream releases (React Router 8.5 and Vite 8.3 measured 154.022 KB), so it has its own
+// budget instead of loosening the pinned gate.
+const TEMPLATE_CLIENT_GZIP_BUDGET_KB = useCurrentDependencies ? 162 : 154;
 const acceptance = {
   clientGzipKb: undefined,
   productionReadyMs: undefined,
