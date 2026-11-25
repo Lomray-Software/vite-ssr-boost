@@ -106,7 +106,7 @@
   "dependencies": {
     "chalk": "^6.0.0",
     "commander": "^15.0.0",
-    "devalue": "^5.9.2",
+    "devalue": "^5.9.4",
     "diff": "^9.0.0",
     "hoist-non-react-statics": "^3.3.2",
     "isbot": "^5.2.2",
@@ -116,8 +116,8 @@
     "semver": "^7.8.5"
   },
   "optionalDependencies": {
-    "compression": "^1.8.1",
-    "express": "^5.2.1"
+    "compression": "^1.8.2",
+    "express": "^5.3.0"
   },
   "devDependencies": {
     "@babel/generator": "^8.0.0",
@@ -214,6 +214,12 @@
       "vite": "^6.4.3",
       "@docsearch/js": "^3.9.0",
       "@docsearch/css": "^3.9.0"
+    },
+    "eslint-plugin-sonarjs": {
+      "minimatch": "^11.0.1"
+    },
+    "eslint-plugin-jsx-a11y-x": {
+      "minimatch": "^11.0.1"
     }
   },
   "bin": {
