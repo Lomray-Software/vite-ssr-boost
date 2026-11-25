@@ -215,12 +215,12 @@ class SourceFiles {
             : specifier.exported.value;
 
         if (exported === name && specifier.type === 'ExportSpecifier') {
+          // `export { "a-b" as c } from './x'` allows a string literal local name
+          const local =
+            specifier.local.type === 'Identifier' ? specifier.local.name : specifier.local.value;
+
           return node.source
-            ? this.exported(
-                this.filename(node.source.value, file, node),
-                specifier.local.name,
-                seen,
-              )
+            ? this.exported(this.filename(node.source.value, file, node), local, seen)
             : this.resolve({ node: specifier.local, file }, seen);
         }
       }
