@@ -95,6 +95,8 @@ const testReactCancellation = (renderer: TRenderToStream): void => {
         await reader.read();
         controller.abort(reason);
         await reader.cancel();
+        // React >=19.3 finishes an abort in a scheduled task, so onError may fire after cancel.
+        await vi.waitFor(() => expect(onError).toHaveBeenCalled());
 
         expect(onError.mock.calls.map(([{ error }]) => error)).toEqual([
           {
@@ -152,7 +154,7 @@ const testReactCancellation = (renderer: TRenderToStream): void => {
 
       expect(response.status).toBe(status);
       await response.text();
-      expect(onError).toHaveBeenCalled();
+      await vi.waitFor(() => expect(onError).toHaveBeenCalled());
       expect(
         onError.mock.calls.every(([{ error }]) => error.code === StreamError.RenderCancel),
       ).toBe(true);

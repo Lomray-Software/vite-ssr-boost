@@ -1,7 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from '@babel/parser';
-import type { File, Node, ObjectExpression, ImportDeclaration } from '@babel/types';
+import type {
+  File,
+  Identifier,
+  ImportDeclaration,
+  Node,
+  ObjectExpression,
+  StringLiteral,
+} from '@babel/types';
 import { VISITOR_KEYS } from '@babel/types';
 import type { Alias } from 'vite';
 
@@ -62,6 +69,13 @@ export const propertyName = (node: ObjectExpression['properties'][number]): stri
 
   return !node.computed && node.key.type === 'Identifier' ? node.key.name : undefined;
 };
+
+/**
+ * Name of an export specifier part. @babel/types 7 types `local` as Identifier only,
+ * while 8 also allows a string literal, so accept both to compile against either major.
+ */
+const moduleExportName = (node: Identifier | StringLiteral): string =>
+  node.type === 'Identifier' ? node.name : node.value;
 
 /** Static module bindings shared by migration and route analysis. */
 class SourceFiles {
@@ -215,12 +229,11 @@ class SourceFiles {
             : specifier.exported.value;
 
         if (exported === name && specifier.type === 'ExportSpecifier') {
+          // `export { "a-b" as c } from './x'` allows a string literal local name
+          const local = moduleExportName(specifier.local);
+
           return node.source
-            ? this.exported(
-                this.filename(node.source.value, file, node),
-                specifier.local.name,
-                seen,
-              )
+            ? this.exported(this.filename(node.source.value, file, node), local, seen)
             : this.resolve({ node: specifier.local, file }, seen);
         }
       }

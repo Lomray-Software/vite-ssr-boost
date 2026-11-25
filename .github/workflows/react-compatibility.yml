@@ -26,6 +26,11 @@ jobs:
             vite: '8.2.2'
             babel: '8.0.4'
             generator: '8.0.0'
+          - react: '19.3.1'
+            router: '8.5.3'
+            vite: '8.3.8'
+            babel: '8.1.3'
+            generator: '8.1.3'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

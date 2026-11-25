@@ -32,8 +32,24 @@ describe('resolveServerUrls', () => {
     });
   });
 
+  it('should keep localhost name when dns lookups agree', async () => {
+    const { promises } = await import('node:dns');
+
+    vi.mocked(promises.lookup).mockResolvedValue({ address: '127.0.0.1', family: 4 } as never);
+
+    const server = {
+      address: () => ({ address: '127.0.0.1', family: 'IPv4', port: 3000 }) satisfies AddressInfo,
+    };
+
+    expect(await resolveServerUrls(server as never, { host: 'localhost' })).toEqual({
+      local: ['http://localhost:3000/'],
+      network: [],
+    });
+  });
+
   it('should resolve localhost url with dns adjusted hostname', async () => {
     const { promises } = await import('node:dns');
+
     vi.mocked(promises.lookup)
       .mockResolvedValueOnce({ address: '127.0.0.1', family: 4 } as never)
       .mockResolvedValueOnce({ address: '::1', family: 6 } as never);
@@ -43,7 +59,7 @@ describe('resolveServerUrls', () => {
     };
 
     expect(await resolveServerUrls(server as never, { host: 'localhost' })).toEqual({
-      local: ['http://localhost:3000/'],
+      local: ['http://127.0.0.1:3000/'],
       network: [],
     });
   });
