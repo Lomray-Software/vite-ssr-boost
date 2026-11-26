@@ -65,9 +65,12 @@ Compression never re-encodes an answer the handler already shaped: a response wi
 every `Set-Cookie` line, and gains `Vary: Accept-Encoding`. Brotli is not offered by default; pass
 `compression: { format }` to pin one encoding.
 
-Error answers carry only safe headers: `Content-Encoding`, `Content-Language`, `Content-Length` and
-`Content-Range` are dropped, and the headers of a thrown error are applied only for a client error
-(status below 500). A range past the end of a file answers 416 with `Content-Range: bytes */<size>`.
+Error answers carry only safe headers: validators (`ETag`, `Last-Modified`), ranges
+(`Accept-Ranges`, `Content-Range`), `Content-Encoding`, `Content-Language`, `Content-Length`,
+`Trailer` and `Transfer-Encoding` are dropped. The headers of a thrown error are applied only for a
+client error (status below 500), and never its `Content-Encoding`, `Content-Length`, `Trailer` or
+`Transfer-Encoding`. A range past the end of a file answers 416 with
+`Content-Range: bytes */<size>`.
 
 ```ts
 const app = await createProductionServer({ buildDir: 'build', compression: true, health: true });

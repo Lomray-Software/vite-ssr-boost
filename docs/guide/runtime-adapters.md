@@ -52,7 +52,8 @@ builds without it start Express. An Express entry (`adapters/express/entry`) kee
 `managedServer: 'express'`, and the node server refuses it with an error that says so.
 
 The CLI orders the node server as health probes, client files, then SSR. It drains on `SIGTERM` and
-`SIGINT` for both servers. To run the same server from your own process, use `createProductionServer`
+`SIGINT` for both servers; an Express application that subscribes to them itself keeps its own
+handling. To run the same server from your own process, use `createProductionServer`
 and `createDevServer`, or the lower-level `prepareProduction` and `prepareDev`; see
 [Node production](/api/node-production) and [Node development](/api/node-dev).
 `build-vercel` and `--serverless` keep the Express handler in this release.
@@ -172,6 +173,7 @@ const { handler, paths } = await prepareProduction({ buildDir, static: false });
 const hashed = new Set(
   JSON.parse(await readFile(join(paths.root, 'server/fingerprinted-files.json'), 'utf8')),
 );
+/** Map a file under publicDir to the URL path the build lists. */
 const toUrlPath = (file) => relative(paths.publicDir, file).split(sep).join('/');
 const app = Fastify();
 
@@ -183,6 +185,7 @@ await app.register(fastifyStatic, {
   globIgnore: [toUrlPath(paths.indexFile)],
   immutable: true,
   maxAge: '1y',
+  /** Revalidate every file the build did not fingerprint. */
   setHeaders: (reply, filePath) => {
     if (!hashed.has(toUrlPath(filePath))) {
       reply.header('cache-control', 'public, max-age=0');

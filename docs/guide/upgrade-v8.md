@@ -101,17 +101,20 @@ planned for **9.0**.
 The CLI now drains the managed server on `SIGTERM` and `SIGINT`: readiness turns off, new
 connections are refused, open requests finish within `drainTimeoutMs` per phase, and a second
 signal forces the close. With the Express server, an application that subscribes to `SIGTERM` or
-`SIGINT` itself (for example in `onServerStarted`) keeps that handling: the CLI checks for existing
-listeners once the server is listening and leaves signals alone when it finds one. Remove your own
+`SIGINT` itself (for example in `onServerStarted`) keeps that handling: the CLI checks for listeners
+added since it started loading the server, once the server is listening, and leaves signals alone
+when it finds one. Listeners from a preloaded module (`node --require`) do not count; a library
+that subscribes in your entry does. Remove your own
 listener to use the managed drain. Subscribe in the synchronous part of `onServerStarted`: a
 listener added later (after an `await` or a timer) is not seen by that check, so both your handler
 and the managed drain run on the same signal.
 
 Configuration load errors in `ssr-boost dev` now stop the command with the original error instead
 of falling back to the Express server. To pick the managed server, `ssr-boost dev` reads the Vite
-config file first, so with the Express server the config file is evaluated twice per start, and
-three times with the node server (the server pick, HTTPS and the Vite server): keep side effects
-in it (logging, writing files) safe to repeat.
+config file first unless `--server` names it. Without the flag the config file is evaluated twice
+per start with the Express server and three times with the node server (the server pick, HTTPS
+and the Vite server); with it, once and twice. Keep side effects in it (logging, writing files)
+safe to repeat.
 
 An explicit `--build-dir` (or `buildDir`) is now used as given. If the directory is missing, `start`
 and `preview` stop with an error instead of silently serving `./build` or `./dist`.
