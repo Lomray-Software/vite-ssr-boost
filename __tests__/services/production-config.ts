@@ -36,7 +36,39 @@ describe('production build configuration', () => {
     expect(loadProductionConfig(directory)).toBeUndefined();
   });
 
-  it.each([null, { version: 2 }, { version: 1, root: 123 }])('rejects an incompatible build descriptor', (config) => {
+  it('keeps the persisted managed server and tolerates unknown extra fields', () => {
+    const config = {
+      version: 1,
+      root: '..',
+      base: '/',
+      mode: 'production',
+      publicDir: 'client',
+      indexFile: 'client/index.html',
+      serverFile: 'server/server.js',
+      managedServer: 'node',
+      futureField: true,
+    };
+
+    fs.writeFileSync(path.join(directory, 'server/ssr-boost.json'), JSON.stringify(config));
+
+    expect(loadProductionConfig(directory)).toEqual({ ...config, root: directory });
+  });
+
+  it.each([
+    null,
+    { version: 2 },
+    { version: 1, root: 123 },
+    {
+      version: 1,
+      root: '..',
+      base: '/',
+      mode: 'production',
+      publicDir: 'client',
+      indexFile: 'client/index.html',
+      serverFile: 'server/server.js',
+      managedServer: 'fastify',
+    },
+  ])('rejects an incompatible build descriptor', (config) => {
     fs.writeFileSync(path.join(directory, 'server/ssr-boost.json'), JSON.stringify(config));
 
     expect(() => loadProductionConfig(directory)).toThrow('Run ssr-boost build again.');

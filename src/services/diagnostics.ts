@@ -4,6 +4,7 @@ import Logger from '@services/logger';
 type TDiagnosticCode =
   | 'SSR_BOOST_CACHE_PRIVATE_LEAK'
   | 'SSR_BOOST_DEPRECATED_REQ_RES'
+  | 'SSR_BOOST_DEPRECATED_EXPRESS_HOOK'
   | 'SSR_BOOST_SSR_POLICY'
   | 'SSR_BOOST_SSR_POLICY_UNMATCHED'
   | 'SSR_BOOST_LOADER_NOT_SERIALIZABLE'
@@ -13,6 +14,22 @@ type TDiagnosticCode =
   | 'SSR_BOOST_HYDRATION_STATE_MISSING'
   | 'SSR_BOOST_DUPLICATE_OUTPUT'
   | 'SSR_BOOST_ONRESPONSE_INVALID_RETURN';
+
+type TExpressHook =
+  'onRequest' | 'shouldSkip' | 'onServerCreated' | 'onServerStarted' | 'middlewares.expressStatic';
+
+const EXPRESS_HOOK_REPLACEMENTS: Record<TExpressHook, string> = {
+  onRequest:
+    'onRequest(req, res) receives the live Express request and response; move request setup to defineEntry onRequest({ request }), which returns { appProps, headers, status } or a Response.',
+  shouldSkip:
+    'shouldSkip hands the request to the next Express middleware; return a Response from defineEntry onRequest, or mount your own route before the SSR handler.',
+  onServerCreated:
+    'onServerCreated exposes the Express app; register routes and middleware on your own server before mounting the handler from @lomray/vite-ssr-boost/node/production.',
+  onServerStarted:
+    'onServerStarted exposes the Express app and server; await listen() from createProductionServer, or use your own server listening event.',
+  'middlewares.expressStatic':
+    'middlewares.expressStatic configures express.static; use the static option of prepareProduction or createProductionServer.',
+};
 
 interface ISerializationIssue {
   path: string;
@@ -205,6 +222,14 @@ class Diagnostics {
     this.warn(
       'SSR_BOOST_DEPRECATED_REQ_RES',
       'context.req and context.res are deprecated in 8.x and planned for removal in 9.0; use context.request, context.response.headers/context.response.status and React Router HTTP helpers such as redirect().',
+    );
+  }
+
+  /** Warn once per Express-only hook that has a managed node:http replacement. */
+  public deprecatedExpressHook(hook: TExpressHook): void {
+    this.warn(
+      'SSR_BOOST_DEPRECATED_EXPRESS_HOOK',
+      `${EXPRESS_HOOK_REPLACEMENTS[hook]} Express-only hooks are deprecated in 8.x and planned for removal in 9.0.`,
     );
   }
 
@@ -409,6 +434,6 @@ class Diagnostics {
 
 export { formatDiagnostic, isDiagnosticsEnabled, splitHtmlShell, walkSerializable };
 
-export type { ISerializationIssue, TDiagnosticCode };
+export type { ISerializationIssue, TDiagnosticCode, TExpressHook };
 
 export default Diagnostics;

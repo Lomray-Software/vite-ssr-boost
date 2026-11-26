@@ -14,8 +14,48 @@ and `waitUntil`. Hooks and default loader context can also access it as `context
 See [Cloudflare Workers](/guide/cloudflare) for a complete Worker build and Static Assets path.
 
 Choose the managed CLI server for Vite development, HMR, asset manifests and production static
-files. It still uses Express. Choose a Fetch handler when your application or hosting platform
-owns the HTTP server, bundling and asset delivery; an adapter does not replace the CLI build pipeline.
+files. It runs Express by default; set `managedServer: 'node'` in the plugin options, or pass
+`--server node` to `dev` and `start`, to run it on `node:http` without Express (see
+[Managed node server](#managed-node-server)). Choose a Fetch handler when your application or
+hosting platform owns the HTTP server, bundling and asset delivery; an adapter does not replace
+the CLI build pipeline.
+
+## Managed node server
+
+The node server mounts a runtime-neutral entry. Export it as the default of your server entry:
+
+```tsx
+import defineEntry from '@lomray/vite-ssr-boost/core/entry';
+import App from './app';
+import routes from './routes';
+
+export default defineEntry(App, routes, {
+  onRequest: ({ request }) => ({ appProps: { locale: request.headers.get('Accept-Language') } }),
+});
+```
+
+`defineEntry(App, routes, options)` takes the `core/handler` options without `getHtml`, plus
+`routerOptions` for React Router's `createStaticHandler`; the router `basename` comes from
+`routerOptions.basename`. `routes` must not be empty. `onRequest` returns
+`{ appProps, headers, status }` or a `Response`; there is no `next()` and no live `req`/`res`.
+The host supplies the HTML shell, route assets and renderer, so the same export runs on the managed
+node server, in your own Node launcher and in tests.
+
+```ts
+// vite.config.ts
+SsrBoost({ managedServer: 'node' });
+```
+
+`ssr-boost build` records the choice in `build/server/ssr-boost.json`, and `ssr-boost start` reads it,
+so production needs neither Vite nor Express. `--server node|express` overrides the recorded value;
+builds without it start Express. An Express entry (`adapters/express/entry`) keeps running on
+`managedServer: 'express'`, and the node server refuses it with an error that says so.
+
+The CLI orders the node server as health probes, client files, then SSR. It drains on `SIGTERM` and
+`SIGINT` for both servers. To run the same server from your own process, use `createProductionServer`
+and `createDevServer`, or the lower-level `prepareProduction` and `prepareDev`; see
+[Node production](/api/node-production) and [Node development](/api/node-dev).
+`build-vercel` and `--serverless` keep the Express handler in this release.
 
 ## Existing Express applications
 
@@ -84,8 +124,9 @@ shells, `loadHtmlShell` validates exactly one outlet in every mode before produc
 
 ## Adapters
 
-The managed CLI is the default path. A custom transport owns the development server and static assets.
-For Node production servers, the production helpers supply the HTML shell and matched route assets.
+The managed CLI is the default path, on Express or on the managed node server. A custom transport
+owns the development server and static assets. For Node production servers, `prepareProduction`
+loads the built `defineEntry` export and supplies the HTML shell and matched route assets.
 The [custom-server example](https://github.com/Lomray-Software/vite-template/tree/example/custom-server)
 demonstrates this integration with the managed CLI in development and Fastify in production.
 
@@ -111,49 +152,51 @@ app.use(adapterExpress(handler));
 
 Fastify production launcher (`server/index.mjs`):
 
-The built server in the custom-server example exports `handler` and `configureHandler`. The latter
-passes `getHtml` and `prepare` to its Fetch handler before Fastify starts accepting requests.
-Run `npm run build` first, then start this launcher with `node server/index.mjs`.
+The server entry in the custom-server example is `export default defineEntry(App, routes)`.
+`prepareProduction` imports it from the build and binds the HTML shell and route assets before
+Fastify starts accepting requests. Run `npm run build` first, then start this launcher with
+`node server/index.mjs`.
 
 ```js
 import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import adapterFastify from '@lomray/vite-ssr-boost/adapters/fastify';
-import { createRouteAssetPreparer, loadHtmlShell } from '@lomray/vite-ssr-boost/node/production';
+import { prepareProduction } from '@lomray/vite-ssr-boost/node/production';
 import Fastify from 'fastify';
-import { configureHandler, handler } from '../build/server/server.js';
 
 const buildDir = fileURLToPath(new URL('../build/', import.meta.url));
-const clientDir = join(buildDir, 'client');
-
-configureHandler({
-  getHtml: await loadHtmlShell({ indexFile: join(clientDir, 'index.html') }),
-  prepare: createRouteAssetPreparer({ buildDir }),
-});
-
+const { handler, paths } = await prepareProduction({ buildDir, static: false });
 const app = Fastify();
 
 await app.register(fastifyStatic, {
-  root: clientDir,
+  root: paths.publicDir,
   index: false,
   wildcard: false,
   immutable: true,
   maxAge: '1y',
   setHeaders: (reply, filePath) => {
-    if (!filePath.startsWith(`${join(clientDir, 'assets')}${sep}`)) {
+    if (!filePath.startsWith(`${join(paths.publicDir, 'assets')}${sep}`)) {
       reply.header('Cache-Control', 'public, max-age=0');
     }
   },
 });
 app.all('/*', adapterFastify(handler, { compression: true }));
 
+let closing;
+
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.once(signal, () => {
-    void app.close().catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+    // Active responses get 30 seconds; whatever is left is cut so the process can exit.
+    const timer = setTimeout(() => app.server.closeAllConnections(), 30_000).unref();
+
+    closing ??= app
+      .close()
+      .catch((error) => {
+        console.error(error);
+        process.exitCode = 1;
+      })
+      .finally(() => clearTimeout(timer));
   });
 }
 
@@ -161,6 +204,10 @@ const address = await app.listen({ port: Number(process.env.PORT ?? 3000), host:
 
 console.info(`Fastify listening at ${address}`);
 ```
+
+`static: false` leaves client files to Fastify. Without a launcher of its own, a host can mount the
+entry directly: `entry({ getHtml: await loadHtmlShell({ indexFile }), prepare:
+createRouteAssetPreparer({ buildDir }), renderToStream })` returns the Fetch handler.
 
 `loadHtmlShell` reads the built HTML once and returns a fresh shell per request.
 `createRouteAssetPreparer` reads `build/server/assets-manifest.json` when a request first matches
@@ -182,7 +229,7 @@ app.all('*', adapterHono(handler));
 
 ### Cloudflare Workers
 
-The managed CLI is the default path for Node/Express applications. A custom Worker transport owns
+The managed CLI is the default path for Node applications. A custom Worker transport owns
 the development server, static assets and route-asset injection; the
 [custom-server example](https://github.com/Lomray-Software/vite-template/tree/example/custom-server)
 demonstrates those responsibilities with a Fastify production launcher.
@@ -255,8 +302,10 @@ Node and Fastify feature-detect `writeEarlyHints`. Unsupported runtimes safely i
 ## Compression
 
 Compression is an adapter concern and never runs in the core. The managed Express server keeps its
-existing `compression` middleware. The new Node, Express, Fastify, and edge adapters can opt into
-streaming compression:
+existing `compression` middleware. The managed node server uses the Node adapter's compression for
+rendered documents in production (gzip or deflate, no Brotli, no npm `compression`), leaves static
+files uncompressed and compresses nothing in development. The new Node, Express, Fastify, and edge
+adapters can opt into streaming compression:
 
 ```ts
 http.createServer(adapterNode(handler, { compression: true }));
@@ -269,7 +318,9 @@ export default {
 ```
 
 The adapters negotiate `gzip` or `deflate`, preserve separate cookies, and skip partial, already
-encoded, and `no-transform` responses. Node transports flush compressed HTML incrementally, so
+encoded, and `no-transform` responses. Each response has one owner: a response that already carries
+`Content-Encoding`, for example from a CDN or an earlier layer, is passed through, and `Vary:
+Accept-Encoding` is kept on every negotiated response. Node transports flush compressed HTML incrementally, so
 the browser receives the shell before Suspense finishes. Edge compression uses `CompressionStream`,
 whose buffering depends on the runtime; leave it off when the hosting platform handles compression.
 

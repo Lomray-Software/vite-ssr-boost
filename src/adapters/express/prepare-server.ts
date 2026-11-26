@@ -7,7 +7,8 @@ import type { Express, Request } from 'express';
 import type { IEntrypointOptions, IPrepareRenderOut } from '@adapters/express/entry';
 import type { TRender } from '@adapters/express/render';
 import type { TRouteObject } from '@interfaces/route-object';
-import { splitHtmlShell } from '@services/diagnostics';
+import Diagnostics, { isDiagnosticsEnabled, splitHtmlShell } from '@services/diagnostics';
+import type { TExpressHook } from '@services/diagnostics';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 
@@ -160,8 +161,31 @@ class PrepareServer {
     };
     this.onServerCreated = onServerCreated;
     this.onServerStarted = onServerStarted;
+    this.warnExpressHooks({
+      onRequest: renderParams.onRequest,
+      onServerCreated,
+      onServerStarted,
+      'middlewares.expressStatic': middlewares?.expressStatic,
+    });
 
     return this.entrypoint;
+  }
+
+  /**
+   * Point configured Express-only hooks at their managed replacements; SSR_BOOST_DIAGNOSTICS=0 silences them.
+   */
+  protected warnExpressHooks(hooks: Partial<Record<TExpressHook, unknown>>): void {
+    if (!isDiagnosticsEnabled(true)) {
+      return;
+    }
+
+    const diagnostics = new Diagnostics('', this.config.getLogger());
+
+    for (const [hook, value] of Object.entries(hooks) as [TExpressHook, unknown][]) {
+      if (value !== undefined) {
+        diagnostics.deprecatedExpressHook(hook);
+      }
+    }
   }
 
   /**

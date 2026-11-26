@@ -35,6 +35,7 @@ interface IPluginOptions {
     isOnlyDev?: boolean;
   }[];
   entrypoint?: IBuildEntrypoint[];
+  managedServer?: 'node' | 'express';
 }
 ```
 
@@ -47,8 +48,17 @@ interface IPluginOptions {
   clientFile: 'client.ts',
   tsconfigAliases: true,
   spaIndex: false,
+  managedServer: 'express',
 }
 ```
+
+## `managedServer`
+
+Selects the server `ssr-boost dev`, `start` and `preview` run. `'express'` keeps the Express
+server and the Express entry. `'node'` runs `node:http` without Express and mounts a
+`defineEntry` default export; see [Managed node server](/guide/runtime-adapters#managed-node-server).
+The build records the value in `server/ssr-boost.json`, so `start` needs no Vite config; the CLI
+`--server` flag overrides it.
 
 ## What the plugin does
 

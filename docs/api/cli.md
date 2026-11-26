@@ -111,6 +111,7 @@ Common flags:
 - `--reset-cache`
 - `--mode`
 - `--entrypoint`
+- `--server [node|express]`
 
 ## `ssr-boost build`
 
@@ -138,6 +139,7 @@ Common flags:
 - `--focus-only`
 - `--build-dir`
 - `--module-preload`
+- `--server [node|express]`
 
 ## `ssr-boost preview`
 

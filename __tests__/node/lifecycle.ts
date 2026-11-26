@@ -1,0 +1,430 @@
+// @vitest-environment node
+import http from 'node:http';
+import net from 'node:net';
+import type { AddressInfo, Socket } from 'node:net';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import createLifecycle from '@node/lifecycle';
+import type { ILifecycle } from '@node/lifecycle';
+
+const servers: http.Server[] = [];
+
+/**
+ * Start a server whose handler is supplied by the test.
+ */
+const listen = async (
+  handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+  configure?: (server: http.Server) => ILifecycle,
+): Promise<{ server: http.Server; lifecycle: ILifecycle; url: string }> => {
+  const server = http.createServer();
+  const lifecycle = configure?.(server) ?? createLifecycle(server);
+
+  server.on('request', handler);
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+  return {
+    server,
+    lifecycle,
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+  };
+};
+
+/**
+ * Collect a streamed response body over a real socket.
+ */
+const getText = (url: string, agent?: http.Agent): Promise<{ status: number; body: string }> =>
+  new Promise((resolve, reject) => {
+    http
+      .get(url, { agent }, (res) => {
+        let body = '';
+
+        res.setEncoding('utf8');
+        res.on('data', (chunk: string) => {
+          body += chunk;
+        });
+        res.on('end', () => resolve({ status: res.statusCode!, body }));
+        res.on('error', reject);
+      })
+      .on('error', reject);
+  });
+
+/**
+ * Open a raw socket and complete an HTTP upgrade handshake on it.
+ */
+const upgrade = (server: http.Server): Promise<Socket> =>
+  new Promise((resolve, reject) => {
+    const socket = net.connect((server.address() as AddressInfo).port, '127.0.0.1');
+
+    socket.once('error', reject);
+    socket.once('data', () => resolve(socket));
+    socket.write('GET /hmr HTTP/1.1\r\nHost: test\r\nConnection: Upgrade\r\nUpgrade: test\r\n\r\n');
+  });
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await Promise.all(
+    servers.splice(0).map(
+      (server) =>
+        new Promise<void>((resolve) => {
+          server.closeAllConnections();
+          server.close(() => resolve());
+        }),
+    ),
+  );
+});
+
+describe('createLifecycle', () => {
+  it('keeps Node timeouts unless set and applies the proxy profile when given', () => {
+    const defaults = http.createServer();
+    const { keepAliveTimeout, headersTimeout, requestTimeout } = defaults;
+
+    createLifecycle(defaults);
+    expect([defaults.keepAliveTimeout, defaults.headersTimeout, defaults.requestTimeout]).toEqual([
+      keepAliveTimeout,
+      headersTimeout,
+      requestTimeout,
+    ]);
+
+    const tuned = http.createServer();
+
+    createLifecycle(tuned, {
+      keepAliveTimeoutMs: 65000,
+      headersTimeoutMs: 66000,
+      requestTimeoutMs: 300000,
+    });
+    expect([tuned.keepAliveTimeout, tuned.headersTimeout, tuned.requestTimeout]).toEqual([
+      65000, 66000, 300000,
+    ]);
+  });
+
+  it('answers health probes only when enabled and reports ready until draining', async () => {
+    let lifecycle!: ILifecycle;
+    const { url } = await listen(
+      (req, res) => lifecycle.health(req, res, () => res.end('app')),
+      (server) => {
+        lifecycle = createLifecycle(server, { health: { readyPath: '/ready' } });
+
+        return lifecycle;
+      },
+    );
+
+    expect(await getText(`${url}/healthz`)).toEqual({ status: 200, body: 'ok' });
+    expect(await getText(`${url}/ready`)).toEqual({ status: 503, body: 'unavailable' });
+    lifecycle.setReady();
+    expect(lifecycle.isReady()).toBe(true);
+    expect(await getText(`${url}/ready?probe=1`)).toEqual({ status: 200, body: 'ok' });
+    expect(await getText(`${url}/readyz`)).toEqual({ status: 200, body: 'app' });
+  });
+
+  it('passes every request through when health is not configured', async () => {
+    let lifecycle!: ILifecycle;
+    const { url } = await listen(
+      (req, res) => lifecycle.health(req, res, () => res.end('app')),
+      (server) => {
+        lifecycle = createLifecycle(server);
+
+        return lifecycle;
+      },
+    );
+
+    expect(await getText(`${url}/healthz`)).toEqual({ status: 200, body: 'app' });
+  });
+
+  it('rejects non-GET probe methods', async () => {
+    let lifecycle!: ILifecycle;
+    const { url } = await listen(
+      (req, res) => lifecycle.health(req, res, () => res.end('app')),
+      (server) => {
+        lifecycle = createLifecycle(server, { health: true });
+
+        return lifecycle;
+      },
+    );
+    const status = await fetch(`${url}/healthz`, { method: 'POST' }).then(({ status: s }) => s);
+
+    expect(status).toBe(405);
+  });
+
+  it('lets an active stream finish, refuses new connections and closes idle keep-alive', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const onClose = vi.fn();
+    let lifecycle!: ILifecycle;
+    const { server, url } = await listen(
+      (req, res) => {
+        if (req.url === '/stream') {
+          res.write('first;');
+          void held.then(() => res.end('last'));
+
+          return;
+        }
+
+        lifecycle.health(req, res, () => res.end('quick'));
+      },
+      (instance) => {
+        lifecycle = createLifecycle(instance, { health: true, onClose });
+
+        return lifecycle;
+      },
+    );
+    const agent = new http.Agent({ keepAlive: true });
+
+    lifecycle.setReady();
+    expect(await getText(`${url}/quick`, agent)).toEqual({ status: 200, body: 'quick' });
+
+    const streamed = getText(`${url}/stream`);
+
+    await vi.waitFor(() => expect(server.listening).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const first = lifecycle.close();
+    const second = lifecycle.close();
+
+    expect(first).toBe(second);
+    expect(lifecycle.isDraining()).toBe(true);
+    expect(lifecycle.isReady()).toBe(false);
+    await expect(getText(`${url}/quick`)).rejects.toThrow();
+    release();
+    expect(await streamed).toEqual({ status: 200, body: 'first;last' });
+    await first;
+    expect(onClose).toHaveBeenCalledOnce();
+    agent.destroy();
+  });
+
+  it('destroys streams still open at the drain timeout', async () => {
+    let lifecycle!: ILifecycle;
+    const { url } = await listen(
+      (_req, res) => {
+        res.write('stuck');
+      },
+      (server) => {
+        lifecycle = createLifecycle(server, { drainTimeoutMs: 50 });
+
+        return lifecycle;
+      },
+    );
+    const streamed = getText(url);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const startedAt = Date.now();
+
+    await lifecycle.close();
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+    await expect(streamed).rejects.toThrow();
+  });
+
+  it('resolves close for a server that never listened', async () => {
+    const onClose = vi.fn();
+    const lifecycle = createLifecycle(http.createServer(), { onClose });
+
+    await lifecycle.close();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('drains on SIGTERM, forces on a second signal and unsubscribes', async () => {
+    const listeners = new Map<string, () => void>();
+
+    vi.spyOn(process, 'on').mockImplementation(((signal: string, listener: () => void) => {
+      listeners.set(signal, listener);
+
+      return process;
+    }) as typeof process.on);
+    vi.spyOn(process, 'off').mockImplementation(((signal: string) => {
+      listeners.delete(signal);
+
+      return process;
+    }) as typeof process.off);
+
+    let lifecycle!: ILifecycle;
+    const { server, url } = await listen(
+      (_req, res) => {
+        res.write('open');
+      },
+      (instance) => {
+        lifecycle = createLifecycle(instance);
+
+        return lifecycle;
+      },
+    );
+    const onExit = vi.fn();
+    const unsubscribe = lifecycle.handleSignals({ onExit });
+    const streamed = getText(url).catch((error: Error) => error);
+
+    expect([...listeners.keys()]).toEqual(['SIGTERM', 'SIGINT']);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    listeners.get('SIGTERM')!();
+    expect(lifecycle.isDraining()).toBe(true);
+
+    const closeAll = vi.spyOn(server, 'closeAllConnections');
+
+    listeners.get('SIGINT')!();
+    expect(closeAll).toHaveBeenCalled();
+    await vi.waitFor(() => expect(onExit).toHaveBeenCalledWith(0));
+    expect(await streamed).toBeInstanceOf(Error);
+    unsubscribe();
+    expect(listeners.size).toBe(0);
+  });
+
+  it('destroys upgraded sockets so close resolves while a WebSocket client is connected', async () => {
+    let lifecycle!: ILifecycle;
+    const { server } = await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance);
+
+        return lifecycle;
+      },
+    );
+
+    server.on('upgrade', (_req, socket: Socket) => {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const client = await upgrade(server);
+    const clientClosed = new Promise((resolve) => client.once('close', resolve));
+
+    await lifecycle.close();
+    await clientClosed;
+    expect(server.listening).toBe(false);
+  });
+
+  it('keeps upgraded sockets while a response streams and drops them when it ends', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let lifecycle!: ILifecycle;
+    const { server, url } = await listen(
+      (_req, res) => {
+        res.write('first;');
+        void held.then(() => res.end('last'));
+      },
+      (instance) => {
+        lifecycle = createLifecycle(instance);
+
+        return lifecycle;
+      },
+    );
+
+    server.on('upgrade', (_req, socket: Socket) => {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const client = await upgrade(server);
+    const streamed = getText(url);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const closed = lifecycle.close();
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.destroyed).toBe(false);
+    release();
+    expect(await streamed).toEqual({ status: 200, body: 'first;last' });
+    await closed;
+    await vi.waitFor(() => expect(client.destroyed).toBe(true));
+  });
+
+  it('destroys upgraded sockets at the drain timeout together with stuck streams', async () => {
+    let lifecycle!: ILifecycle;
+    const { server, url } = await listen(
+      (_req, res) => {
+        res.write('stuck');
+      },
+      (instance) => {
+        lifecycle = createLifecycle(instance, { drainTimeoutMs: 50 });
+
+        return lifecycle;
+      },
+    );
+
+    server.on('upgrade', (_req, socket: Socket) => {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const client = await upgrade(server);
+    const streamed = getText(url).catch((error: Error) => error);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await lifecycle.close();
+    expect(await streamed).toBeInstanceOf(Error);
+    await vi.waitFor(() => expect(client.destroyed).toBe(true));
+  });
+
+  it('attaches the upgrade tracker only while the application listens for upgrades', () => {
+    const server = http.createServer();
+
+    createLifecycle(server);
+    expect(server.listenerCount('upgrade')).toBe(0);
+
+    /**
+     * Application upgrade handler.
+     */
+    const onUpgrade = (): void => undefined;
+
+    server.on('upgrade', onUpgrade);
+    expect(server.listenerCount('upgrade')).toBe(2);
+    expect(server.listeners('upgrade')[1]).toBe(onUpgrade);
+    server.off('upgrade', onUpgrade);
+    expect(server.listenerCount('upgrade')).toBe(0);
+
+    const prepared = http.createServer();
+
+    prepared.on('upgrade', onUpgrade);
+    createLifecycle(prepared);
+    expect(prepared.listenerCount('upgrade')).toBe(2);
+  });
+
+  it('runs onDrain while the drain starts and onClose after the server stopped', async () => {
+    const calls: string[] = [];
+    let lifecycle!: ILifecycle;
+    const { server } = await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance, {
+          onDrain: () => {
+            calls.push(`drain:${String(instance.listening)}`);
+          },
+          onClose: () => {
+            calls.push(`close:${String(instance.listening)}`);
+          },
+        });
+
+        return lifecycle;
+      },
+    );
+
+    await lifecycle.close();
+    expect(calls).toEqual(['drain:true', 'close:false']);
+    expect(server.listening).toBe(false);
+  });
+
+  it('still stops the server and rejects when onDrain fails', async () => {
+    const onClose = vi.fn();
+    let lifecycle!: ILifecycle;
+    const { server } = await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance, {
+          onDrain: () => Promise.reject(new Error('vite close failed')),
+          onClose,
+        });
+
+        return lifecycle;
+      },
+    );
+
+    await expect(lifecycle.close()).rejects.toThrow('vite close failed');
+    expect(server.listening).toBe(false);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+});

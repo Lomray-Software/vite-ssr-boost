@@ -65,6 +65,31 @@ describe('cli-shortcuts', () => {
     expect(stubs.reboot.called).toBe(false);
   });
 
+  it('should drain through the lifecycle on restart when the server has one', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'r')!;
+    const { context, stubs } = createContext();
+    const close = sandbox.stub().resolves();
+
+    await shortcut.action({ ...context, lifecycle: { close } as never });
+
+    expect(close.calledOnce).toBe(true);
+    expect(stubs.serverClose.called).toBe(false);
+    expect(stubs.close.called).toBe(false);
+    expect(stubs.reboot.calledOnceWithExactly(false)).toBe(true);
+  });
+
+  it('should stop restart flow when the lifecycle drain fails', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'r')!;
+    const { context, stubs } = createContext();
+    const close = sandbox.stub().rejects(new Error('drain failed'));
+
+    await shortcut.action({ ...context, lifecycle: { close } as never });
+
+    expect(stubs.info.lastCall.args[0]).toContain('failed to stop dev server');
+    expect(stubs.info.lastCall.args[0]).toContain('drain failed');
+    expect(stubs.reboot.called).toBe(false);
+  });
+
   it('should print urls on "u" shortcut', () => {
     const shortcut = shortcuts.find(({ key }) => key === 'u')!;
     const { context, stubs } = createContext();

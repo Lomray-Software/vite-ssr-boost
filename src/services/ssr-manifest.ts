@@ -99,7 +99,8 @@ class SsrManifest extends RouteAssets {
    * Get singleton instance
    */
   public static get(config: ServerConfig, params: ISsrManifestParams = {}): SsrManifest {
-    if (SsrManifest.instance === null) {
+    // A restarted dev server brings a new config with a new Vite; the old instance holds the closed one.
+    if (SsrManifest.instance === null || SsrManifest.instance.config !== config) {
       SsrManifest.instance = new SsrManifest(config, params);
     }
 

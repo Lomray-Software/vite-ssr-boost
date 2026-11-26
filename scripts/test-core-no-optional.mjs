@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { access, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { execFileSync, spawn } from 'node:child_process';
+import { access, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -83,7 +84,7 @@ try {
     `./${archive}`,
   ]);
 
-  for (const dependency of ['compression', 'express', '@playwright/test']) {
+  for (const dependency of ['compression', 'express', 'vite', '@playwright/test']) {
     try {
       await access(join(directory, 'node_modules', dependency));
       throw new Error(`${dependency} was installed despite --omit=optional.`);
@@ -139,6 +140,10 @@ try {
           throw new Error(`${relativePath} imports an optional adapter dependency.`);
         }
 
+        if (/(?:from|import\()\s*["']vite(?:\/[^"']*)?["']/.test(code)) {
+          throw new Error(`${relativePath} imports Vite at runtime.`);
+        }
+
         if (
           /(?:from|import\()\s*["'](?:node:|fs["']|http["']|https["']|path["']|url["'])/.test(
             code,
@@ -192,10 +197,18 @@ try {
     assert.equal(http.cacheControl({ private: true, noStore: true }), 'private, no-store');
     const production = await import('@lomray/vite-ssr-boost/node/production');
     const productionJs = await import('@lomray/vite-ssr-boost/node/production.js');
-    for (const name of ['loadHtmlShell', 'createRouteAssetPreparer']) {
+    for (const name of ['loadHtmlShell', 'createRouteAssetPreparer', 'prepareProduction', 'createProductionServer', 'serveStatic', 'createLifecycle']) {
       assert.equal(typeof production[name], 'function', name);
       assert.equal(production[name], productionJs[name], name);
     }
+    const dev = await import('@lomray/vite-ssr-boost/node/dev');
+    const devJs = await import('@lomray/vite-ssr-boost/node/dev.js');
+    for (const name of ['prepareDev', 'createDevServer']) {
+      assert.equal(typeof dev[name], 'function', name);
+      assert.equal(dev[name], devJs[name], name);
+    }
+    const { default: defineEntry, isEntry } = await import('@lomray/vite-ssr-boost/core/entry');
+    assert.equal(isEntry(defineEntry(() => null, [{ path: '/', element: null }])), true);
     assert.equal(createHandler, (await import('@lomray/vite-ssr-boost/core/handler.js')).default);
     assert.equal(adapterEdge, (await import('@lomray/vite-ssr-boost/adapters/edge.js')).default);
     assert.equal(adapterNode, (await import('@lomray/vite-ssr-boost/adapters/node.js')).default);
@@ -218,6 +231,107 @@ try {
     cwd: directory,
     stdio: 'inherit',
   });
+
+  // A node managed build must serve, and drain on SIGTERM, with neither Express nor Vite installed.
+  const buildDir = join(directory, 'build');
+
+  await mkdir(join(buildDir, 'client', 'assets'), { recursive: true });
+  await mkdir(join(buildDir, 'server'), { recursive: true });
+  await writeFile(
+    join(buildDir, 'client', 'index.html'),
+    '<!doctype html><html><head></head><body><div id="root"><!--ssr-outlet--></div></body></html>',
+  );
+  await writeFile(join(buildDir, 'client', 'assets', 'app-AbCdEf12.js'), 'export {};');
+  await writeFile(
+    join(buildDir, 'server', 'server.js'),
+    `import { createElement } from 'react';
+    import defineEntry from '@lomray/vite-ssr-boost/core/entry';
+    export default defineEntry(({ children }) => children, [
+      { path: '/', element: createElement('p', null, 'node-server-ok') },
+    ]);`,
+  );
+  await writeFile(
+    join(buildDir, 'server', 'ssr-boost.json'),
+    JSON.stringify({
+      version: 1,
+      root: '..',
+      base: '/',
+      mode: 'production',
+      publicDir: 'client',
+      indexFile: 'client/index.html',
+      serverFile: 'server/server.js',
+      managedServer: 'node',
+    }),
+  );
+
+  const serverProof = join(directory, 'node-server.mjs');
+
+  await writeFile(
+    serverProof,
+    `
+    import assert from 'node:assert/strict';
+    import { createProductionServer } from '@lomray/vite-ssr-boost/node/production';
+    const app = await createProductionServer({ buildDir: ${JSON.stringify(buildDir)}, compression: true, health: {} });
+    const { port } = await app.listen(0, '127.0.0.1');
+    const origin = 'http://127.0.0.1:' + port;
+    const page = await fetch(origin + '/', { headers: { 'user-agent': 'Googlebot/2.1', 'accept-encoding': 'gzip' } });
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /node-server-ok/);
+    assert.equal(page.headers.get('content-encoding'), 'gzip');
+    const asset = await fetch(origin + '/assets/app-AbCdEf12.js');
+    assert.equal(asset.status, 200);
+    assert.equal(asset.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    assert.equal((await fetch(origin + '/readyz')).status, 200);
+    assert.equal((await fetch(origin + '/missing')).status, 404);
+    await app.close();
+    await app.close();
+    `,
+  );
+  execFileSync(process.execPath, [serverProof], { cwd: directory, stdio: 'inherit' });
+
+  const port = await new Promise((resolve, reject) => {
+    const probe = createNetServer();
+
+    probe.once('error', reject);
+    probe.listen(0, () => {
+      const { port: free } = probe.address();
+
+      probe.close(() => resolve(free));
+    });
+  });
+  const cli = spawn(
+    process.execPath,
+    [join(packageRoot, 'cli.js'), 'start', '--build-dir', buildDir, '--port', String(port)],
+    { cwd: directory, stdio: ['ignore', 'inherit', 'inherit'] },
+  );
+  const exited = new Promise((resolve) => cli.once('exit', (code, signal) => resolve({ code, signal })));
+
+  try {
+    const deadline = Date.now() + 20000;
+    let body;
+
+    while (body === undefined) {
+      if (Date.now() > deadline || cli.exitCode !== null) {
+        throw new Error('ssr-boost start did not serve the node build.');
+      }
+
+      body = await fetch(new URL('/', `http://${'127.0.0.1'}:${port}`), {
+        headers: { 'user-agent': 'Googlebot/2.1' },
+      })
+        .then((response) => (response.ok ? response.text() : undefined))
+        .catch(() => undefined);
+
+      if (body === undefined) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+
+    assert.match(body, /node-server-ok/);
+    cli.kill('SIGTERM');
+    assert.deepEqual(await exited, { code: 0, signal: null });
+  } finally {
+    cli.kill('SIGKILL');
+  }
 
   // Resolve the public conditional export in an installed consumer, with no Node shims.
   const edgeBundle = await build({
@@ -250,6 +364,16 @@ try {
     import type { IHtmlShell, ILoadHtmlShellOptions, IRouteAssetPreparerOptions } from '@lomray/vite-ssr-boost/node/production';
     import type { IHtmlShell as IHtmlShellJs } from '@lomray/vite-ssr-boost/node/production.js';
     import type { ICreateHandlerOptions } from '@lomray/vite-ssr-boost/core/handler';
+    import { createProductionServer, prepareProduction } from '@lomray/vite-ssr-boost/node/production';
+    import type { IProductionServer, IPrepareProductionOptions } from '@lomray/vite-ssr-boost/node/production';
+    import defineEntry from '@lomray/vite-ssr-boost/core/entry';
+    import type { IEntry } from '@lomray/vite-ssr-boost/core/entry';
+    const productionOptions: IPrepareProductionOptions = { buildDir: '/app/build', static: false };
+    const productionServer: Promise<IProductionServer> = createProductionServer({ ...productionOptions, compression: true, drainTimeoutMs: 1000 });
+    const prepared: Promise<{ handler: TSsrHandler }> = prepareProduction(productionOptions);
+    const typedEntry: IEntry = defineEntry(() => null, [{ path: '/' }]);
+    // @ts-expect-error managed compression takes a boolean or options, not a string.
+    createProductionServer({ compression: 'gzip' });
     import { cacheControl, documentHeaders, conditionalRequest } from '@lomray/vite-ssr-boost/http';
     import type { IDocumentHeaderRule } from '@lomray/vite-ssr-boost/http.js';
     const rules: IDocumentHeaderRule[] = [{ when: ({ hasCookie }) => !hasCookie('session'), set: { 'Cache-Control': cacheControl({ public: true, sMaxAge: 30 }) } }];
@@ -318,7 +442,7 @@ try {
     }
   }
 
-  process.stdout.write('Packed exports (including http, testing and node/production), NodeNext/Bundler declarations, optional-free core/testing and edge testing bundle passed.\n');
+  process.stdout.write('Packed exports (including http, testing, core/entry, node/production and node/dev), the node managed server without Express or Vite, NodeNext/Bundler declarations, optional-free core/testing and edge testing bundle passed.\n');
 } finally {
   await rm(directory, { force: true, recursive: true });
 }

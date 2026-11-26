@@ -22,7 +22,13 @@ const {
   setCurrentEntrypointNameMock,
   printServerInfoMock,
   processStopMock,
+  createProductionServerMock,
+  createDevServerMock,
+  loadProductionConfigMock,
 } = vi.hoisted(() => ({
+  createProductionServerMock: vi.fn(),
+  createDevServerMock: vi.fn(),
+  loadProductionConfigMock: vi.fn(),
   BuildMock: vi.fn(),
   createServerMock: vi.fn(),
   resolveConfigMock: vi.fn(),
@@ -58,6 +64,32 @@ vi.mock('@helpers/print-server-info', () => ({
 vi.mock('@helpers/process-stop', () => ({
   default: processStopMock,
 }));
+vi.mock('@node/production', () => ({
+  createProductionServer: createProductionServerMock,
+}));
+vi.mock('@node/dev', () => ({
+  createDevServer: createDevServerMock,
+}));
+vi.mock('@services/production-config', () => ({
+  default: loadProductionConfigMock,
+}));
+
+/**
+ * Lifecycle double that records its signal subscription.
+ */
+const createLifecycleMock = () => {
+  const release = vi.fn();
+
+  return {
+    release,
+    lifecycle: { handleSignals: vi.fn(() => release), close: vi.fn().mockResolvedValue(undefined) },
+  };
+};
+
+/**
+ * Let queued promise callbacks run.
+ */
+const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 describe('cli integration', () => {
   afterEach(() => {
@@ -65,6 +97,7 @@ describe('cli integration', () => {
     vi.clearAllMocks();
     cliContext.config = undefined;
     cliContext.server = undefined;
+    cliContext.lifecycle = undefined;
   });
 
   it('should print build duration info', async () => {
@@ -90,6 +123,7 @@ describe('cli integration', () => {
     createServerMock.mockResolvedValue({
       run: vi.fn(() => 'server'),
       app: 'app',
+      getLifecycle: vi.fn(() => undefined),
     });
 
     expect(await runDev({ version: '1', entrypointName: 'worker' })).toEqual({
@@ -105,6 +139,110 @@ describe('cli integration', () => {
 
     expect(await runServerless({ version: '1' })).toBe('app');
     expect(printServerInfoMock).toHaveBeenCalled();
+  });
+
+  it('should start the node production server when selected by flag or by the build', async () => {
+    const { lifecycle, release } = createLifecycleMock();
+    const listen = vi.fn().mockResolvedValue(null);
+
+    createProductionServerMock.mockResolvedValue({ server: 'node-server', lifecycle, listen });
+
+    expect(await runProd({ version: '1', server: 'node', port: 4100 })).toEqual({
+      server: 'node-server',
+      config: expect.anything(),
+      lifecycle,
+    });
+    expect(createProductionServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ compression: true, modulePreload: false }),
+    );
+    expect(listen).toHaveBeenCalledWith(4100, expect.anything());
+    expect(printServerInfoMock).toHaveBeenCalledWith(expect.anything(), {
+      version: '1',
+      server: 'node-server',
+    });
+    expect(lifecycle.handleSignals).toHaveBeenCalledWith({ onExit: processStopMock });
+    expect(createServerMock).not.toHaveBeenCalled();
+
+    loadProductionConfigMock.mockReturnValueOnce({ managedServer: 'node' });
+    await runProd({ version: '1', isPrintInfo: false });
+
+    expect(createProductionServerMock).toHaveBeenCalledTimes(2);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(createServerMock).not.toHaveBeenCalled();
+  });
+
+  it('should let the flag override a persisted node selection', async () => {
+    createServerMock.mockResolvedValue({
+      run: vi.fn(() => 'server'),
+      app: 'app',
+      getLifecycle: vi.fn(() => undefined),
+    });
+    loadProductionConfigMock.mockReturnValueOnce({ managedServer: 'node' });
+
+    expect((await runProd({ version: '1', server: 'express' })).server).toBe('server');
+    expect(createProductionServerMock).not.toHaveBeenCalled();
+  });
+
+  it('should start the node dev server when selected', async () => {
+    const { lifecycle } = createLifecycleMock();
+    const listen = vi.fn().mockResolvedValue(null);
+    const config = { getParams: () => ({ host: '0.0.0.0', port: 4200 }) };
+    const vite = { config: { server: {} as { host?: string } } };
+
+    createDevServerMock.mockResolvedValue({
+      config,
+      vite,
+      server: 'dev-server',
+      lifecycle,
+      listen,
+    });
+
+    expect(await runDev({ version: '1', server: 'node', isHost: true, mode: 'dev' })).toEqual({
+      server: 'dev-server',
+      config,
+      lifecycle,
+    });
+    expect(createDevServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'dev', isHost: true }),
+    );
+    expect(vite.config.server.host).toBe('0.0.0.0');
+    expect(listen).toHaveBeenCalledWith(4200, '0.0.0.0');
+    expect(lifecycle.handleSignals).toHaveBeenCalledWith({ onExit: processStopMock });
+    expect(createServerMock).not.toHaveBeenCalled();
+  });
+
+  it('should read the dev server selection from the plugin options', async () => {
+    const { lifecycle } = createLifecycleMock();
+
+    resolveConfigMock.mockResolvedValue({});
+    getPluginConfigMock.mockReturnValue({ managedServer: 'node' });
+    createDevServerMock.mockResolvedValue({
+      config: { getParams: () => ({ host: 'h', port: 1 }) },
+      vite: { config: { server: {} } },
+      server: 'dev-server',
+      lifecycle,
+      listen: vi.fn().mockResolvedValue(null),
+    });
+
+    expect((await runDev({ version: '1', isPrintInfo: false })).server).toBe('dev-server');
+    expect(printServerInfoMock).not.toHaveBeenCalled();
+  });
+
+  it('should exit through the lifecycle drain on ctrl+c', async () => {
+    const { lifecycle } = createLifecycleMock();
+
+    cliContext.lifecycle = lifecycle as never;
+    onKeyPress('\x03');
+    await flush();
+
+    expect(lifecycle.close).toHaveBeenCalledTimes(1);
+    expect(processStopMock).toHaveBeenCalledWith(0);
+
+    lifecycle.close.mockRejectedValueOnce(new Error('drain failed'));
+    onKeyPress('\x04');
+    await flush();
+
+    expect(processStopMock).toHaveBeenLastCalledWith(1);
   });
 
   it('should reset vite cache when cache dir exists', async () => {

@@ -6,8 +6,21 @@ import type { IPluginOptions } from '../plugin';
 /**
  * Stop server
  */
-const stopServer = async ({ server, config }: ICliContext): Promise<boolean> => {
+const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<boolean> => {
   const Logger = config?.getLogger();
+
+  // drain through the lifecycle: it closes the server and the dev Vite instance
+  if (lifecycle) {
+    try {
+      await lifecycle.close();
+
+      return true;
+    } catch (error) {
+      Logger?.info(chalk.red(`failed to stop dev server: ${error as string}`));
+
+      return false;
+    }
+  }
 
   // stop express server
   const err = await new Promise((resolve) => {

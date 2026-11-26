@@ -136,7 +136,9 @@ describe('legacy Express render adapter', () => {
       }
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain('SSR_BOOST_DEPRECATED_REQ_RES');
-      expect(warnings[0]).toContain('context.request, context.response.headers/context.response.status');
+      expect(warnings[0]).toContain(
+        'context.request, context.response.headers/context.response.status',
+      );
       expect(warnings[0]).toContain('9.0');
       expect(warnings[0]).toContain('diagnostics#ssr_boost_deprecated_req_res');
     },
@@ -145,29 +147,32 @@ describe('legacy Express render adapter', () => {
   it.each([
     [true, '1'],
     [false, '0'],
-  ] as const)('keeps plain req/res properties with isProd=%s and diagnostics=%s', async (isProd, override) => {
-    vi.stubEnv('SSR_BOOST_DIAGNOSTICS', override);
-    const { config, context, logger } = createContext();
-    config.isProd = isProd;
-    coreRenderMock.mockImplementation(async (_, updated, options) => {
-      await options.onRouterReady({ context: updated });
-      return new Response('rendered');
-    });
-    await render({ App, handler: {} as never }, config as never, context as never, {
-      onRouterReady: ({ context: hookContext }) => {
-        for (const name of ['req', 'res'] as const) {
-          expect(Object.getOwnPropertyDescriptor(hookContext, name)).toEqual({
-            configurable: true,
-            enumerable: true,
-            value: context[name],
-            writable: true,
-          });
-        }
-        return {};
-      },
-    });
-    expect(logger.warn).not.toHaveBeenCalled();
-  });
+  ] as const)(
+    'keeps plain req/res properties with isProd=%s and diagnostics=%s',
+    async (isProd, override) => {
+      vi.stubEnv('SSR_BOOST_DIAGNOSTICS', override);
+      const { config, context, logger } = createContext();
+      config.isProd = isProd;
+      coreRenderMock.mockImplementation(async (_, updated, options) => {
+        await options.onRouterReady({ context: updated });
+        return new Response('rendered');
+      });
+      await render({ App, handler: {} as never }, config as never, context as never, {
+        onRouterReady: ({ context: hookContext }) => {
+          for (const name of ['req', 'res'] as const) {
+            expect(Object.getOwnPropertyDescriptor(hookContext, name)).toEqual({
+              configurable: true,
+              enumerable: true,
+              value: context[name],
+              writable: true,
+            });
+          }
+          return {};
+        },
+      });
+      expect(logger.warn).not.toHaveBeenCalled();
+    },
+  );
 
   /**
    * Preserve reusable hook headers while emitting each response's cookies independently.
@@ -190,7 +195,6 @@ describe('legacy Express render adapter', () => {
         await response.text();
       });
       await render({ App, handler }, config as never, context as never, {
-
         /**
          * Reuse application-owned metadata across otherwise independent requests.
          */
@@ -457,6 +461,30 @@ describe('legacy Express render adapter', () => {
       );
     },
   );
+
+  it('hands a skipped request to next() and warns once about shouldSkip', async () => {
+    const handler = createStaticHandler([{ path: '*', Component: () => 'BODY' }]);
+    const warnings: unknown[] = [];
+
+    for (const route of ['/first', '/second']) {
+      const { config, context, logger } = createContext();
+      const onSkip = vi.fn();
+      context.req.originalUrl = route;
+
+      await render({ App, handler }, config as never, context as never, {
+        onRequest: () => ({ shouldSkip: true }),
+        onSkip,
+      });
+
+      expect(onSkip).toHaveBeenCalledOnce();
+      expect(coreRenderMock).not.toHaveBeenCalled();
+      warnings.push(...logger.warn.mock.calls.map(([message]) => message));
+    }
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('SSR_BOOST_DEPRECATED_EXPRESS_HOOK');
+    expect(warnings[0]).toContain('shouldSkip');
+  });
 
   it('keeps Express redirect behavior for legacy consumers', async () => {
     const { config, context, res } = createContext();

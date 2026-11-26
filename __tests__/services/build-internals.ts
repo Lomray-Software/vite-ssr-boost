@@ -216,6 +216,20 @@ describe('Build internals', () => {
     });
   });
 
+  it('persists the selected managed server so start can pick it without the plugin', () => {
+    const service = prepareService();
+    service.pluginConfig.managedServer = 'node';
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
+    const writeFile = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+
+    service.writeProductionConfig();
+
+    expect(JSON.parse(String(writeFile.mock.calls[0][1]))).toMatchObject({
+      version: 1,
+      managedServer: 'node',
+    });
+  });
+
   it.each([
     {
       label: 'empty',

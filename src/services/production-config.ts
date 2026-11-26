@@ -9,7 +9,13 @@ interface IProductionConfig {
   publicDir: string;
   indexFile: string;
   serverFile: string;
+  // Missing means express: builds made before the managed node server existed.
+  managedServer?: TManagedServer;
 }
+
+type TManagedServer = 'node' | 'express';
+
+const managedServers: ReadonlySet<unknown> = new Set(['node', 'express']);
 
 /**
  * Read relocatable build settings while retaining conventional paths for older builds.
@@ -42,7 +48,8 @@ const loadProductionConfig = (buildDir?: string): IProductionConfig | undefined 
     config?.version !== 1 ||
     ['root', 'base', 'mode', 'publicDir', 'indexFile', 'serverFile'].some(
       (key) => typeof config[key as keyof IProductionConfig] !== 'string',
-    )
+    ) ||
+    (config.managedServer !== undefined && !managedServers.has(config.managedServer))
   ) {
     throw new Error(`Invalid production configuration: ${filename}. Run ssr-boost build again.`);
   }
@@ -50,6 +57,6 @@ const loadProductionConfig = (buildDir?: string): IProductionConfig | undefined 
   return { ...config, root: path.resolve(path.dirname(filename), config.root) };
 };
 
-export type { IProductionConfig };
+export type { IProductionConfig, TManagedServer };
 
 export default loadProductionConfig;

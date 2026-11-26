@@ -19,6 +19,15 @@ function onKeyPress(input: string): void {
 async function runAction(input: string): Promise<void> {
   // ctrl+c or ctrl+d
   if (input === '\x03' || input === '\x04') {
+    if (cliContext.lifecycle) {
+      cliContext.lifecycle.close().then(
+        () => processStop(0),
+        () => processStop(1),
+      );
+
+      return;
+    }
+
     if (!cliContext.server?.close((e) => processStop(e ? 1 : 0))) {
       processStop();
     }

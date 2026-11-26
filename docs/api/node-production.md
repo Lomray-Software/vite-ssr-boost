@@ -1,22 +1,164 @@
 # Node production helpers
 
 Use these helpers when your application owns its Node HTTP server and serves a build produced by
-the SSR BOOST CLI. They supply the `getHtml` and `prepare` options for `core/handler`.
+the SSR BOOST CLI. `createProductionServer` is a complete `node:http` server; `prepareProduction`
+gives you the pieces to mount on your own; `loadHtmlShell` and `createRouteAssetPreparer` supply
+the `getHtml` and `prepare` options for `core/handler`.
 
 ```ts
 import {
+  createLifecycle,
+  createProductionServer,
   createRouteAssetPreparer,
   loadHtmlShell,
+  prepareProduction,
+  serveStatic,
 } from '@lomray/vite-ssr-boost/node/production';
 import type {
+  ICreateProductionServerOptions,
   IHtmlShell,
+  ILifecycle,
+  ILifecycleOptions,
   ILoadHtmlShellOptions,
+  IPrepareProductionOptions,
+  IProductionApp,
+  IProductionPaths,
+  IProductionServer,
   IRouteAssetPreparerOptions,
+  IServeStaticOptions,
   TRouteAssetsManifest,
+  TStaticMiddleware,
 } from '@lomray/vite-ssr-boost/node/production';
 ```
 
-The explicit `.js` import path also works. These helpers use Node's filesystem APIs.
+The explicit `.js` import path also works. These helpers use Node's filesystem APIs and need
+neither Vite nor Express.
+
+## `createProductionServer`
+
+```ts
+interface ICreateProductionServerOptions extends IPrepareProductionOptions, ILifecycleOptions {
+  compression?: boolean | { format?: 'gzip' | 'deflate' }; // Default: false
+  https?: https.ServerOptions;
+  logger?: IErrorLogger;
+}
+
+interface IProductionServer extends IProductionApp {
+  server: http.Server | https.Server;
+  lifecycle: ILifecycle;
+  listen: (port?: number, host?: string) => Promise<AddressInfo | string | null>;
+  close: () => Promise<void>;
+}
+
+function createProductionServer(options?: ICreateProductionServerOptions): Promise<IProductionServer>;
+```
+
+Requests pass through health probes, client files, then SSR, which receives only what the file
+server skipped. `compression` applies to rendered documents only. `listen` resolves with the bound
+address and rejects bind errors. `close` is `lifecycle.close`. The server does not subscribe to
+process signals; call `lifecycle.handleSignals()` when your process owns them.
+
+```ts
+const app = await createProductionServer({ buildDir: 'build', compression: true, health: true });
+
+await app.listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+app.lifecycle.handleSignals({ onExit: (code) => process.exit(code) });
+```
+
+## `prepareProduction`
+
+```ts
+interface IPrepareProductionOptions {
+  buildDir?: string; // Default: ./build, then ./dist
+  modulePreload?: boolean; // Default: false
+  isSPA?: boolean; // Default: false
+  static?: Omit<IServeStaticOptions, 'root' | 'basename' | 'isSPA' | 'hasAccessIndexHtml'> | false;
+  hasAccessIndexHtml?: () => boolean;
+  loadEntry?: (file: string) => Promise<unknown>;
+}
+
+interface IProductionApp {
+  handler: SsrHandler;
+  staticMiddleware?: TStaticMiddleware; // Undefined with static: false
+  paths: { root: string; base: string; publicDir: string; indexFile: string; serverFile: string };
+}
+
+function prepareProduction(options?: IPrepareProductionOptions): Promise<IProductionApp>;
+```
+
+Paths come from `server/ssr-boost.json`. The handler mounts the built `defineEntry` default export
+with the HTML shell, route assets and Node renderer bound. An Express entry or a missing server
+build throws an error naming the file. With `isSPA`, no server entry is loaded and the handler
+answers every route with the built document and `Cache-Control: no-cache`. Mount
+`staticMiddleware` before the handler; it calls `next()` for anything that is not a file.
+
+## `serveStatic`
+
+```ts
+interface IServeStaticOptions extends ServeStaticOptions {
+  root: string;
+  basename?: string;
+  isSPA?: boolean;
+  assetsDir?: string; // Default: 'assets'
+  hasAccessIndexHtml?: () => boolean;
+}
+
+function serveStatic(options: IServeStaticOptions): TStaticMiddleware;
+```
+
+Connect middleware on [serve-static](https://github.com/expressjs/serve-static) with the managed
+Express server's behaviour: validators, ranges, HEAD and directory redirects stay with
+serve-static; in SSR builds, URLs outside the client directory's top-level names go straight to
+`next()`;
+`/.well-known/` is served even though other dotfiles stay hidden, resolving `name` to `name.json`.
+SSR builds hide the raw `/index.html` shell (any letter case) unless `hasAccessIndexHtml()` returns
+true, so that URL reaches the router.
+
+Fingerprinted bundles in `assetsDir` (`name-<hash>.ext`) get
+`Cache-Control: public, max-age=31536000, immutable`. Every other file keeps serve-static's
+revalidating default. Setting `maxAge`, `immutable` or `cacheControl: false` hands the policy for
+every file to you.
+
+## `createLifecycle`
+
+```ts
+interface ILifecycleOptions {
+  health?: boolean | { livePath?: string; readyPath?: string }; // true: /healthz, /readyz
+  drainTimeoutMs?: number; // Default: 30000
+  keepAliveTimeoutMs?: number; // Default: Node's
+  headersTimeoutMs?: number; // Default: Node's
+  requestTimeoutMs?: number; // Default: Node's
+  onDrain?: () => Promise<void> | void;
+  onClose?: () => Promise<void> | void;
+}
+
+function createLifecycle(server: http.Server | https.Server, options?: ILifecycleOptions): ILifecycle;
+```
+
+Health probes are opt-in. The live path answers 200 while the process runs; the ready path answers
+200 after `setReady()` and 503 once a drain starts. Both answer `GET` and `HEAD` with
+`Cache-Control: no-store`.
+
+`close()` is idempotent: every caller shares one drain. It stops accepting connections, closes idle
+keep-alive sockets, sends `Connection: close` on responses still in flight and resolves once every
+socket is gone. Responses that outlive `drainTimeoutMs` have their sockets destroyed. Upgraded
+sockets (WebSocket, HMR) are destroyed once no HTTP response is active. `onDrain` runs as the drain
+starts, `onClose` after it.
+
+`handleSignals({ signals, onExit })` routes `SIGTERM` and `SIGINT` (by default) through `close()` and
+returns an unsubscribe function; a second signal destroys the remaining sockets. The CLI uses it.
+Embedded and serverless hosts own their lifecycle and leave it uncalled.
+
+Timeouts stay at Node's defaults unless set. Behind a load balancer whose idle timeout is 60 seconds,
+keep the server's keep-alive longer than the balancer's so the balancer closes first:
+
+```ts
+createProductionServer({
+  keepAliveTimeoutMs: 65_000,
+  headersTimeoutMs: 66_000,
+  requestTimeoutMs: 300_000,
+});
+```
 
 ## `loadHtmlShell`
 

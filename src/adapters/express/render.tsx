@@ -288,6 +288,10 @@ async function render(
             shouldWrite = false;
 
             if (shouldSkip) {
+              if (isDiagnosticsEnabled(true)) {
+                new Diagnostics('', Logger).deprecatedExpressHook('shouldSkip');
+              }
+
               onSkip?.();
             }
 

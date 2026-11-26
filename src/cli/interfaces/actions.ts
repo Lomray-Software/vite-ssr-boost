@@ -1,4 +1,5 @@
 import type { IBuildParams } from '@services/build';
+import type { TManagedServer } from '@services/production-config';
 
 export interface IDevActionParams {
   host?: boolean;
@@ -6,6 +7,7 @@ export interface IDevActionParams {
   resetCache?: boolean;
   mode?: string;
   entrypoint?: string;
+  server?: TManagedServer;
 }
 
 export interface IBuildActionParams {
@@ -25,6 +27,7 @@ export interface IStartActionParams {
   focusOnly?: IBuildParams['focusOnly'];
   modulePreload?: boolean;
   buildDir?: string;
+  server?: TManagedServer;
 }
 
 export interface IPreviewActionParams extends IStartActionParams {

@@ -241,7 +241,7 @@ class Build {
    */
   protected writeProductionConfig(): void {
     const { base, mode } = this.viteConfig;
-    const { indexFile = 'index.html', serverFile = 'server.ts' } = this.pluginConfig;
+    const { indexFile = 'index.html', serverFile = 'server.ts', managedServer } = this.pluginConfig;
     const config: IProductionConfig = {
       version: 1,
       root: '..',
@@ -250,6 +250,7 @@ class Build {
       publicDir: 'client',
       indexFile: path.posix.join('client', indexFile),
       serverFile: `server/${path.parse(serverFile).name}.js`,
+      ...(managedServer ? { managedServer } : {}),
     };
     const directory = path.join(this.buildDir, 'server');
 

@@ -9,19 +9,34 @@ import PrepareServer from '@adapters/express/prepare-server';
 import type { TRender } from '@adapters/express/render';
 import staticFiles from '@adapters/express/static-files';
 import printServerInfo from '@helpers/print-server-info';
+import createLifecycle from '@node/lifecycle';
+import type { ILifecycle, ILifecycleOptions } from '@node/lifecycle';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 
 export interface ICreateServerOut {
   run: (options?: { version?: string; isPrintInfo?: boolean }) => Server;
   app: Express;
+  /** Drain, timeouts and health of the server the last run() started. */
+  getLifecycle: () => ILifecycle | undefined;
 }
 
 /**
  * Create SSR server
  */
-async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
+async function createServer(
+  config: ServerConfig,
+  lifecycleOptions: ILifecycleOptions = {},
+): Promise<ICreateServerOut> {
   const app = express().disable('x-powered-by');
+  let lifecycle: ILifecycle | undefined;
+
+  if (lifecycleOptions.health) {
+    /**
+     * Answer health probes before any application middleware.
+     */
+    app.use((req, res, next) => (lifecycle ? lifecycle.health(req, res, next) : next()));
+  }
 
   if (config.isProd) {
     app.set('env', 'production');
@@ -175,11 +190,18 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
         config.getVite()!.config.server.host = host;
       }
 
-      const server = (
-        isHTTPS
-          ? https.createServer(config.getVite()!.config.server.https!, app)
-          : http.createServer(app)
-      ).listen(port, host, () => {
+      const server = isHTTPS
+        ? https.createServer(config.getVite()!.config.server.https!, app)
+        : http.createServer(app);
+
+      lifecycle = createLifecycle(server, {
+        // Vite keeps HMR sockets open; closing it lets the dev drain finish.
+        onDrain: config.isProd ? undefined : () => config.getVite()?.close(),
+        ...lifecycleOptions,
+      });
+
+      server.listen(port, host, () => {
+        lifecycle?.setReady();
         void prepareServer.onServerStarted?.(app, serverApi, server);
 
         if (!isPrintInfo) {
@@ -192,6 +214,11 @@ async function createServer(config: ServerConfig): Promise<ICreateServerOut> {
       return server;
     },
     app,
+
+    /**
+     * Expose the lifecycle so the CLI can route signals and shortcuts through its drain.
+     */
+    getLifecycle: () => lifecycle,
   };
 }
 

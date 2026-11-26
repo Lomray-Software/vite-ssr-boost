@@ -88,6 +88,13 @@ for response metadata before shell readiness, and React Router HTTP helpers such
 in loaders/actions. Keep Express-specific middleware or response takeover in middleware or the
 earlier `onRequest(req, res)` hook; its arguments are unaffected.
 
+Express-only entry hooks (`onRequest(req, res)`, `shouldSkip`, `onServerCreated`,
+`onServerStarted` and `middlewares.expressStatic`) keep working in 8.x and log
+[`SSR_BOOST_DEPRECATED_EXPRESS_HOOK`](/reference/diagnostics#ssr_boost_deprecated_express_hook)
+once per hook, in development and production, unless `SSR_BOOST_DIAGNOSTICS=0`. Their
+replacements are `defineEntry` and the [Node server kit](/guide/runtime-adapters); removal is
+planned for **9.0**.
+
 ## Check the upgraded application
 
 Run development and production builds, then check hydration, lazy-route JS/CSS, redirects, unmatched-route 404s, error middleware and any HTML transform. If you use parsed request bodies, streaming or cancellation, exercise those paths too.

@@ -44,6 +44,15 @@ describe('SsrManifest', () => {
     expect(SsrManifest.get(config)).toBe(SsrManifest.get(config));
   });
 
+  it('should replace the instance when a restarted server brings a new config', () => {
+    const first = SsrManifest.get(createConfig());
+    const config = createConfig();
+    const second = SsrManifest.get(config);
+
+    expect(second).not.toBe(first);
+    expect(SsrManifest.get(config)).toBe(second);
+  });
+
   it('should load and cleanup client manifest', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(

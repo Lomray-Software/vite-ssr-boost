@@ -16,3 +16,6 @@ docs/.vitepress/cache
 
 playwright-report
 test-results
+
+# Dev server test projects
+.ssr-boost-dev-test-*

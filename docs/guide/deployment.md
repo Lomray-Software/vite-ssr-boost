@@ -14,8 +14,11 @@ The package CLI covers the main operational flows:
 
 ### Choosing a runtime
 
-The managed Express server (`ssr-boost start`) is the convenient default: it supplies the
-production launcher, lifecycle hooks, static files and compression, with opt-in Early Hints.
+The managed server (`ssr-boost start`) is the convenient default: it supplies the production
+launcher, static files, compression and a drain on `SIGTERM`/`SIGINT`, with opt-in Early Hints.
+It runs Express unless the plugin sets `managedServer: 'node'` or `start` gets `--server node`;
+the node server runs on `node:http` with a `defineEntry` entry and needs neither Vite nor Express
+at runtime. See [Managed node server](/guide/runtime-adapters#managed-node-server).
 
 The [public benchmark's Runtimes section](https://github.com/Lomray-Software/ssr-benchmarks#runtimes)
 serves the same built app through every transport. In that benchmark, the Fetch adapters on
@@ -59,8 +62,11 @@ Application hooks, loggers and middleware options remain in the compiled managed
 Development shortcuts, aliases, environment files and executable Vite plugin configuration are
 not serialized into the descriptor.
 
+The descriptor also records the plugin's `managedServer`; builds without the field start Express.
+
 Ordinary `ssr-boost start` invocations parse their flags with Node's argument parser, load the
-descriptor and start the existing managed Express server. The server loads Express, compression,
+descriptor and start the selected managed server. The node server loads the compiled application,
+its React rendering dependencies and serve-static. The Express server loads Express, compression,
 the compiled application and its React rendering dependencies. It reads the HTML shell and route
 asset manifest on first use and caches them for that server. Colored server messages still use
 Chalk. Vite, config resolution, the CLI command tree, Commander, migration tools, Babel and
@@ -100,13 +106,16 @@ file and directory names at startup. URLs outside those prefixes go straight to 
 a filesystem lookup. Built assets and public files retain Express's validators, ranges, HEAD
 responses and directory redirects. Add new top-level public files before starting the server;
 restart after changing the build. Custom extension fallbacks and `fallthrough: false` retain
-the unrestricted static middleware.
+the unrestricted static middleware. The managed node server applies the same rules through
+[`serveStatic`](/api/node-production#servestatic), and gives only fingerprinted assets an immutable
+one-year cache policy.
 
 On React versions that expose `renderToReadableStream`, the Node renderer uses that native
 Web stream directly. React 18 retains the pipeable renderer and its bounded Node-to-Web bridge.
 Both paths preserve cancellation, shell hooks and downstream demand.
 
-The managed Express server keeps gzip enabled for HTML. The response writer flushes compression
+The managed node server compresses rendered HTML with the Node adapter (gzip or deflate) and
+leaves static files uncompressed. The managed Express server keeps gzip enabled for HTML. The response writer flushes compression
 after each HTML chunk, before waiting for transport capacity. This delivers the shell while
 Suspense data is pending and preserves backpressure for later chunks. Buffered responses remain
 compressible. The Fetch core queues the prepared document header once React's shell is ready;

@@ -1,10 +1,12 @@
 import type { Server } from 'node:net';
+import type { ILifecycle } from '@node/lifecycle';
 import type ServerConfig from '@services/server-config';
 
 export interface ICliContext {
   isProd?: boolean;
   server?: Server;
   config?: ServerConfig;
+  lifecycle?: ILifecycle; // graceful close shared by signals, shortcuts and reboot
   reboot?: (isPrintInfo?: boolean) => Promise<void>; // reboot dev server
 }
 

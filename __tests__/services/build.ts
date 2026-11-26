@@ -5,7 +5,6 @@ import process from 'node:process';
 import sinon from 'sinon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BuildService from '@services/build';
-import ServerConfig from '@services/server-config';
 import SsrManifest from '@services/ssr-manifest';
 
 const config = {
@@ -45,10 +44,7 @@ describe('build', () => {
         }),
       } as unknown as childProcess.ChildProcess),
       processOnStub: sandbox.stub(process, 'on'),
-      buildRoutesManifestStub: sandbox.stub(
-        SsrManifest.get(ServerConfig.init()),
-        'buildRoutesManifest',
-      ),
+      buildRoutesManifestStub: sandbox.stub(SsrManifest.prototype, 'buildRoutesManifest'),
     };
   };
 

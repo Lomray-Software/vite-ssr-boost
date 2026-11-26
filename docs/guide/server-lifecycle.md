@@ -28,7 +28,9 @@ file-backed shells, including in production.
 
 ## `onServerCreated`
 
-Called once after the Express app exists.
+Called once after the Express app exists. Deprecated in 8.x; see
+[SSR_BOOST_DEPRECATED_EXPRESS_HOOK](/reference/diagnostics#ssr_boost_deprecated_express_hook) for the
+node server equivalent.
 
 Use it for:
 
@@ -39,7 +41,9 @@ Use it for:
 
 ## `onServerStarted`
 
-Called once after the HTTP server starts listening.
+Called once after the HTTP server starts listening. Deprecated in 8.x; see
+[SSR_BOOST_DEPRECATED_EXPRESS_HOOK](/reference/diagnostics#ssr_boost_deprecated_express_hook) for the
+node server equivalent.
 
 Use it for:
 
