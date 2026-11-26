@@ -28,6 +28,7 @@ const ENTITY_HEADERS = [
   'Content-Range',
   'ETag',
   'Last-Modified',
+  'Transfer-Encoding',
 ];
 
 /**

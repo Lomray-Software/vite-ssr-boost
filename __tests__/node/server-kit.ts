@@ -165,6 +165,33 @@ describe('node/server-kit', () => {
       expect(await response.text()).toBe('Range Not Satisfiable');
     });
 
+    it('should drop a staged transfer-encoding and frame the error by its length', async () => {
+      const url = await serve([
+        (_req, res, next) => {
+          res.setHeader('Transfer-Encoding', 'chunked');
+          next(new Error('fail'));
+        },
+      ]);
+
+      // A raw request shows the headers as sent, before a client would reject the framing.
+      const headers = await new Promise<http.IncomingHttpHeaders & { status?: number }>(
+        (resolve, reject) => {
+          http
+            .get(url, (response) => {
+              response.resume();
+              response.on('end', () =>
+                resolve({ ...response.headers, status: response.statusCode }),
+              );
+            })
+            .on('error', reject);
+        },
+      );
+
+      expect(headers.status).toBe(500);
+      expect(headers['transfer-encoding']).toBeUndefined();
+      expect(headers['content-length']).toBe(String(Buffer.byteLength('Internal Server Error')));
+    });
+
     it('should keep the framing of the error body over the error own headers', async () => {
       const url = await serve([
         (_req, _res, next) =>
