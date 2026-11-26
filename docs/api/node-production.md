@@ -133,12 +133,13 @@ when `extensions` lists its extension, the extensionless URL. `prepareProduction
 Files listed in `immutableFiles` get `Cache-Control: public, max-age=31536000, immutable`. Every
 other file keeps serve-static's revalidating default, so a stable name such as
 `assets/icon-facebook.svg` from `public/` is never pinned for a year. `ssr-boost build` writes the
-files Vite emitted for the client (scripts, styles and imported assets, nested chunks included) to
+client files Vite emitted (scripts, styles and imported assets, nested chunks included) to
 `server/fingerprinted-files.json`, and `prepareProduction` passes that list unless you give your
-own. A build without the file, such as one made before 8.7, revalidates everything. The list
-trusts Vite's hashed output names; if your output file names drop `[hash]`, set `maxAge` or your
-own `immutableFiles`. Setting `maxAge`, `immutable` or `cacheControl: false` hands the policy for
-every file to you.
+own. A build without the file, such as one made before 8.7, revalidates everything. A file is
+listed only when its name comes from an `entryFileNames`, `chunkFileNames` or `assetFileNames`
+string pattern with `[hash]`, so a stable name such as `assets/app.js` keeps revalidating. Names
+from a function pattern are never listed; give your own `immutableFiles` for them. Setting
+`maxAge`, `immutable` or `cacheControl: false` hands the policy for every file to you.
 
 ## `createLifecycle`
 

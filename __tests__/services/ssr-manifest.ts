@@ -161,10 +161,17 @@ describe('SsrManifest', () => {
         imports: ['dep'],
         isEntry: true,
       },
-      dep: {
+      'src/styles.css': {
         assets: [],
-        css: ['dep.css'],
-        file: 'dep.js',
+        css: [],
+        file: 'assets/styles-Mn0pQr1s.css',
+        imports: [],
+        isEntry: true,
+      },
+      dep: {
+        assets: ['assets/logo-Ab12Cd34.svg'],
+        css: ['assets/dep-Xy_9-8Zq.css'],
+        file: 'assets/dep-Q1w2E3r4.js',
         imports: [],
       },
     });
@@ -175,7 +182,13 @@ describe('SsrManifest', () => {
     );
 
     expect(Object.keys(assets)).toEqual(
-      expect.arrayContaining(['img.png', 'style.css', 'route.js', 'dep.css', 'dep.js']),
+      expect.arrayContaining([
+        'img.png',
+        'style.css',
+        'route.js',
+        'assets/dep-Xy_9-8Zq.css',
+        'assets/dep-Q1w2E3r4.js',
+      ]),
     );
 
     manifest.buildRoutesManifest();
@@ -192,7 +205,16 @@ describe('SsrManifest', () => {
     );
     expect(writeFileSync).toHaveBeenCalledWith(
       '/root/dist/server/fingerprinted-files.json',
-      `${JSON.stringify(['dep.css', 'dep.js', 'img.png', 'route.js', 'style.css'], null, 2)}\n`,
+      `${JSON.stringify(
+        [
+          'assets/dep-Q1w2E3r4.js',
+          'assets/dep-Xy_9-8Zq.css',
+          'assets/logo-Ab12Cd34.svg',
+          'assets/styles-Mn0pQr1s.css',
+        ],
+        null,
+        2,
+      )}\n`,
       { encoding: 'utf-8' },
     );
   });

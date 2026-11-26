@@ -233,6 +233,7 @@ class Build {
       viteAliases: this.viteConfig.resolve.alias,
       basename: this.viteConfig.base,
       renderBuiltUrl: this.viteConfig?.experimental?.renderBuiltUrl,
+      buildOutput: this.viteConfig.build,
     }).buildRoutesManifest();
   }
 

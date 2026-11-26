@@ -3,6 +3,8 @@ import path from 'node:path';
 import chalk from 'chalk';
 import type { RouterState } from 'react-router';
 import type { Alias, ModuleNode, RenderBuiltAssetUrl } from 'vite';
+import createFingerprintMatcher from '@helpers/fingerprint-matcher';
+import type { IBuildOutputConfig, TOutputKind } from '@helpers/fingerprint-matcher';
 import type { IAsyncRoute } from '@helpers/import-route';
 import type { TRoutesTree } from '@services/parse-routes';
 import ParseRoutes from '@services/parse-routes';
@@ -17,7 +19,19 @@ interface ISsrManifestParams {
   viteAliases?: Alias[];
   basename?: string;
   renderBuiltUrl?: RenderBuiltAssetUrl;
+  buildOutput?: IBuildOutputConfig;
 }
+
+/**
+ * Name which output pattern produced a manifest record's own file.
+ */
+const getOutputKind = (file: string, isEntry?: boolean): TOutputKind => {
+  if (!/\.[cm]?js$/.test(file)) {
+    return 'asset';
+  }
+
+  return isEntry ? 'entry' : 'chunk';
+};
 
 interface IManifest {
   [path: string]: {
@@ -84,11 +98,16 @@ class SsrManifest extends RouteAssets {
   protected readonly renderBuiltUrl?: RenderBuiltAssetUrl;
 
   /**
+   * Client build output settings that decide which emitted names carry a content hash
+   */
+  protected readonly buildOutput?: IBuildOutputConfig;
+
+  /**
    * @constructor
    */
   protected constructor(
     config: ServerConfig,
-    { buildDir, viteAliases, basename, renderBuiltUrl }: ISsrManifestParams = {},
+    { buildDir, viteAliases, basename, renderBuiltUrl, buildOutput }: ISsrManifestParams = {},
   ) {
     super(path.resolve(config.getParams().root, buildDir || ''), config.isModulePreload);
 
@@ -100,6 +119,7 @@ class SsrManifest extends RouteAssets {
     this.pathNormalize = new PathNormalize(config, viteAliases);
     this.basename = basename;
     this.renderBuiltUrl = renderBuiltUrl;
+    this.buildOutput = buildOutput;
   }
 
   /**
@@ -360,16 +380,18 @@ class SsrManifest extends RouteAssets {
   }
 
   /**
-   * Every file Vite emitted for the client build; Vite names them with a content hash.
+   * Client files whose names come from an output pattern with a content hash.
+   * A stable name such as `assets/app.js` stays out, so it is never cached as immutable.
    */
   protected getEmittedFiles(manifest: IManifest): string[] {
-    const files = Object.values(manifest).flatMap(({ file, css = [], assets = [] }) => [
-      file,
-      ...css,
-      ...assets,
+    const isFingerprinted = createFingerprintMatcher(this.buildOutput);
+    const files = Object.values(manifest).flatMap(({ file, isEntry, css = [], assets = [] }) => [
+      // A manifest record for a stylesheet or an imported asset names a file from assetFileNames.
+      ...(file && isFingerprinted(file, getOutputKind(file, isEntry)) ? [file] : []),
+      ...[...css, ...assets].filter((asset) => isFingerprinted(asset, 'asset')),
     ]);
 
-    return [...new Set(files.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    return [...new Set(files)].sort((a, b) => a.localeCompare(b));
   }
 
   /**
