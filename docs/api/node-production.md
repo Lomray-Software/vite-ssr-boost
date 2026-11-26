@@ -102,7 +102,8 @@ function prepareProduction(options?: IPrepareProductionOptions): Promise<IProduc
 Paths come from `server/ssr-boost.json`. The handler mounts the built `defineEntry` default export
 with the HTML shell, route assets and Node renderer bound. An Express entry or a missing server
 build throws an error naming the file. With `isSPA`, no server entry is loaded and the handler
-answers every route with the built document and `Cache-Control: no-cache`. Mount
+answers every route with the built document and `Cache-Control: no-cache`; `staticMiddleware`
+sends the same policy when `/` or `/index.html` resolves to that document. Mount
 `staticMiddleware` before the handler; it calls `next()` for anything that is not a file.
 
 ## `serveStatic`
@@ -144,6 +145,10 @@ from a function pattern are never listed; give your own `immutableFiles` for the
 outputs, a kind of file is listed only when every output names it with `[hash]`, since the
 manifest does not say which output wrote a file. Setting
 `maxAge`, `immutable` or `cacheControl: false` hands the policy for every file to you.
+
+With `isSPA`, the shell file is sent with `Cache-Control: no-cache`, the same policy as the route
+fallback, whether it is reached as `/` or by its own name. This differs from the managed Express
+server, which serves that file with serve-static's revalidating default.
 
 ## `createLifecycle`
 

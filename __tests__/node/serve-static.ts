@@ -293,6 +293,28 @@ describe('node serveStatic', () => {
     expect(await (await fetch(`${node}/.well-known/shell`)).text()).toBe('well-known-shell');
   });
 
+  it('sends no-cache for the SPA document and keeps the other files revalidating', async () => {
+    const immutableFiles = ['assets/index-AbCd1234.js'];
+    const spa = await startNode({}, true, { immutableFiles });
+
+    /**
+     * Cache-Control the node middleware sends for one path.
+     */
+    const policy = async (url: string) => (await fetch(url)).headers.get('cache-control');
+
+    expect(await policy(`${spa}/`)).toBe('no-cache');
+    expect(await policy(`${spa}/index.html`)).toBe('no-cache');
+    expect(await policy(`${spa}/robots.txt`)).toBe('public, max-age=0');
+    expect(await policy(`${spa}/assets/index-AbCd1234.js`)).toBe(
+      'public, max-age=31536000, immutable',
+    );
+
+    const plain = await startNode({}, true);
+
+    expect(await policy(`${plain}/`)).toBe('no-cache');
+    expect(await policy(`${plain}/robots.txt`)).toBe('public, max-age=0');
+  });
+
   it('hides a shell whose name starts with two dots', async () => {
     await writeFile(path.join(root, '..shell.html'), 'dotted-shell');
     const node = await startNode({ dotfiles: 'allow' }, false, {

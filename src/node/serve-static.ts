@@ -66,20 +66,23 @@ const getMountedUrl = (url: string, mount: string): string | undefined => {
 };
 
 /**
- * Give the listed content-hashed files a long-lived policy and leave every other file revalidating.
+ * Give the listed content-hashed files a long-lived policy, the SPA document `no-cache` like
+ * its route fallback, and leave every other file revalidating.
  */
 const createCachePolicy = (
   root: string,
   immutableFiles: Iterable<string> | undefined,
   { cacheControl, immutable, maxAge, setHeaders }: ServeStaticOptions<ServerResponse>,
+  spaShellFile?: string,
 ): ServeStaticOptions<ServerResponse>['setHeaders'] => {
   const fingerprinted = new Set(
     [...(immutableFiles ?? [])].map((file) => path.posix.normalize(file).replace(/^\/+/, '')),
   );
+  const spaShell = spaShellFile ? path.resolve(root, spaShellFile) : undefined;
 
   // An explicit maxAge or immutable option means the caller owns the policy for every file.
   if (
-    !fingerprinted.size ||
+    (!fingerprinted.size && !spaShell) ||
     cacheControl === false ||
     maxAge !== undefined ||
     immutable !== undefined
@@ -93,6 +96,8 @@ const createCachePolicy = (
   return (res, filePath, stat) => {
     if (fingerprinted.has(path.relative(root, filePath).split(path.sep).join('/'))) {
       res.setHeader('Cache-Control', IMMUTABLE);
+    } else if (spaShell && path.resolve(filePath) === spaShell) {
+      res.setHeader('Cache-Control', 'no-cache');
     }
 
     setHeaders?.(res, filePath, stat);
@@ -213,7 +218,7 @@ const serveStatic = ({
   const fileOptions: ServeStaticOptions<ServerResponse> = {
     ...options,
     index: isSPA ? options.index : false,
-    setHeaders: createCachePolicy(root, immutableFiles, options),
+    setHeaders: createCachePolicy(root, immutableFiles, options, isSPA ? shellFile : undefined),
   };
   const plain = createServeStatic(root, fileOptions) as TStaticMiddleware;
   const serve = isSPA ? plain : createSsrServe(root, plain, fileOptions);

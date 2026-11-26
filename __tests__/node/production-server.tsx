@@ -348,6 +348,14 @@ describe('createProductionServer', () => {
     expect(route.headers['cache-control']).toBe('no-cache');
     expect(route.body.toString()).toContain('<title>Fixture</title>');
     expect(head.body.length).toBe(0);
+
+    for (const document of ['/', '/index.html']) {
+      const response = await request(`${url}${document}`);
+
+      expect(response.headers['cache-control'], document).toBe('no-cache');
+      expect(response.body.toString(), document).toContain('<title>Fixture</title>');
+    }
+
     expect((await request(`${url}/robots.txt`)).body.toString()).toBe('User-agent: *');
   });
 
