@@ -65,7 +65,8 @@ interface ILifecycle {
   health: (req: IncomingMessage, res: ServerResponse, next: TNext) => void;
   /**
    * Bind the server and resolve with its address, rejecting bind errors.
-   * Refused once close() has started; close() waits for a bind in flight.
+   * Refused while another bind is in flight and once close() has started;
+   * close() waits for a bind in flight.
    */
   listen: (port?: number, host?: string) => Promise<AddressInfo | string | null>;
   /**
@@ -112,7 +113,8 @@ const applyTimeouts = (
 };
 
 /**
- * A timer that can also be expired early; unref'd so it never holds the process open.
+ * A timer that can also be expired early. It stays referenced, so a stalled hook on an idle
+ * process still reaches its deadline instead of letting the process exit unnoticed.
  */
 const createDeadline = (ms: number, onExpire: () => void): IDeadline => {
   let isSettled = false;
@@ -135,8 +137,6 @@ const createDeadline = (ms: number, onExpire: () => void): IDeadline => {
     finish();
   };
   const timer = setTimeout(expire, ms);
-
-  timer.unref();
 
   return {
     reached,
@@ -185,6 +185,7 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   let isForced = false;
   let closing: Promise<void> | undefined;
   let binding: Promise<unknown> | undefined;
+  let isBinding = false;
   let cancelGrace: (() => void) | undefined;
   let activeResponses = 0;
   const upgradedSockets = new Set<Duplex>();
@@ -318,12 +319,35 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
       return Promise.reject(new Error('[ssr-boost] listen() was called after close() started.'));
     }
 
+    if (isBinding) {
+      return Promise.reject(
+        new Error('[ssr-boost] listen() was called while a bind is in flight.'),
+      );
+    }
+
+    isBinding = true;
+
     const bound = new Promise<AddressInfo | string | null>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(port, host, () => {
-        server.off('error', reject);
-        resolve(server.address());
-      });
+      /**
+       * Settle once and drop the error listener, whichever way the bind ended.
+       */
+      const fail = (error: unknown): void => {
+        server.off('error', fail);
+        reject(error);
+      };
+
+      server.once('error', fail);
+
+      try {
+        server.listen(port, host, () => {
+          server.off('error', fail);
+          resolve(server.address());
+        });
+      } catch (error) {
+        fail(error);
+      }
+    }).finally(() => {
+      isBinding = false;
     });
 
     binding = bound.catch(() => undefined);

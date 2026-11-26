@@ -1,7 +1,11 @@
 // @vitest-environment node
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import type { AddressInfo, Socket } from 'node:net';
+import { fileURLToPath } from 'node:url';
+import { transformSync } from 'esbuild';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import createLifecycle from '@node/lifecycle';
 import type { ILifecycle } from '@node/lifecycle';
@@ -544,6 +548,43 @@ describe('createLifecycle', () => {
     await expect(bound).resolves.toMatchObject({ address: '127.0.0.1' });
     expect(late.listening).toBe(false);
     expect(late.listenerCount('error')).toBe(0);
+  });
+
+  it('drops its error listener when listen throws and refuses a second bind in flight', async () => {
+    const server = http.createServer();
+    const lifecycle = createLifecycle(server);
+
+    servers.push(server);
+    await expect(lifecycle.listen(-1)).rejects.toMatchObject({ code: 'ERR_SOCKET_BAD_PORT' });
+    expect(server.listenerCount('error')).toBe(0);
+
+    const bound = lifecycle.listen(0, 'localhost');
+
+    await expect(lifecycle.listen(0, 'localhost')).rejects.toThrow(
+      '[ssr-boost] listen() was called while a bind is in flight.',
+    );
+    await expect(bound).resolves.toBeTruthy();
+    expect(server.listenerCount('error')).toBe(0);
+  });
+
+  it('keeps the drain deadline alive on an otherwise idle process', () => {
+    const source = readFileSync(
+      fileURLToPath(new URL('../../src/node/lifecycle.ts', import.meta.url)),
+      'utf8',
+    );
+    const { code } = transformSync(source, { loader: 'ts', format: 'esm' });
+    const script = `${code}
+const lifecycle = createLifecycle((await import('node:http')).createServer(), {
+  drainTimeoutMs: 50,
+  onClose: () => new Promise(() => undefined),
+});
+lifecycle.close().then(() => process.exit(0), () => process.exit(1));
+`;
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8',
+    });
+
+    expect(child.status).toBe(1);
   });
 
   it('rejects listen with the bind error', async () => {
