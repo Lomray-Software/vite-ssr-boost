@@ -216,6 +216,17 @@ describe('node/server-kit', () => {
       expect(result?.ca).toBeUndefined();
     });
 
+    it('should name a TLS file that cannot be read instead of using the path as a value', async () => {
+      const dir = await mkdtemp(path.join(os.tmpdir(), 'ssr-boost-tls-test-'));
+      const missing = path.join(dir, 'missing-cert.pem');
+
+      tempDirs.push(dir);
+
+      await expect(resolveTlsOptions({ cert: missing })).rejects.toThrow(
+        `[ssr-boost] Could not read the HTTPS cert file: ${missing}`,
+      );
+    });
+
     it('should pass buffers through unchanged', async () => {
       const key = Buffer.from('buffer key');
 

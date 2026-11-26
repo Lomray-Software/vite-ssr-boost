@@ -104,10 +104,28 @@ const createRequestListener =
   };
 
 /**
- * Read a file path option the way Vite does, keeping inline PEM values as they are.
+ * Inline PEM values carry their own armour; anything else is a path to read.
  */
-const readTlsValue = async <T>(value: T): Promise<T | Buffer> =>
-  typeof value === 'string' ? readFile(path.resolve(value)).catch(() => value) : value;
+const INLINE_PEM = /-----BEGIN /;
+
+/**
+ * Read one TLS file option, keeping inline PEM values and naming the file that failed.
+ */
+const readTlsValue = async <T>(name: string, value: T): Promise<T | Buffer> => {
+  if (typeof value !== 'string' || INLINE_PEM.test(value)) {
+    return value;
+  }
+
+  const file = path.resolve(value);
+
+  try {
+    return await readFile(file);
+  } catch (error) {
+    throw new Error(`[ssr-boost] Could not read the HTTPS ${name} file: ${file}`, {
+      cause: error,
+    });
+  }
+};
 
 /**
  * Resolve Vite-style HTTPS options, where ca, cert, key and pfx may be file paths.
@@ -119,11 +137,14 @@ const resolveTlsOptions = async (
     return undefined;
   }
 
-  const [ca, cert, key, pfx] = await Promise.all(
-    [https.ca, https.cert, https.key, https.pfx].map((value) => readTlsValue(value)),
-  );
+  const [ca, cert, key, pfx] = await Promise.all([
+    readTlsValue('ca', https.ca),
+    readTlsValue('cert', https.cert),
+    readTlsValue('key', https.key),
+    readTlsValue('pfx', https.pfx),
+  ]);
 
-  return { ...https, ca, cert, key, pfx } as HttpsServerOptions;
+  return { ...https, ca, cert, key, pfx };
 };
 
 /**
