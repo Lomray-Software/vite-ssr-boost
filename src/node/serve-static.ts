@@ -47,6 +47,8 @@ const getPathname = (url: string): string | undefined => {
 const getShellKey = (pathname: string): string =>
   path.posix.normalize(pathname.replace(/\\/g, '/')).toLowerCase();
 
+export { getShellKey };
+
 /**
  * Lowercased mount prefix without trailing slashes; the root mount is empty.
  */

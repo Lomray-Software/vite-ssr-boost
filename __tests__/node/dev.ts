@@ -401,9 +401,18 @@ export default defineEntry(App, routes, {
       socket.on('close', () => resolve());
     });
     const listeningAtViteClose: boolean[] = [];
+    const drainedAtViteClose: boolean[] = [];
+    let isDrained = false;
     const close = app.vite.close.bind(app.vite);
+
+    // `close` fires only after the last connection ended, not when accepting stops.
+    app.server.once('close', () => {
+      isDrained = true;
+    });
+
     const viteClose = vi.spyOn(app.vite, 'close').mockImplementation(() => {
       listeningAtViteClose.push(app.server.listening);
+      drainedAtViteClose.push(isDrained);
 
       return close();
     });
@@ -414,6 +423,7 @@ export default defineEntry(App, routes, {
     expect(viteClose).toHaveBeenCalledTimes(1);
     // Vite closes only after the server stopped, so in-flight renders keep their pipeline.
     expect(listeningAtViteClose).toEqual([false]);
+    expect(drainedAtViteClose).toEqual([true]);
     expect(onDrain).toHaveBeenCalledTimes(1);
     expect(app.server.listening).toBe(false);
     started = [];

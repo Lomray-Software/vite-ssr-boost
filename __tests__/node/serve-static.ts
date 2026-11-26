@@ -7,7 +7,7 @@ import path from 'node:path';
 import express from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import staticFiles from '@adapters/express/static-files';
-import serveStatic from '@node/serve-static';
+import serveStatic, { getShellKey } from '@node/serve-static';
 import type { IServeStaticOptions } from '@node/serve-static';
 
 type TOptions = Omit<IServeStaticOptions, 'root' | 'basename' | 'isSPA'>;
@@ -314,17 +314,26 @@ describe('node serveStatic', () => {
       const node = await startNode({ extensions: ['html'] }, false, extra);
       const shell = extra.shellFile ? '/nested/shell' : '/index';
 
-      for (const pathname of [
-        `${shell}#x`,
-        `${shell}.html#x`,
-        `${shell}.html?a=1#x`,
-        `${shell.replace(/\//g, '\\')}.html`,
-      ]) {
+      for (const pathname of [`${shell}#x`, `${shell}.html#x`, `${shell}.html?a=1#x`]) {
         const { body } = await observe(node + pathname);
 
         expect(body ?? 'error', pathname).not.toMatch(/document|nested-shell/);
       }
     }
+
+    // Only the interior separators turn into backslashes, so the URL stays under the mount.
+    const node = await startNode({ extensions: ['html'] }, false, {
+      shellFile: 'nested/shell.html',
+    });
+
+    for (const pathname of ['/nested\\shell.html', '/nested\\shell', '/Nested\\Shell.html']) {
+      expect((await observe(node + pathname)).body, pathname).toBe('SSR');
+    }
+  });
+
+  it('folds backslashes, dot segments and case into one shell key', () => {
+    expect(getShellKey('/Nested\\Shell.html')).toBe('/nested/shell.html');
+    expect(getShellKey('/nested/./x/../shell.html')).toBe('/nested/shell.html');
   });
 
   it('hides a well-known shell under both spellings unless access is granted', async () => {
