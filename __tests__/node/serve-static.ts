@@ -276,6 +276,23 @@ describe('node serveStatic', () => {
     expect(await (await fetch(`${withExtensions}/about`)).text()).toBe('extension-fallback');
   });
 
+  it('hides a well-known shell under both spellings unless access is granted', async () => {
+    await writeFile(path.join(root, '.well-known', 'shell.json'), 'well-known-shell');
+    let isAllowed = false;
+    const node = await startNode({}, false, {
+      shellFile: path.join(root, '.well-known', 'shell.json'),
+      hasAccessIndexHtml: () => isAllowed,
+    });
+
+    expect(await (await fetch(`${node}/.well-known/shell.json`)).text()).toBe('SSR');
+    expect(await (await fetch(`${node}/.well-known/shell`)).text()).toBe('SSR');
+    expect(await (await fetch(`${node}/.well-known/assetlinks`)).text()).toBe('[]');
+
+    isAllowed = true;
+    expect(await (await fetch(`${node}/.well-known/shell.json`)).text()).toBe('well-known-shell');
+    expect(await (await fetch(`${node}/.well-known/shell`)).text()).toBe('well-known-shell');
+  });
+
   it('hides a shell whose name starts with two dots', async () => {
     await writeFile(path.join(root, '..shell.html'), 'dotted-shell');
     const node = await startNode({ dotfiles: 'allow' }, false, {

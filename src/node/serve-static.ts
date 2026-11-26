@@ -204,7 +204,12 @@ const serveStatic = ({
   ...options
 }: IServeStaticOptions): TStaticMiddleware => {
   const mount = normalizeBasename(basename);
+  const wellKnownExtensions = options.extensions ?? ['json'];
+  // Each file server resolves extensions its own way, so each gets the aliases it would serve.
   const shellPaths = isSPA ? new Set<string>() : getShellPaths(root, shellFile, options.extensions);
+  const wellKnownShellPaths = isSPA
+    ? new Set<string>()
+    : getShellPaths(root, shellFile, wellKnownExtensions);
   const fileOptions: ServeStaticOptions<ServerResponse> = {
     ...options,
     index: isSPA ? options.index : false,
@@ -217,7 +222,7 @@ const serveStatic = ({
       ? (createServeStatic(root, {
           ...fileOptions,
           dotfiles: 'allow',
-          extensions: options.extensions ?? ['json'],
+          extensions: wellKnownExtensions,
         }) as TStaticMiddleware)
       : undefined;
 
@@ -246,7 +251,9 @@ const serveStatic = ({
     // The shell is matched by the file it resolves to, so no URL spelling reaches it.
     if (
       pathname !== undefined &&
-      shellPaths.has(path.posix.normalize(pathname).toLowerCase()) &&
+      (isWellKnown ? wellKnownShellPaths : shellPaths).has(
+        path.posix.normalize(pathname).toLowerCase(),
+      ) &&
       !hasAccessIndexHtml?.()
     ) {
       next();
