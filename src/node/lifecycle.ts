@@ -186,6 +186,9 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   let closing: Promise<void> | undefined;
   let binding: Promise<unknown> | undefined;
   let isBinding = false;
+  // Bound at some point and not yet through the native 'close' event.
+  let hasListened = server.listening;
+  let isClosed = false;
   let cancelGrace: (() => void) | undefined;
   let activeResponses = 0;
   const upgradedSockets = new Set<Duplex>();
@@ -224,6 +227,14 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
    * Whether an event hands its socket to the application.
    */
   const isTunnelEvent = (event: string | symbol): event is TTunnelEvent => TUNNEL_EVENTS.has(event);
+
+  server.on('listening', () => {
+    hasListened = true;
+    isClosed = false;
+  });
+  server.on('close', () => {
+    isClosed = true;
+  });
 
   server.on('connection', (socket: Socket) => {
     sockets.add(socket);
@@ -340,6 +351,7 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
 
       try {
         server.listen(port, host, () => {
+          hasListened = true;
           server.off('error', fail);
           resolve(server.address());
         });
@@ -360,13 +372,17 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
    */
   const stopServer = (): Promise<void> =>
     new Promise<void>((done, fail) => {
-      if (!server.listening) {
+      if (server.listening) {
+        server.close((error) => (error ? fail(error) : done()));
+      } else if (hasListened && !isClosed) {
+        // A native close() already stopped accepting; its connections still run, so join it.
+        server.once('close', () => done());
+      } else {
         done();
 
         return;
       }
 
-      server.close((error) => (error ? fail(error) : done()));
       server.closeIdleConnections();
 
       if (activeResponses === 0) {

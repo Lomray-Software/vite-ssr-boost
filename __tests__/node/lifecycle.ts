@@ -230,6 +230,58 @@ describe('createLifecycle', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('joins a native close already in progress and waits for its streams', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const onClose = vi.fn();
+    const { url, lifecycle } = await listen(
+      (_req, res) => {
+        res.write('first;');
+        void held.then(() => res.end('last'));
+      },
+      (server) => createLifecycle(server, { onDrain: () => void server.close(), onClose }),
+    );
+    const streamed = getText(url);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const closed = lifecycle.close();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(onClose).not.toHaveBeenCalled();
+    release();
+    expect(await streamed).toEqual({ status: 200, body: 'first;last' });
+    await closed;
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('destroys a stream held by a native close at the drain deadline', async () => {
+    const onClose = vi.fn();
+    const { url, lifecycle } = await listen(
+      (_req, res) => {
+        res.write('stuck');
+      },
+      (server) =>
+        createLifecycle(server, {
+          drainTimeoutMs: 50,
+          onDrain: () => void server.close(),
+          onClose,
+        }),
+    );
+    const streamed = getText(url);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const startedAt = Date.now();
+
+    await lifecycle.close();
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+    expect(onClose).toHaveBeenCalledOnce();
+    await expect(streamed).rejects.toThrow();
+  });
+
   it('drains on SIGTERM, forces on a second signal and unsubscribes', async () => {
     const listeners = new Map<string, () => void>();
 
