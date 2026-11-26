@@ -70,9 +70,11 @@ vi.mock('node:http', async () => {
             _host: string,
             cb: () => void,
           ) {
+            // Node registers the callback as a `listening` listener, then emits the event.
+            (this as unknown as import('node:events').EventEmitter).once('listening', cb);
             queueMicrotask(() => {
               this.listening = true;
-              cb();
+              (this as unknown as import('node:events').EventEmitter).emit('listening');
             });
 
             return this;
@@ -170,6 +172,84 @@ describe('node server', () => {
     expect(onError).toHaveBeenCalledWith(failure);
     expect(result.getLifecycle()?.isReady()).toBe(false);
     expect(prepareServer.onServerStarted).not.toHaveBeenCalled();
+  });
+
+  it('should run onServerStarted before listening listeners added after run', async () => {
+    const result = await createServer(createDevConfig() as never);
+    const server = result.run({ isPrintInfo: false });
+    const seen: boolean[] = [];
+
+    server.on('listening', () => {
+      seen.push(prepareServer.onServerStarted.mock.calls.length === 1);
+      seen.push(result.getLifecycle()!.isReady());
+    });
+    await flush();
+
+    expect(seen).toEqual([true, true]);
+  });
+
+  it('should treat a once error listener as owning the bind error', async () => {
+    const http = (await import('node:http')).default;
+    const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
+    const onError = vi.fn();
+    const onRejection = vi.fn();
+    const nextTick = process.nextTick.bind(process);
+    const thrown: unknown[] = [];
+
+    /**
+     * A server whose bind fails with EADDRINUSE.
+     */
+    const createTakenServer = () => {
+      const { EventEmitter } = require('node:events') as typeof import('node:events');
+      const server = Object.assign(new EventEmitter(), {
+        listening: false,
+        listen: vi.fn(() => {
+          queueMicrotask(() => server.emit('error', failure));
+
+          return server;
+        }),
+      });
+
+      return server as never;
+    };
+
+    vi.mocked(http.createServer)
+      .mockImplementationOnce(createTakenServer)
+      .mockImplementationOnce(createTakenServer);
+    // Collect what the adapter rethrows, so it does not reach the test runner.
+    vi.spyOn(process, 'nextTick').mockImplementation(((
+      callback: (...args: unknown[]) => void,
+      ...args: unknown[]
+    ) =>
+      nextTick(() => {
+        try {
+          callback(...args);
+        } catch (error) {
+          thrown.push(error);
+        }
+      })) as typeof process.nextTick);
+    process.on('unhandledRejection', onRejection);
+
+    try {
+      const owned = await createServer(createDevConfig() as never);
+
+      owned.run({ isPrintInfo: false }).once('error', onError);
+      await flush();
+
+      expect(onError).toHaveBeenCalledWith(failure);
+      expect(thrown).toEqual([]);
+
+      const unowned = await createServer(createDevConfig() as never);
+
+      unowned.run({ isPrintInfo: false });
+      await flush();
+      await flush();
+
+      expect(thrown).toEqual([failure]);
+      expect(onRejection).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', onRejection);
+    }
   });
 
   it('should have no lifecycle before run', async () => {

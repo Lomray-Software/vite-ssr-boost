@@ -206,22 +206,55 @@ async function createServer(
             },
       });
 
+      /**
+       * Runs as the first `listening` listener, as the listen() callback did before,
+       * so listeners added after run() see the state onServerStarted prepared.
+       */
+      const onListening = (): void => {
+        lifecycle?.setReady();
+        void prepareServer.onServerStarted?.(app, serverApi, server);
+
+        if (!isPrintInfo) {
+          return;
+        }
+
+        void printServerInfo(config, { version, server });
+      };
+
+      let isErrorOwned = false;
+      let ownErrorListeners = 0;
+
+      /**
+       * Decide during dispatch whether the application listens for the bind error,
+       * since Node drops a once() listener before calling it.
+       */
+      const onBindError = (): void => {
+        isErrorOwned = server.listenerCount('error') > ownErrorListeners;
+      };
+
+      server.once('listening', onListening);
+      server.prependListener('error', onBindError);
+
       // Bind through the lifecycle, so a close() right after run() waits for the port.
-      void lifecycle.listen(port, host).then(
+      const bound = lifecycle.listen(port, host);
+
+      // This listener and the one the lifecycle holds while binding.
+      ownErrorListeners = server.listenerCount('error');
+
+      void bound.then(
         () => {
-          lifecycle?.setReady();
-          void prepareServer.onServerStarted?.(app, serverApi, server);
-
-          if (!isPrintInfo) {
-            return;
-          }
-
-          void printServerInfo(config, { version, server });
+          server.off('error', onBindError);
         },
         (error: unknown) => {
-          // Listeners on the server already saw the error; with none, fail loudly as before.
-          if (server.listenerCount('error') === 0) {
-            throw error;
+          server.off('error', onBindError);
+          server.off('listening', onListening);
+
+          // Listeners on the server already saw the error; with none, fail loudly as before,
+          // as an uncaught exception rather than an unhandled rejection.
+          if (!isErrorOwned) {
+            process.nextTick(() => {
+              throw error;
+            });
           }
         },
       );
