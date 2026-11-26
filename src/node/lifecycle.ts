@@ -7,7 +7,7 @@ type TNext = (error?: unknown) => void;
 
 type TLifecycleServer = HttpServer | HttpsServer;
 
-type TSignal = 'SIGINT' | 'SIGTERM';
+type TSignal = NodeJS.Signals;
 
 type TTunnelEvent = 'upgrade' | 'connect';
 
