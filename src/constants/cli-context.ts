@@ -7,6 +7,7 @@ export interface ICliContext {
   server?: Server;
   config?: ServerConfig;
   lifecycle?: ILifecycle; // graceful close shared by signals, shortcuts and reboot
+  isExiting?: boolean; // a termination signal arrived: the process exits after the drain
   reboot?: (isPrintInfo?: boolean) => Promise<void>; // reboot dev server
 }
 

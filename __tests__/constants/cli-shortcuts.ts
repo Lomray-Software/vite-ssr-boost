@@ -55,6 +55,24 @@ describe('cli-shortcuts', () => {
     expect(stubs.info.lastCall.args[0]).toContain('server restarted successful');
   });
 
+  it('should not restart when a termination signal arrived during the drain', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'r')!;
+    const { context, stubs } = createContext();
+    const lifecycle = {
+      close: sandbox.stub().callsFake(() => {
+        context.isExiting = true;
+
+        return Promise.resolve();
+      }),
+    };
+
+    context.lifecycle = lifecycle as unknown as ICliContext['lifecycle'];
+    await shortcut.action(context);
+
+    expect(lifecycle.close.calledOnce).toBe(true);
+    expect(stubs.reboot.called).toBe(false);
+  });
+
   it('should stop restart flow when server closing fails', async () => {
     const shortcut = shortcuts.find(({ key }) => key === 'r')!;
     const { context, stubs } = createContext('boom');

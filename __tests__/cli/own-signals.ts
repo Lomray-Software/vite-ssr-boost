@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ownSignals from '@cli/helpers/own-signals';
+import cliContext from '@constants/cli-context';
 
 const { processStopMock } = vi.hoisted(() => ({ processStopMock: vi.fn() }));
 
@@ -24,7 +25,24 @@ describe('ownSignals', () => {
 
     ownSignals(lifecycle as never);
 
-    expect(lifecycle.handleSignals).toHaveBeenCalledWith({ onExit: processStopMock });
+    expect(lifecycle.handleSignals).toHaveBeenCalledWith(
+      expect.objectContaining({ onExit: processStopMock }),
+    );
+  });
+
+  it('marks the CLI as exiting when a signal arrives', () => {
+    const { lifecycle } = createLifecycle();
+
+    ownSignals(lifecycle as never);
+
+    const [[{ onSignal }]] = lifecycle.handleSignals.mock.calls as unknown as [
+      [{ onSignal: (signal: string) => void }],
+    ];
+
+    onSignal('SIGTERM');
+
+    expect(cliContext.isExiting).toBe(true);
+    cliContext.isExiting = undefined;
   });
 
   it('releases the previous subscription when a restart brings a new server', () => {

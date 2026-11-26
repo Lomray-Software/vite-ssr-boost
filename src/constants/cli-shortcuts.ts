@@ -56,6 +56,11 @@ const shortcuts: NonNullable<IPluginOptions['customShortcuts']> = [
         return;
       }
 
+      // a termination signal arrived during the drain: the process is exiting, do not boot again
+      if (cliContext.isExiting) {
+        return;
+      }
+
       await reboot?.(false);
       Logger?.info(chalk.green('server restarted successful.'));
     },

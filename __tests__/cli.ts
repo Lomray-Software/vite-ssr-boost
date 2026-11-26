@@ -82,7 +82,12 @@ const createLifecycleMock = () => {
 
   return {
     release,
-    lifecycle: { handleSignals: vi.fn(() => release), close: vi.fn().mockResolvedValue(undefined) },
+    lifecycle: {
+      handleSignals: vi.fn(() => release),
+      close: vi.fn().mockResolvedValue(undefined),
+      isDraining: vi.fn(() => false),
+      force: vi.fn(),
+    },
   };
 };
 
@@ -98,6 +103,7 @@ describe('cli integration', () => {
     cliContext.config = undefined;
     cliContext.server = undefined;
     cliContext.lifecycle = undefined;
+    cliContext.isExiting = undefined;
   });
 
   it('should print build duration info', async () => {
@@ -160,7 +166,9 @@ describe('cli integration', () => {
       version: '1',
       server: 'node-server',
     });
-    expect(lifecycle.handleSignals).toHaveBeenCalledWith({ onExit: processStopMock });
+    expect(lifecycle.handleSignals).toHaveBeenCalledWith(
+      expect.objectContaining({ onExit: processStopMock }),
+    );
     expect(createServerMock).not.toHaveBeenCalled();
 
     loadProductionConfigMock.mockReturnValueOnce({ managedServer: 'node' });
@@ -207,7 +215,9 @@ describe('cli integration', () => {
     );
     expect(vite.config.server.host).toBe('0.0.0.0');
     expect(listen).toHaveBeenCalledWith(4200, '0.0.0.0');
-    expect(lifecycle.handleSignals).toHaveBeenCalledWith({ onExit: processStopMock });
+    expect(lifecycle.handleSignals).toHaveBeenCalledWith(
+      expect.objectContaining({ onExit: processStopMock }),
+    );
     expect(createServerMock).not.toHaveBeenCalled();
   });
 
@@ -228,6 +238,22 @@ describe('cli integration', () => {
     expect(printServerInfoMock).not.toHaveBeenCalled();
   });
 
+  it('should force a drain already under way on ctrl+c and exit once', async () => {
+    const { lifecycle } = createLifecycleMock();
+
+    lifecycle.isDraining.mockReturnValue(true);
+    cliContext.lifecycle = lifecycle as never;
+    onKeyPress('\x03');
+    onKeyPress('\x03');
+    await flush();
+
+    expect(lifecycle.force).toHaveBeenCalledTimes(2);
+    expect(lifecycle.close).toHaveBeenCalledTimes(1);
+    expect(processStopMock).toHaveBeenCalledTimes(1);
+    expect(processStopMock).toHaveBeenCalledWith(0);
+    expect(cliContext.isExiting).toBe(true);
+  });
+
   it('should exit through the lifecycle drain on ctrl+c', async () => {
     const { lifecycle } = createLifecycleMock();
 
@@ -238,7 +264,10 @@ describe('cli integration', () => {
     expect(lifecycle.close).toHaveBeenCalledTimes(1);
     expect(processStopMock).toHaveBeenCalledWith(0);
 
-    lifecycle.close.mockRejectedValueOnce(new Error('drain failed'));
+    const failing = createLifecycleMock().lifecycle;
+
+    failing.close.mockRejectedValueOnce(new Error('drain failed'));
+    cliContext.lifecycle = failing as never;
     onKeyPress('\x04');
     await flush();
 
