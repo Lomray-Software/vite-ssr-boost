@@ -143,7 +143,10 @@ listed only when its name comes from an `entryFileNames`, `chunkFileNames` or `a
 string pattern with `[hash]`, so a stable name such as `assets/app.js` keeps revalidating. Names
 from a function pattern are never listed; give your own `immutableFiles` for them. With several
 outputs, a kind of file is listed only when every output names it with `[hash]`, since the
-manifest does not say which output wrote a file. Setting
+manifest does not say which output wrote a file. The list is decided by the name, not by the
+content: a plugin that emits a file under an explicit `fileName` shaped like a hashed name, such
+as `assets/logo-abcd1234.svg`, is listed too. Give your own `immutableFiles` when a plugin does
+that with stable content. Setting
 `maxAge`, `immutable` or `cacheControl: false` hands the policy for every file to you.
 
 With `isSPA`, the shell file is sent with `Cache-Control: no-cache`, the same policy as the route
