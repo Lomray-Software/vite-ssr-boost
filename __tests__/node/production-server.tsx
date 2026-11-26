@@ -371,6 +371,87 @@ describe('createProductionServer', () => {
     expect(file.headers['content-encoding']).toBeUndefined();
   });
 
+  it('keeps an existing Vary and every cookie when it compresses a document', async () => {
+    const { url } = await start({
+      compression: true,
+      loadEntry: handlerModule(() => {
+        const headers = new Headers({ 'Content-Type': 'text/html', Vary: 'Cookie' });
+
+        headers.append('Set-Cookie', 'first=1; Path=/');
+        headers.append('Set-Cookie', 'second=2; Path=/; HttpOnly');
+
+        return Promise.resolve(new Response('<p>cookies</p>', { headers }));
+      }),
+    });
+    const response = await request(`${url}/`, { headers: { 'Accept-Encoding': 'gzip' } });
+
+    expect(response.headers['content-encoding']).toBe('gzip');
+    expect(response.headers.vary?.split(',').map((value) => value.trim())).toEqual([
+      'Cookie',
+      'Accept-Encoding',
+    ]);
+    expect(getCookies(response)).toEqual(['first=1; Path=/', 'second=2; Path=/; HttpOnly']);
+    expect(gunzipSync(response.body).toString()).toBe('<p>cookies</p>');
+  });
+
+  it('leaves no-transform, encoded and partial answers as the handler sent them', async () => {
+    const encoded = Buffer.from([1, 2, 3, 4]);
+    const { url } = await start({
+      compression: true,
+      loadEntry: handlerModule((req) => {
+        switch (new URL(req.url).pathname) {
+          case '/no-transform':
+            return Promise.resolve(
+              new Response('<p>plain</p>', { headers: { 'Cache-Control': 'no-transform' } }),
+            );
+
+          case '/encoded':
+            return Promise.resolve(
+              new Response(encoded, { headers: { 'Content-Encoding': 'br' } }),
+            );
+
+          default:
+            return Promise.resolve(
+              new Response('<p>', {
+                status: 206,
+                headers: { 'Content-Range': 'bytes 0-2/10', 'Content-Type': 'text/html' },
+              }),
+            );
+        }
+      }),
+    });
+    const headers = { 'Accept-Encoding': 'gzip, deflate' };
+    const plain = await request(`${url}/no-transform`, { headers });
+    const brotli = await request(`${url}/encoded`, { headers });
+    const partial = await request(`${url}/partial`, {
+      headers: { ...headers, Range: 'bytes=0-2' },
+    });
+
+    expect(plain.headers['content-encoding']).toBeUndefined();
+    expect(plain.body.toString()).toBe('<p>plain</p>');
+    expect(brotli.headers['content-encoding']).toBe('br');
+    expect(brotli.body.equals(encoded)).toBe(true);
+    expect(partial.status).toBe(206);
+    expect(partial.headers['content-range']).toBe('bytes 0-2/10');
+    expect(partial.headers['content-encoding']).toBeUndefined();
+    expect(partial.body.toString()).toBe('<p>');
+  });
+
+  it('sends a document as it is when the client refuses every encoding', async () => {
+    const { url } = await start({ compression: true });
+    const missing = await request(`${url}/`);
+    const refused = await request(`${url}/`, {
+      headers: { 'Accept-Encoding': 'gzip;q=0, deflate;q=0' },
+    });
+
+    [missing, refused].forEach((response) => {
+      expect(response.headers['content-encoding']).toBeUndefined();
+      expect(response.headers.vary).toContain('Accept-Encoding');
+      expect(response.body.toString()).toContain('<p>Home</p>');
+    });
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   it('streams first bytes before the body ends and cancels on client disconnect', async () => {
     const cancel = vi.fn();
     let signal: AbortSignal | undefined;
