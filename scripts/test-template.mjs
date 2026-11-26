@@ -133,9 +133,14 @@ const run = async (args) => {
 
 const hasExited = (child) => child.exitCode !== null || child.signalCode !== null;
 
-const stop = async (child) => {
+/**
+ * Stop a CLI process with SIGTERM, then SIGKILL after three seconds.
+ * With `drains`, the process must have drained and exited with code 0 on SIGTERM alone.
+ */
+const stop = async (child, { drains = false } = {}) => {
   if (hasExited(child)) {
     await child.closed;
+    assert.ok(!drains, 'The managed server exited before SIGTERM.');
     return;
   }
 
@@ -150,6 +155,8 @@ const stop = async (child) => {
     }),
   ]);
 
+  const drained = hasExited(child) && child.exitCode === 0;
+
   if (!hasExited(child)) {
     const killed = once(child, 'exit');
 
@@ -157,6 +164,10 @@ const stop = async (child) => {
     await killed;
   }
   await child.closed;
+
+  if (drains) {
+    assert.ok(drained, 'The managed Express server did not drain and exit 0 on SIGTERM.');
+  }
 };
 
 const waitUntilReady = async (origin, child) => {
@@ -985,7 +996,8 @@ try {
       `Advisory: streamed shell ratio: ${(candidateTtfb.deferred / candidateTtfb.home).toFixed(3)}x / 1.5x target`,
     );
   } finally {
-    await stop(prod);
+    // The template keeps the default managed Express server, so this pins its SIGTERM drain.
+    await stop(prod, { drains: true });
     await dispose();
   }
 
