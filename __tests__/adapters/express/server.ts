@@ -156,7 +156,17 @@ describe('node server', () => {
       vi.mocked(http.createServer).mockImplementationOnce(() => {
         const server = Object.assign(new EventEmitter(), {
           listening: false,
-          listen: vi.fn(() => server),
+          closeIdleConnections: vi.fn(),
+          closeAllConnections: vi.fn(),
+          close: vi.fn(),
+          // Node registers the listen callback as a `listening` listener.
+          listen: vi.fn((_port: number, _host: string, cb?: () => void) => {
+            if (cb) {
+              server.once('listening', cb);
+            }
+
+            return server;
+          }),
         });
 
         servers.push(server);
@@ -273,6 +283,23 @@ describe('node server', () => {
     await expect(closed).resolves.toBeUndefined();
   });
 
+  it('should start nothing when the bind lands after the drain moved past it', async () => {
+    const servers = await mockPendingServers();
+    const close = vi.fn().mockResolvedValue(undefined);
+    const result = await createServer(createDevConfig({ close }) as never, {
+      drainTimeoutMs: 10,
+    });
+
+    result.run();
+    await result.getLifecycle()!.close();
+    servers[0].emit('listening');
+
+    expect(prepareServer.onServerStarted).not.toHaveBeenCalled();
+    expect(printServerInfoMock).not.toHaveBeenCalled();
+    expect(result.getLifecycle()!.isReady()).toBe(false);
+    expect((servers[0] as unknown as { close: () => void }).close).toHaveBeenCalledOnce();
+  });
+
   it('should have no lifecycle before run', async () => {
     const result = await createServer(createDevConfig() as never);
 
@@ -298,16 +325,29 @@ describe('node server', () => {
     const result = await createServer(createDevConfig({ close }) as never, { onDrain, onClose });
 
     const server = result.run({ isPrintInfo: false });
+    let release: (() => void) | undefined;
 
     await flush();
-    await result.getLifecycle()!.close();
+    // Hold the close callback: Node calls it once the last connection ended.
+    vi.mocked(server.close).mockImplementationOnce((cb) => {
+      release = cb as () => void;
+
+      return server;
+    });
+
+    const closed = result.getLifecycle()!.close();
+
+    await flush();
+
+    expect(server.close).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+
+    release!();
+    await closed;
 
     expect(close).toHaveBeenCalledTimes(1);
     expect(onDrain).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(close.mock.invocationCallOrder[0]).toBeGreaterThan(
-      vi.mocked(server.close).mock.invocationCallOrder[0],
-    );
   });
 
   it('should answer health probes before application middleware once running', async () => {

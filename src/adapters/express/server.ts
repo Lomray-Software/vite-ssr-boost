@@ -196,7 +196,7 @@ async function createServer(
 
       const { onClose } = lifecycleOptions;
 
-      lifecycle = createLifecycle(server, {
+      const runLifecycle = createLifecycle(server, {
         ...lifecycleOptions,
         // Vite closes after the socket drain, as in 8.6, so a response still rendering completes.
         onClose: config.isProd
@@ -206,12 +206,19 @@ async function createServer(
             },
       });
 
+      lifecycle = runLifecycle;
+
       /**
        * The listen() callback, as in 8.6: it runs before listeners added after run(),
        * so they see the state onServerStarted prepared.
        */
       const onListening = (): void => {
-        lifecycle?.setReady();
+        // A bind that lands once the drain started is released by the lifecycle; start nothing.
+        if (runLifecycle.isDraining()) {
+          return;
+        }
+
+        runLifecycle.setReady();
         void prepareServer.onServerStarted?.(app, serverApi, server);
 
         if (!isPrintInfo) {
@@ -225,7 +232,7 @@ async function createServer(
       // server's error listeners or crashes the process when it has none.
       server.listen(port, host, onListening);
       // A close() right after run() still waits for the port.
-      trackNativeBind(lifecycle);
+      trackNativeBind(runLifecycle);
 
       return server;
     },
