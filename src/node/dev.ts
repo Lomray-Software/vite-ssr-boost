@@ -7,7 +7,7 @@ import type { Connect, InlineConfig, ViteDevServer, WsOptions } from 'vite';
 import type { TCompression } from '@adapters/compression';
 import getRouteAssets from '@adapters/express/route-assets';
 import adapterNode from '@adapters/node';
-import type { IEntryHost } from '@core/entry';
+import type { IEntry, IEntryHost } from '@core/entry';
 import type { TSsrHandler } from '@core/types';
 import createLifecycle from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions, TLifecycleServer } from '@node/lifecycle';
@@ -152,13 +152,16 @@ const prepareDev = async ({
   const { isSPA } = config.getParams();
   const prepare = createDevPreparer(config);
 
+  let mounted: { entry: IEntry; handler: TSsrHandler } | undefined;
+
   /**
-   * Re-import the entry so edits to server code apply on the next request.
+   * Mount an entry once per loaded module, so its runtime state lives until server code changes.
    */
-  const ssrHandler: TSsrHandler = async (request, executionContext) => {
-    const { root, serverFile } = config.getParams();
-    const file = path.resolve(`${root}/${serverFile}`);
-    const entry = toEntry(file, await loadEntry(config.getVite()!, file));
+  const mount = (entry: IEntry): TSsrHandler => {
+    if (mounted?.entry === entry) {
+      return mounted.handler;
+    }
+
     const handler = entry({
       /**
        * Transform the document only when the entry renders, never for an onRequest bypass.
@@ -172,7 +175,22 @@ const prepareDev = async ({
       renderToStream,
     });
 
-    return handler(request, executionContext);
+    mounted = { entry, handler };
+
+    return handler;
+  };
+
+  /**
+   * Re-import the entry so edits to server code apply on the next request.
+   */
+  const ssrHandler: TSsrHandler = async (request, executionContext) => {
+    const { root, serverFile } = config.getParams();
+    const file = path.resolve(`${root}/${serverFile}`);
+
+    return mount(toEntry(file, await loadEntry(config.getVite()!, file)))(
+      request,
+      executionContext,
+    );
   };
 
   /**

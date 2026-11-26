@@ -32,6 +32,7 @@ type TEntryApp<TAppProps> = FC<PropsWithChildren<{ server: TAppProps }>>;
 
 /**
  * A runtime-neutral entry: each host calls it once with its own services.
+ * Every call gets its own runtime state (404 cache, admission, SPA shell), so hosts never share it.
  */
 interface IEntry<TAppProps = Record<string, any>> {
   (host: IEntryHost<TAppProps>): TSsrHandler;
@@ -54,10 +55,9 @@ const defineEntry = <TAppProps = Record<string, any>>(
 ): IEntry<TAppProps> => {
   const basename = routerOptions?.basename ?? options.basename;
   const handler = createStaticHandler(routes as RouteObject[], { ...routerOptions, basename });
-  const runtime = new HandlerRuntime(handler.dataRoutes, { ...options, basename });
 
   /**
-   * Bind host services to the shared router and runtime state.
+   * Bind host services to the shared router and to runtime state of this mount alone.
    */
   const entry = ({ getHtml, prepare: hostPrepare, renderToStream }: IEntryHost<TAppProps>) =>
     createHandler<TAppProps>(
@@ -87,7 +87,7 @@ const defineEntry = <TAppProps = Record<string, any>>(
               }
             : undefined,
       },
-      runtime,
+      new HandlerRuntime(handler.dataRoutes, { ...options, basename }),
     );
 
   return Object.assign(entry, { kind: 'ssr-boost-entry' as const });

@@ -116,22 +116,28 @@ describe('defineEntry', () => {
     await outside.text();
   });
 
-  it('shares runtime state between hosts mounting the same entry', async () => {
+  it('keeps runtime state per mount, so a cached 404 never crosses hosts', async () => {
     const onRequest = vi.fn(() => ({}));
     const entry = defineEntry(App, [{ id: 'root', path: '/', errorElement: <p>missing</p> }], {
       notFound: 'cached',
       onRequest,
     });
-    const first = entry({ getHtml: shell, renderToStream });
-    const second = entry({ getHtml: shell, renderToStream });
+    const hostShell = (title: string) => () => ({
+      header: `<!doctype html><html><head><title>${title}</title></head><body><div id="root">`,
+      footer: '</div></body></html>',
+    });
+    const first = entry({ getHtml: hostShell('first'), renderToStream });
+    const second = entry({ getHtml: hostShell('second'), renderToStream });
 
-    const responses = [
-      await first(new Request('http://localhost/one')),
-      await second(new Request('http://localhost/two')),
+    const bodies = [
+      await (await first(new Request('http://localhost/one'))).text(),
+      await (await first(new Request('http://localhost/two'))).text(),
+      await (await second(new Request('http://localhost/three'))).text(),
     ];
 
-    expect(responses.map(({ status }) => status)).toEqual([404, 404]);
-    await Promise.all(responses.map((response) => response.text()));
-    expect(onRequest).toHaveBeenCalledOnce();
+    expect(bodies[0]).toContain('<title>first</title>');
+    expect(bodies[1]).toContain('<title>first</title>');
+    expect(bodies[2]).toContain('<title>second</title>');
+    expect(onRequest).toHaveBeenCalledTimes(2);
   });
 });

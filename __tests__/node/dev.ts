@@ -299,6 +299,61 @@ describe('createDevServer', { timeout: 30000 }, () => {
     expect(home.body).toContain('Home v2');
   });
 
+  it('keeps one mount per loaded entry and mounts again after a server edit', async () => {
+    writeProject();
+
+    const counted = (version: string): string => `import { createElement } from 'react';
+import defineEntry from '@lomray/vite-ssr-boost/core/entry';
+import routes from './routes';
+
+const App = ({ children }) => createElement('main', null, children);
+
+export default defineEntry(App, routes, {
+  notFound: 'cached',
+  onRequest: () => {
+    globalThis.__ssrBoostDevMounts = [...(globalThis.__ssrBoostDevMounts ?? []), '${version}'];
+
+    return undefined;
+  },
+});
+`;
+    const calls = (): string[] =>
+      (globalThis as { __ssrBoostDevMounts?: string[] }).__ssrBoostDevMounts ?? [];
+
+    write('server.ts', counted('v1'));
+
+    const { url } = await start();
+
+    await request(`${url}/missing`);
+    await request(`${url}/missing-too`);
+
+    expect(calls()).toEqual(['v1']);
+
+    write('server.ts', counted('v2'));
+
+    /**
+     * Ask until the watcher drops the old module and the new mount answers with an empty cache.
+     */
+    const waitForRemount = async (attempts = 50): Promise<void> => {
+      await request(`${url}/missing`);
+
+      if (calls().includes('v2') || attempts <= 1) {
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 100);
+      });
+
+      return waitForRemount(attempts - 1);
+    };
+
+    await waitForRemount();
+
+    expect(calls()).toEqual(['v1', 'v2']);
+    delete (globalThis as { __ssrBoostDevMounts?: string[] }).__ssrBoostDevMounts;
+  });
+
   it('reads the document only when the entry renders', async () => {
     writeProject({ html: '<!doctype html><html><head></head><body></body></html>' });
 
