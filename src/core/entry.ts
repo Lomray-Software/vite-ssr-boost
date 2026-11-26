@@ -52,8 +52,8 @@ const defineEntry = <TAppProps = Record<string, any>>(
   routes: TRouteObject[],
   { routerOptions, prepare, ...options }: TEntryOptions<TAppProps> = {},
 ): IEntry<TAppProps> => {
-  const handler = createStaticHandler(routes as RouteObject[], routerOptions);
   const basename = routerOptions?.basename ?? options.basename;
+  const handler = createStaticHandler(routes as RouteObject[], { ...routerOptions, basename });
   const runtime = new HandlerRuntime(handler.dataRoutes, { ...options, basename });
 
   /**

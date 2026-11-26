@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import defineEntry, { isEntry } from '@core/entry';
 import renderToStream from '@node/render-to-stream';
 
+/** Return a minimal document shell for the handler. */
 const shell = () => ({
   header: '<!doctype html><html><head></head><body><div id="root">',
   footer: '</div></body></html>',
@@ -98,6 +99,21 @@ describe('defineEntry', () => {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain('<p>About</p>');
+  });
+
+  it('matches routes under the top-level basename', async () => {
+    const handler = defineEntry(App, routes, { basename: '/app' })({
+      getHtml: shell,
+      renderToStream,
+    });
+
+    const matched = await handler(new Request('http://localhost/app/about'));
+    const outside = await handler(new Request('http://localhost/about'));
+
+    expect(matched.status).toBe(200);
+    expect(await matched.text()).toContain('<p>About</p>');
+    expect(outside.status).toBe(404);
+    await outside.text();
   });
 
   it('shares runtime state between hosts mounting the same entry', async () => {
