@@ -22,17 +22,6 @@ interface ISsrManifestParams {
   buildOutput?: IBuildOutputConfig;
 }
 
-/**
- * Name which output pattern produced a manifest record's own file.
- */
-const getOutputKind = (file: string, isEntry?: boolean): TOutputKind => {
-  if (!/\.[cm]?js$/.test(file)) {
-    return 'asset';
-  }
-
-  return isEntry ? 'entry' : 'chunk';
-};
-
 interface IManifest {
   [path: string]: {
     assets: string[];
@@ -40,8 +29,25 @@ interface IManifest {
     file: string;
     isEntry?: boolean;
     imports: string[];
+    name?: string;
+    names?: string[];
   };
 }
+
+/**
+ * Name which output pattern produced a manifest record's own file.
+ * Vite writes `name` without `names` only for chunks, so a `.js` asset record
+ * (an `?url` import) is matched against assetFileNames.
+ */
+const getOutputKind = (record: IManifest[string]): TOutputKind => {
+  const { file, isEntry, name, names } = record;
+
+  if (!/\.[cm]?js$/.test(file) || name === undefined || names !== undefined) {
+    return 'asset';
+  }
+
+  return isEntry ? 'entry' : 'chunk';
+};
 
 /**
  * Working with SSR Manifest file
@@ -385,11 +391,15 @@ class SsrManifest extends RouteAssets {
    */
   protected getEmittedFiles(manifest: IManifest): string[] {
     const isFingerprinted = createFingerprintMatcher(this.buildOutput);
-    const files = Object.values(manifest).flatMap(({ file, isEntry, css = [], assets = [] }) => [
-      // A manifest record for a stylesheet or an imported asset names a file from assetFileNames.
-      ...(file && isFingerprinted(file, getOutputKind(file, isEntry)) ? [file] : []),
-      ...[...css, ...assets].filter((asset) => isFingerprinted(asset, 'asset')),
-    ]);
+    const files = Object.values(manifest).flatMap((record) => {
+      const { file, css = [], assets = [] } = record;
+
+      return [
+        // A manifest record for a stylesheet or an imported asset names a file from assetFileNames.
+        ...(file && isFingerprinted(file, getOutputKind(record)) ? [file] : []),
+        ...[...css, ...assets].filter((asset) => isFingerprinted(asset, 'asset')),
+      ];
+    });
 
     return [...new Set(files)].sort((a, b) => a.localeCompare(b));
   }

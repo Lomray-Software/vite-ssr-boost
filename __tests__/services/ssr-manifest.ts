@@ -219,6 +219,39 @@ describe('SsrManifest', () => {
     );
   });
 
+  it('matches a js asset record against assetFileNames, not chunkFileNames', () => {
+    const writeFileSync = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+    const manifest = SsrManifest.get(createConfig(), {
+      buildDir: 'dist',
+      buildOutput: { rollupOptions: { output: { assetFileNames: 'assets/[name][extname]' } } },
+    }) as unknown as TSsrManifestPrivate;
+    manifest.pathNormalize.getImportPostfix = vi.fn(() => ['', '.ts']);
+    manifest.pathNormalize.getAppPath = vi.fn((val: string) => val);
+    parseMock.mockReturnValue([]);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(manifest, 'loadClientManifest').mockReturnValue({
+      // Vite writes `src` without `name` for an `?url` import of a script.
+      'src/sw-register.js': { file: 'assets/sw-register.js', src: 'src/sw-register.js' },
+      // An entry asset carries `names` beside `name`.
+      'src/theme.js': {
+        file: 'assets/register.js',
+        src: 'src/theme.js',
+        isEntry: true,
+        name: 'register',
+        names: ['register.js'],
+      },
+      'src/lazy.js': { file: 'assets/lazy-DauyBWxg.js', name: 'lazy', src: 'src/lazy.js' },
+    });
+
+    manifest.buildRoutesManifest();
+
+    expect(writeFileSync).toHaveBeenCalledWith(
+      '/root/dist/server/fingerprinted-files.json',
+      `${JSON.stringify(['assets/lazy-DauyBWxg.js'], null, 2)}\n`,
+      { encoding: 'utf-8' },
+    );
+  });
+
   it('fails the build when a lazy route is neither in the client manifest nor on disk', () => {
     vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
     const manifest = SsrManifest.get(createConfig(), {
