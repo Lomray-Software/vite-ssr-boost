@@ -356,6 +356,20 @@ describe('createDevServer', { timeout: 30000 }, () => {
     started = [];
   });
 
+  it('answers readiness 503 and keeps accepting during the readiness grace', async () => {
+    writeProject();
+
+    const { app, url } = await start({ health: true, readinessGraceMs: 300 });
+    const closed = app.close();
+
+    expect((await request(`${url}/readyz`)).status).toBe(503);
+    expect(app.server.listening).toBe(true);
+
+    await closed;
+    expect(app.server.listening).toBe(false);
+    started = [];
+  });
+
   it.skipIf(!hasOpenssl)('serves HTTPS from the Vite config, HMR included', async () => {
     writeProject();
 

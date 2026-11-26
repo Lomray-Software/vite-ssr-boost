@@ -236,6 +236,7 @@ const createProductionServer = async ({
   logger = new DefaultLogger(),
   health,
   drainTimeoutMs,
+  readinessGraceMs,
   keepAliveTimeoutMs,
   headersTimeoutMs,
   requestTimeoutMs,
@@ -249,6 +250,7 @@ const createProductionServer = async ({
   const lifecycle = createLifecycle(server, {
     health,
     drainTimeoutMs,
+    readinessGraceMs,
     keepAliveTimeoutMs,
     headersTimeoutMs,
     requestTimeoutMs,

@@ -206,6 +206,7 @@ const createDevServer = async ({
   logger,
   health,
   drainTimeoutMs,
+  readinessGraceMs,
   keepAliveTimeoutMs,
   headersTimeoutMs,
   requestTimeoutMs,
@@ -226,6 +227,7 @@ const createDevServer = async ({
   const lifecycle = createLifecycle(server, {
     health,
     drainTimeoutMs,
+    readinessGraceMs,
     keepAliveTimeoutMs,
     headersTimeoutMs,
     requestTimeoutMs,

@@ -567,6 +567,18 @@ describe('createProductionServer', () => {
     expect(app.close()).toBe(app.close());
   });
 
+  it('answers readiness 503 and keeps accepting during the readiness grace', async () => {
+    const { app, url } = await start({ health: true, readinessGraceMs: 300 });
+    const closed = app.close();
+
+    expect((await request(`${url}/readyz`)).status).toBe(503);
+    expect((await request(`${url}/healthz`)).status).toBe(200);
+    expect(app.server.listening).toBe(true);
+
+    await closed;
+    expect(app.server.listening).toBe(false);
+  });
+
   it('runs onDrain once when the server closes', async () => {
     const onDrain = vi.fn();
     const { app } = await start({ onDrain });
