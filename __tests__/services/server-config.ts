@@ -29,6 +29,14 @@ describe('ServerConfig', () => {
     });
   });
 
+  it('should keep an explicit build root even when a conventional one exists', () => {
+    vi.spyOn(fs, 'existsSync').mockImplementation((filepath) => filepath === './build');
+
+    const config = ServerConfig.init({ isProd: true }, { root: './missing' });
+
+    expect(config.getParams().root).toBe('./missing');
+  });
+
   it('should apply vite plugin config and entrypoint overrides', async () => {
     const getPluginConfig = (await import('@helpers/plugin-config')).default;
     vi.mocked(getPluginConfig).mockReturnValue({

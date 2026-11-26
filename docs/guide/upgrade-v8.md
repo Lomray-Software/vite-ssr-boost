@@ -108,6 +108,9 @@ listener to use the managed drain.
 Configuration load errors in `ssr-boost dev` now stop the command with the original error instead
 of falling back to the Express server.
 
+An explicit `--build-dir` (or `buildDir`) is now used as given. If the directory is missing, `start`
+and `preview` stop with an error instead of silently serving `./build` or `./dist`.
+
 ## Check the upgraded application
 
 Run development and production builds, then check hydration, lazy-route JS/CSS, redirects, unmatched-route 404s, error middleware and any HTML transform. If you use parsed request bodies, streaming or cancellation, exercise those paths too.

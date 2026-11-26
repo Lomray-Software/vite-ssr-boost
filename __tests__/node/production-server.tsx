@@ -169,6 +169,23 @@ describe('prepareProduction', () => {
     expect((await request(`${url}/robots.txt`)).status).toBe(404);
   });
 
+  it('rejects a missing explicit build directory beside a valid conventional one', async () => {
+    const originalCwd = process.cwd();
+
+    process.chdir(directory);
+
+    try {
+      await expect(
+        prepareProduction({ buildDir: 'missing', loadEntry: entryModule() }),
+      ).rejects.toThrow('Build directory not found');
+      await expect(prepareProduction({ loadEntry: entryModule() })).resolves.toMatchObject({
+        paths: { serverFile: join(process.cwd(), 'build/server/server.js') },
+      });
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   it('names the missing server entry and how to produce it', async () => {
     await expect(prepareProduction({ buildDir })).rejects.toThrow(
       `[ssr-boost] Server entry not found: ${join(buildDir, 'server/server.js')}. Run ssr-boost build or pass the build directory.`,

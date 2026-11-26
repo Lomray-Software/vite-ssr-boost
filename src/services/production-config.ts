@@ -17,13 +17,28 @@ type TManagedServer = 'node' | 'express';
 
 const managedServers: ReadonlySet<unknown> = new Set(['node', 'express']);
 
+const DEFAULT_BUILD_DIRS = ['./build', './dist'];
+
+/**
+ * Pick the build directory: an explicit one alone, otherwise the first conventional one present.
+ */
+const findBuildDir = (buildDir?: string): string | undefined => {
+  if (buildDir === undefined) {
+    return DEFAULT_BUILD_DIRS.find((candidate) => fs.existsSync(candidate));
+  }
+
+  if (!fs.existsSync(buildDir)) {
+    throw new Error(`Build directory not found: ${path.resolve(buildDir)}. Run ssr-boost build.`);
+  }
+
+  return buildDir;
+};
+
 /**
  * Read relocatable build settings while retaining conventional paths for older builds.
  */
 const loadProductionConfig = (buildDir?: string): IProductionConfig | undefined => {
-  const directory = [buildDir, './build', './dist'].find(
-    (candidate) => candidate && fs.existsSync(candidate),
-  );
+  const directory = findBuildDir(buildDir);
 
   if (!directory) {
     return;
@@ -56,6 +71,8 @@ const loadProductionConfig = (buildDir?: string): IProductionConfig | undefined 
 
   return { ...config, root: path.resolve(path.dirname(filename), config.root) };
 };
+
+export { DEFAULT_BUILD_DIRS, findBuildDir };
 
 export type { IProductionConfig, TManagedServer };
 

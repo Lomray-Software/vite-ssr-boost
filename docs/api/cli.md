@@ -139,7 +139,10 @@ Common flags:
 - `--focus-only`
 - `--build-dir`
 - `--module-preload`
-- `--server [node|express]`
+- `--server <node|express>`
+
+`--build-dir` is used as given: when the directory does not exist the command stops with an error
+instead of falling back to `./build` or `./dist`.
 
 ## `ssr-boost preview`
 

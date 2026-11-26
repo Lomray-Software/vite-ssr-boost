@@ -19,7 +19,10 @@ import { createRequestListener, toEntry } from '@node/server-kit';
 import type { IErrorLogger } from '@node/server-kit';
 import { splitHtmlShell } from '@services/diagnostics';
 import DefaultLogger from '@services/logger';
-import loadProductionConfig from '@services/production-config';
+import loadProductionConfig, {
+  DEFAULT_BUILD_DIRS,
+  findBuildDir,
+} from '@services/production-config';
 import createAssetPreparer from '@services/route-asset-preparer';
 import RouteAssets from '@services/route-assets';
 import type { TRouteAssetsManifest } from '@services/route-assets';
@@ -119,13 +122,7 @@ const DEFAULT_PATHS: Omit<IProductionPaths, 'root'> = {
  */
 const resolvePaths = (buildDir?: string): IProductionPaths => {
   const config = loadProductionConfig(buildDir);
-  const root =
-    config?.root ??
-    path.resolve(
-      [buildDir, './build', './dist'].find((dir) => dir && existsSync(dir)) ??
-        buildDir ??
-        './build',
-    );
+  const root = config?.root ?? path.resolve(findBuildDir(buildDir) ?? DEFAULT_BUILD_DIRS[0]);
   const paths = config ?? DEFAULT_PATHS;
 
   return {

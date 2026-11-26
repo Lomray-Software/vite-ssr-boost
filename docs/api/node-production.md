@@ -69,7 +69,7 @@ app.lifecycle.handleSignals({ onExit: (code) => process.exit(code) });
 
 ```ts
 interface IPrepareProductionOptions {
-  buildDir?: string; // Default: ./build, then ./dist
+  buildDir?: string; // Default: ./build, then ./dist; an explicit directory must exist
   modulePreload?: boolean; // Default: false
   isSPA?: boolean; // Default: false
   static?: Omit<IServeStaticOptions, 'root' | 'basename' | 'isSPA' | 'hasAccessIndexHtml'> | false;

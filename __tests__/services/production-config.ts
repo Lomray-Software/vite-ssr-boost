@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import loadProductionConfig from '@services/production-config';
 
 describe('production build configuration', () => {
+  const originalCwd = process.cwd();
   let directory: string;
 
   beforeEach(() => {
@@ -13,6 +14,7 @@ describe('production build configuration', () => {
   });
 
   afterEach(() => {
+    process.chdir(originalCwd);
     fs.rmSync(directory, { recursive: true, force: true });
   });
 
@@ -72,6 +74,30 @@ describe('production build configuration', () => {
     fs.writeFileSync(path.join(directory, 'server/ssr-boost.json'), JSON.stringify(config));
 
     expect(() => loadProductionConfig(directory)).toThrow('Run ssr-boost build again.');
+  });
+
+  it('uses an explicit build directory alone instead of a conventional one', () => {
+    const config = {
+      version: 1,
+      root: '..',
+      base: '/',
+      mode: 'production',
+      publicDir: 'client',
+      indexFile: 'client/index.html',
+      serverFile: 'server/server.js',
+    };
+
+    fs.mkdirSync(path.join(directory, 'build/server'), { recursive: true });
+    fs.writeFileSync(path.join(directory, 'build/server/ssr-boost.json'), JSON.stringify(config));
+    process.chdir(directory);
+
+    expect(() => loadProductionConfig('missing')).toThrow(
+      `Build directory not found: ${path.join(fs.realpathSync(directory), 'missing')}`,
+    );
+    expect(loadProductionConfig()).toEqual({
+      ...config,
+      root: path.join(fs.realpathSync(directory), 'build'),
+    });
   });
 
   it('does not silently fall back when the descriptor is corrupt', () => {
