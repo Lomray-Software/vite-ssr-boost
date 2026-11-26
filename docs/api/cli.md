@@ -111,7 +111,7 @@ Common flags:
 - `--reset-cache`
 - `--mode`
 - `--entrypoint`
-- `--server [node|express]`
+- `--server <node|express>`
 
 ## `ssr-boost build`
 

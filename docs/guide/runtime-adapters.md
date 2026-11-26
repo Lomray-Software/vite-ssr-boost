@@ -35,8 +35,8 @@ export default defineEntry(App, routes, {
 ```
 
 `defineEntry(App, routes, options)` takes the `core/handler` options without `getHtml`, plus
-`routerOptions` for React Router's `createStaticHandler`; the router `basename` comes from
-`routerOptions.basename`. `routes` must not be empty. `onRequest` returns
+`routerOptions` for React Router's `createStaticHandler`; the router `basename` is
+`routerOptions.basename ?? basename`. `routes` must not be empty. `onRequest` returns
 `{ appProps, headers, status }` or a `Response`; there is no `next()` and no live `req`/`res`.
 The host supplies the HTML shell, route assets and renderer, so the same export runs on the managed
 node server, in your own Node launcher and in tests.
@@ -180,9 +180,10 @@ await app.register(fastifyStatic, {
   wildcard: false,
   immutable: true,
   maxAge: '1y',
-  setHeaders: (reply, filePath) => {
+  // setHeaders receives the raw Node response, not the Fastify reply.
+  setHeaders: (res, filePath) => {
     if (!hashed.has(relative(paths.publicDir, filePath).split(sep).join('/'))) {
-      reply.header('Cache-Control', 'public, max-age=0');
+      res.setHeader('Cache-Control', 'public, max-age=0');
     }
   },
 });
