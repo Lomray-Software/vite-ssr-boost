@@ -39,8 +39,11 @@ process after changing certificates. That read resolves the config with its plug
 that sets `server.https` in its `config` hook is honoured, and `configResolved` hooks run once for
 it and once more for the Vite server. A `ca`, `cert`, `key` or `pfx` string that holds a PEM block
 (`-----BEGIN `) is used as it is, and any other string is read as a file path; a file that cannot be
-read stops the start with its path instead of being passed on as a value. `close()` drains the server and closes Vite, including its
-HMR clients. Lifecycle options are described in [Node production](/api/node-production#createlifecycle).
+read stops the start with its path instead of being passed on as a value. Under `ssr-boost dev`
+the config file is evaluated once more before that, to pick the managed server, so keep its side
+effects safe to repeat. `close()` drains the server, then closes Vite with its HMR clients, so a
+response still rendering completes. Lifecycle options are described in
+[Node production](/api/node-production#createlifecycle).
 
 ```ts
 const dev = await createDevServer({ health: true });

@@ -400,12 +400,20 @@ export default defineEntry(App, routes, {
     const closed = new Promise<void>((resolve) => {
       socket.on('close', () => resolve());
     });
-    const viteClose = vi.spyOn(app.vite, 'close');
+    const listeningAtViteClose: boolean[] = [];
+    const close = app.vite.close.bind(app.vite);
+    const viteClose = vi.spyOn(app.vite, 'close').mockImplementation(() => {
+      listeningAtViteClose.push(app.server.listening);
+
+      return close();
+    });
 
     await app.close();
     await closed;
 
     expect(viteClose).toHaveBeenCalledTimes(1);
+    // Vite closes only after the server stopped, so in-flight renders keep their pipeline.
+    expect(listeningAtViteClose).toEqual([false]);
     expect(onDrain).toHaveBeenCalledTimes(1);
     expect(app.server.listening).toBe(false);
     started = [];

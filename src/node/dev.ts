@@ -249,13 +249,13 @@ const createDevServer = async ({
     keepAliveTimeoutMs,
     headersTimeoutMs,
     requestTimeoutMs,
+    onDrain,
     /**
-     * Terminate HMR clients beside the caller's own drain work.
+     * Close Vite once the sockets drained, so a response still rendering completes.
      */
-    onDrain: async () => {
-      await Promise.all([app.close(), onDrain?.()]);
+    onClose: async () => {
+      await Promise.all([app.close(), onClose?.()]);
     },
-    onClose,
   });
 
   server.on(

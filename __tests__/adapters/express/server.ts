@@ -291,17 +291,23 @@ describe('node server', () => {
     expect(printServerInfoMock).not.toHaveBeenCalled();
   });
 
-  it('should close vite once beside a user onDrain hook', async () => {
+  it('should close vite once after the server stopped, beside the user hooks', async () => {
     const close = vi.fn().mockResolvedValue(undefined);
     const onDrain = vi.fn().mockResolvedValue(undefined);
-    const result = await createServer(createDevConfig({ close }) as never, { onDrain });
+    const onClose = vi.fn().mockResolvedValue(undefined);
+    const result = await createServer(createDevConfig({ close }) as never, { onDrain, onClose });
 
-    result.run({ isPrintInfo: false });
+    const server = result.run({ isPrintInfo: false });
+
     await flush();
     await result.getLifecycle()!.close();
 
     expect(close).toHaveBeenCalledTimes(1);
     expect(onDrain).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(close.mock.invocationCallOrder[0]).toBeGreaterThan(
+      vi.mocked(server.close).mock.invocationCallOrder[0],
+    );
   });
 
   it('should answer health probes before application middleware once running', async () => {
