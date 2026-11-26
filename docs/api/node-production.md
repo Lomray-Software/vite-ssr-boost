@@ -54,9 +54,20 @@ function createProductionServer(options?: ICreateProductionServerOptions): Promi
 ```
 
 Requests pass through health probes, client files, then SSR, which receives only what the file
-server skipped. `compression` applies to rendered documents only. `listen` resolves with the bound
-address and rejects bind errors. `close` is `lifecycle.close`. The server does not subscribe to
-process signals; call `lifecycle.handleSignals()` when your process owns them.
+server skipped. `compression` applies to rendered documents only. `listen` is `lifecycle.listen`:
+it resolves with the bound address, rejects bind errors and rejects once `close()` has started.
+`close` is `lifecycle.close`. The server does not subscribe to process signals; call
+`lifecycle.handleSignals()` when your process owns them.
+
+Compression never re-encodes an answer the handler already shaped: a response with
+`Content-Encoding`, `Content-Range`, `Cache-Control: no-transform`, a 204, 206 or 304 status, or a
+`HEAD` request passes through unchanged. A compressed document keeps its own `Vary` values and
+every `Set-Cookie` line, and gains `Vary: Accept-Encoding`. Brotli is not offered by default; pass
+`compression: { format }` to pin one encoding.
+
+Error answers carry only safe headers: `Content-Encoding`, `Content-Language`, `Content-Length` and
+`Content-Range` are dropped, and the headers of a thrown error are applied only for a client error
+(status below 500). A range past the end of a file answers 416 with `Content-Range: bytes */<size>`.
 
 ```ts
 const app = await createProductionServer({ buildDir: 'build', compression: true, health: true });
@@ -134,7 +145,8 @@ every file to you.
 ```ts
 interface ILifecycleOptions {
   health?: boolean | { livePath?: string; readyPath?: string }; // true: /healthz, /readyz
-  drainTimeoutMs?: number; // Default: 30000
+  drainTimeoutMs?: number; // Default: 30000, per phase
+  readinessGraceMs?: number; // Default: 0
   keepAliveTimeoutMs?: number; // Default: Node's
   headersTimeoutMs?: number; // Default: Node's
   requestTimeoutMs?: number; // Default: Node's
@@ -142,22 +154,55 @@ interface ILifecycleOptions {
   onClose?: () => Promise<void> | void;
 }
 
+interface ILifecycle {
+  setReady: () => void;
+  isReady: () => boolean;
+  isDraining: () => boolean;
+  health: (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
+  listen: (port?: number, host?: string) => Promise<AddressInfo | string | null>;
+  close: () => Promise<void>;
+  force: () => void;
+  handleSignals: (options?: {
+    signals?: NodeJS.Signals[]; // Default: ['SIGTERM', 'SIGINT']
+    onSignal?: (signal: NodeJS.Signals) => void;
+    onExit?: (code: number) => void;
+  }) => () => void;
+}
+
 function createLifecycle(server: http.Server | https.Server, options?: ILifecycleOptions): ILifecycle;
 ```
 
+Bind through `listen`, not `server.listen`: it applies the timeouts, rejects once `close()` has
+started, and `close()` waits for a bind still in flight.
+
 Health probes are opt-in. The live path answers 200 while the process runs; the ready path answers
 200 after `setReady()` and 503 once a drain starts. Both answer `GET` and `HEAD` with
-`Cache-Control: no-store`.
+`Cache-Control: no-store`; other methods get 405.
 
 `close()` is idempotent: every caller shares one drain. It stops accepting connections, closes idle
 keep-alive sockets, sends `Connection: close` on responses still in flight and resolves once every
-socket is gone. Responses that outlive `drainTimeoutMs` have their sockets destroyed. Upgraded
-sockets (WebSocket, HMR) are destroyed once no HTTP response is active. `onDrain` runs as the drain
-starts, `onClose` after it.
+socket is gone. Upgraded and tunnelled sockets (WebSocket, HMR, `CONNECT`) are tracked too and
+destroyed once no HTTP response is active. `onDrain` runs as the drain starts, beside the socket
+drain, and `onClose` after it.
 
-`handleSignals({ signals, onExit })` routes `SIGTERM` and `SIGINT` (by default) through `close()` and
-returns an unsubscribe function; a second signal destroys the remaining sockets. The CLI uses it.
-Embedded and serverless hosts own their lifecycle and leave it uncalled.
+`drainTimeoutMs` bounds each phase on its own: the socket drain with `onDrain`, then `onClose`.
+When a phase runs out, its remaining sockets are destroyed and a hook still running makes `close()`
+reject with a message naming the hook, so a stuck dependency cannot hold the process forever.
+`force()` ends the drain at once: it destroys every socket, stops waiting for the hooks and starts
+the drain when none is under way.
+
+`readinessGraceMs` keeps the server accepting for that long after readiness turns 503, so a load
+balancer or a Kubernetes readiness probe takes the instance out of rotation before the port closes.
+Set it a little above the probe's `periodSeconds * failureThreshold`, and keep
+`terminationGracePeriodSeconds` above the grace plus the drain. `force()` cuts the grace short.
+
+`handleSignals({ signals, onSignal, onExit })` routes `SIGTERM` and `SIGINT` (by default) through
+`close()` and returns an unsubscribe function. A signal that arrives while a drain is already under
+way joins it; the next signal calls `force()`. `onExit` receives 0 after a clean drain and 1 when
+it failed. The CLI uses it: `ctrl+c` in the terminal forces the drain on the second press, and a
+restart requested while the process is exiting is skipped. With the Express server the CLI leaves
+signals alone when the application subscribed its own handlers. Embedded and serverless hosts own
+their lifecycle and leave it uncalled.
 
 Timeouts stay at Node's defaults unless set. Behind a load balancer whose idle timeout is 60 seconds,
 keep the server's keep-alive longer than the balancer's so the balancer closes first:

@@ -158,7 +158,8 @@ Fastify starts accepting requests. Run `npm run build` first, then start this la
 `node server/index.mjs`.
 
 ```js
-import { join, sep } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import adapterFastify from '@lomray/vite-ssr-boost/adapters/fastify';
@@ -167,6 +168,10 @@ import Fastify from 'fastify';
 
 const buildDir = fileURLToPath(new URL('../build/', import.meta.url));
 const { handler, paths } = await prepareProduction({ buildDir, static: false });
+// Only files the build listed carry a content hash; everything else revalidates.
+const hashed = new Set(
+  JSON.parse(await readFile(join(paths.root, 'server/fingerprinted-files.json'), 'utf8')),
+);
 const app = Fastify();
 
 await app.register(fastifyStatic, {
@@ -176,7 +181,7 @@ await app.register(fastifyStatic, {
   immutable: true,
   maxAge: '1y',
   setHeaders: (reply, filePath) => {
-    if (!filePath.startsWith(`${join(paths.publicDir, 'assets')}${sep}`)) {
+    if (!hashed.has(relative(paths.publicDir, filePath).split(sep).join('/'))) {
       reply.header('Cache-Control', 'public, max-age=0');
     }
   },
