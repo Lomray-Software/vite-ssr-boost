@@ -172,18 +172,20 @@ const { handler, paths } = await prepareProduction({ buildDir, static: false });
 const hashed = new Set(
   JSON.parse(await readFile(join(paths.root, 'server/fingerprinted-files.json'), 'utf8')),
 );
+const toUrlPath = (file) => relative(paths.publicDir, file).split(sep).join('/');
 const app = Fastify();
 
 await app.register(fastifyStatic, {
   root: paths.publicDir,
   index: false,
   wildcard: false,
+  // The HTML shell is a template for SSR, so /index.html falls through to the handler.
+  globIgnore: [toUrlPath(paths.indexFile)],
   immutable: true,
   maxAge: '1y',
-  // setHeaders receives the raw Node response, not the Fastify reply.
-  setHeaders: (res, filePath) => {
-    if (!hashed.has(relative(paths.publicDir, filePath).split(sep).join('/'))) {
-      res.setHeader('Cache-Control', 'public, max-age=0');
+  setHeaders: (reply, filePath) => {
+    if (!hashed.has(toUrlPath(filePath))) {
+      reply.header('cache-control', 'public, max-age=0');
     }
   },
 });
@@ -211,8 +213,10 @@ const address = await app.listen({ port: Number(process.env.PORT ?? 3000), host:
 console.info(`Fastify listening at ${address}`);
 ```
 
-`static: false` leaves client files to Fastify. Without a launcher of its own, a host can mount the
-entry directly: `entry({ getHtml: await loadHtmlShell({ indexFile }), prepare:
+`static: false` leaves client files to Fastify. `globIgnore` keeps the raw HTML shell out of the
+file routes, the way `serveStatic` hides it, so a request for it is rendered like any other page.
+In `@fastify/static` 10, `setHeaders` receives the Fastify reply. Without a launcher of its own,
+a host can mount the entry directly: `entry({ getHtml: await loadHtmlShell({ indexFile }), prepare:
 createRouteAssetPreparer({ buildDir }), renderToStream })` returns the Fetch handler.
 
 `loadHtmlShell` reads the built HTML once and returns a fresh shell per request.
