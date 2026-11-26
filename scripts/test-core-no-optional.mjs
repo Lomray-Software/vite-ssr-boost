@@ -263,6 +263,10 @@ try {
       managedServer: 'node',
     }),
   );
+  await writeFile(
+    join(buildDir, 'server', 'fingerprinted-files.json'),
+    JSON.stringify(['assets/app-AbCdEf12.js']),
+  );
 
   const serverProof = join(directory, 'node-server.mjs');
 
@@ -281,6 +285,8 @@ try {
     const asset = await fetch(origin + '/assets/app-AbCdEf12.js');
     assert.equal(asset.status, 200);
     assert.equal(asset.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    const shell = await fetch(origin + '/index.html');
+    assert.notEqual(shell.headers.get('cache-control'), 'public, max-age=31536000, immutable');
     assert.equal((await fetch(origin + '/readyz')).status, 200);
     assert.equal((await fetch(origin + '/missing')).status, 404);
     await app.close();
