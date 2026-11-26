@@ -63,7 +63,7 @@ const createRouteAssetPreparer = <TAppProps = Record<string, any>>({
 
 type TStaticOptions = Omit<
   IServeStaticOptions,
-  'root' | 'basename' | 'isSPA' | 'hasAccessIndexHtml'
+  'root' | 'basename' | 'isSPA' | 'shellFile' | 'hasAccessIndexHtml'
 >;
 
 interface IPrepareProductionOptions {
@@ -217,6 +217,7 @@ const prepareProduction = async ({
             root: paths.publicDir,
             basename: new URL(paths.base, 'http://localhost').pathname,
             isSPA,
+            shellFile: paths.indexFile,
             hasAccessIndexHtml,
           }),
   };

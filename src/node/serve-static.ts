@@ -19,12 +19,13 @@ interface IServeStaticOptions extends ServeStaticOptions<ServerResponse> {
   isSPA?: boolean;
   /** Content-hashed files relative to root; only these get an immutable one-year policy. */
   immutableFiles?: Iterable<string>;
-  /** SSR builds hide the raw `/index.html` shell unless this returns true. */
+  /** Built HTML shell, absolute or relative to root; SSR builds hide it. Defaults to `index.html`. */
+  shellFile?: string;
+  /** SSR builds hide the raw HTML shell unless this returns true. */
   hasAccessIndexHtml?: () => boolean;
 }
 
 const WELL_KNOWN = '/.well-known/';
-const HIDDEN_INDEX = '/index-not-found.html';
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 
 /**
@@ -99,6 +100,36 @@ const createCachePolicy = (
 };
 
 /**
+ * Request paths that resolve to the shell: its own path and, when send may append its
+ * extension, the extensionless form. Lowercased, since case-insensitive disks match any spelling.
+ */
+const getShellPaths = (
+  root: string,
+  shellFile: string,
+  extensions: ServeStaticOptions<ServerResponse>['extensions'],
+): Set<string> => {
+  const relative = path.relative(root, path.resolve(root, shellFile));
+
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return new Set();
+  }
+
+  const shellPath = `/${relative.split(path.sep).join('/')}`.toLowerCase();
+  const extension = path.posix.extname(shellPath);
+  const paths = new Set([shellPath]);
+
+  if (
+    extension &&
+    Array.isArray(extensions) &&
+    extensions.some((name) => `.${String(name).replace(/^\./, '').toLowerCase()}` === extension)
+  ) {
+    paths.add(shellPath.slice(0, -extension.length));
+  }
+
+  return paths;
+};
+
+/**
  * Send HTML routes straight on while retaining static handling for built file prefixes.
  */
 const createSsrServe = (
@@ -162,10 +193,12 @@ const serveStatic = ({
   basename,
   isSPA = false,
   immutableFiles,
+  shellFile = 'index.html',
   hasAccessIndexHtml,
   ...options
 }: IServeStaticOptions): TStaticMiddleware => {
   const mount = normalizeBasename(basename);
+  const shellPaths = isSPA ? new Set<string>() : getShellPaths(root, shellFile, options.extensions);
   const fileOptions: ServeStaticOptions<ServerResponse> = {
     ...options,
     index: isSPA ? options.index : false,
@@ -203,13 +236,20 @@ const serveStatic = ({
       pathname !== undefined &&
       !pathname.includes('\\') &&
       path.posix.normalize(pathname).startsWith(WELL_KNOWN);
-    const isHiddenIndex =
-      !isSPA &&
+
+    // The shell is matched by the file it resolves to, so no URL spelling reaches it.
+    if (
       pathname !== undefined &&
-      path.posix.normalize(pathname).toLowerCase() === '/index.html';
+      shellPaths.has(path.posix.normalize(pathname).toLowerCase()) &&
+      !hasAccessIndexHtml?.()
+    ) {
+      next();
+
+      return;
+    }
 
     req.originalUrl = originalUrl ?? url;
-    req.url = isHiddenIndex && !hasAccessIndexHtml?.() ? HIDDEN_INDEX : mountedUrl;
+    req.url = mountedUrl;
 
     /**
      * Hand the untouched request to the next middleware.

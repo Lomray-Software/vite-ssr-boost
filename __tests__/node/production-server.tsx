@@ -297,6 +297,27 @@ describe('createProductionServer', () => {
     expect(shell.body.toString()).toContain('<!--ssr-outlet-->');
   });
 
+  it('hides a shell the build config renamed', async () => {
+    await cp(join(buildDir, 'client/index.html'), join(buildDir, 'client/app.html'));
+    await writeFile(
+      join(buildDir, 'server/ssr-boost.json'),
+      JSON.stringify({
+        version: 1,
+        root: '..',
+        base: '/',
+        mode: 'production',
+        publicDir: 'client',
+        indexFile: 'client/app.html',
+        serverFile: 'server/server.js',
+      }),
+    );
+    const { url } = await start({ loadEntry: entryModule() });
+    const hidden = await request(`${url}/app.html`);
+
+    expect(hidden.status).toBe(404);
+    expect(hidden.body.toString()).not.toContain('<!--ssr-outlet-->');
+  });
+
   it('serves the client document for every route in SPA mode', async () => {
     await rm(join(buildDir, 'server'), { recursive: true });
     const loadEntry = vi.fn();

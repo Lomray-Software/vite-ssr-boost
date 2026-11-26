@@ -72,7 +72,9 @@ interface IPrepareProductionOptions {
   buildDir?: string; // Default: ./build, then ./dist; an explicit directory must exist
   modulePreload?: boolean; // Default: false
   isSPA?: boolean; // Default: false
-  static?: Omit<IServeStaticOptions, 'root' | 'basename' | 'isSPA' | 'hasAccessIndexHtml'> | false;
+  static?:
+    | Omit<IServeStaticOptions, 'root' | 'basename' | 'isSPA' | 'shellFile' | 'hasAccessIndexHtml'>
+    | false;
   hasAccessIndexHtml?: () => boolean;
   loadEntry?: (file: string) => Promise<unknown>;
 }
@@ -100,6 +102,7 @@ interface IServeStaticOptions extends ServeStaticOptions {
   basename?: string;
   isSPA?: boolean;
   immutableFiles?: Iterable<string>; // Paths relative to root
+  shellFile?: string; // Absolute or relative to root, default 'index.html'
   hasAccessIndexHtml?: () => boolean;
 }
 
@@ -111,8 +114,10 @@ Express server's behaviour: validators, ranges, HEAD and directory redirects sta
 serve-static; in SSR builds, URLs outside the client directory's top-level names go straight to
 `next()`;
 `/.well-known/` is served even though other dotfiles stay hidden, resolving `name` to `name.json`.
-SSR builds hide the raw `/index.html` shell (any letter case) unless `hasAccessIndexHtml()` returns
-true, so that URL reaches the router.
+SSR builds hide the raw HTML shell unless `hasAccessIndexHtml()` returns true, so that URL reaches
+the router. The shell is matched by the file it resolves to: any letter case, dot segments and,
+when `extensions` lists its extension, the extensionless URL. `prepareProduction` passes the
+`indexFile` from `ssr-boost.json`, so a renamed shell stays hidden too.
 
 Files listed in `immutableFiles` get `Cache-Control: public, max-age=31536000, immutable`. Every
 other file keeps serve-static's revalidating default, so a stable name such as

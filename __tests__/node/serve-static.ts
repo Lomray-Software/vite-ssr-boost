@@ -253,6 +253,29 @@ describe('node serveStatic', () => {
     expect(await (await fetch(`${spa}/`)).text()).toBe('document');
   });
 
+  it('hides the shell by the file it resolves to, whatever its name', async () => {
+    await writeFile(path.join(root, 'shell.html'), 'renamed-shell');
+    await writeFile(path.join(root, 'index-not-found.html'), 'public-page');
+    let isAllowed = false;
+    const renamed = await startNode({}, false, {
+      shellFile: path.join(root, 'shell.html'),
+      hasAccessIndexHtml: () => isAllowed,
+    });
+
+    expect(await (await fetch(`${renamed}/shell.html`)).text()).toBe('SSR');
+    expect(await (await fetch(`${renamed}/Shell.HTML`)).text()).toBe('SSR');
+    expect(await (await fetch(`${renamed}/index-not-found.html`)).text()).toBe('public-page');
+
+    isAllowed = true;
+    expect(await (await fetch(`${renamed}/shell.html`)).text()).toBe('renamed-shell');
+
+    const withExtensions = await startNode({ extensions: ['html'] }, false);
+
+    expect(await (await fetch(`${withExtensions}/index`)).text()).toBe('SSR');
+    expect(await (await fetch(`${withExtensions}/index.html`)).text()).toBe('SSR');
+    expect(await (await fetch(`${withExtensions}/about`)).text()).toBe('extension-fallback');
+  });
+
   it('only serves inside its mount and restores the URL for the next handler', async () => {
     const middleware = serveStatic({ root, basename: '/Base/' });
     const seen: string[] = [];
