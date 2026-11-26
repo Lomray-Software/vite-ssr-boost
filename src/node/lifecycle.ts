@@ -375,6 +375,7 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
       }
     }).finally(() => {
       isBinding = false;
+      binding = undefined;
     });
 
     binding = bound.catch(() => undefined);
@@ -397,12 +398,16 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
        */
       const settle = (): void => {
         server.off('listening', settle);
+        server.off('close', settle);
         emitter.off(errorMonitor, settle);
         isBinding = false;
+        binding = undefined;
         resolve();
       };
 
       server.on('listening', settle);
+      // A native close() during the host lookup cancels the bind with only a `close` event.
+      server.on('close', settle);
       emitter.on(errorMonitor, settle);
     });
   };

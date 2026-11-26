@@ -634,6 +634,22 @@ describe('createLifecycle', () => {
     expect(server.listening).toBe(false);
   });
 
+  it('ends a pending native bind that a native close cancelled', async () => {
+    const server = http.createServer();
+    const lifecycle = createLifecycle(server, { drainTimeoutMs: 60_000 });
+
+    servers.push(server);
+    trackNativeBind(lifecycle);
+    // A close() during the host lookup cancels the bind with only a `close` event.
+    server.listen(0, 'localhost');
+    server.close();
+
+    const startedAt = Date.now();
+
+    await expect(lifecycle.close()).resolves.toBeUndefined();
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+  });
+
   it('lets force end a pending native bind at once', async () => {
     const server = http.createServer();
     const lifecycle = createLifecycle(server);
