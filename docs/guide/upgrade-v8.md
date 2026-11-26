@@ -85,8 +85,9 @@ once per process. Production has no accessors or warning overhead.
 
 Use `context.request` for request data, `context.response.headers` and `context.response.status`
 for response metadata before shell readiness, and React Router HTTP helpers such as `redirect()`
-in loaders/actions. Keep Express-specific middleware or response takeover in middleware or the
-earlier `onRequest(req, res)` hook; its arguments are unaffected.
+in loaders/actions. Keep Express-specific middleware or response takeover in Express middleware.
+The earlier `onRequest(req, res)` hook still receives the same arguments, but it is deprecated and
+logs the warning described below.
 
 Express-only entry hooks (`onRequest(req, res)`, `shouldSkip`, `onServerCreated`,
 `onServerStarted` and `middlewares.expressStatic`) keep working in 8.x and log
@@ -94,6 +95,18 @@ Express-only entry hooks (`onRequest(req, res)`, `shouldSkip`, `onServerCreated`
 once per hook, in development and production, unless `SSR_BOOST_DIAGNOSTICS=0`. Their
 replacements are `defineEntry` and the [Node server kit](/guide/runtime-adapters); removal is
 planned for **9.0**.
+
+## Process signals and shutdown
+
+The CLI now drains the managed server on `SIGTERM` and `SIGINT`: readiness turns off, new
+connections are refused, open requests finish within `drainTimeoutMs` per phase, and a second
+signal forces the close. With the Express server, an application that subscribes to `SIGTERM` or
+`SIGINT` itself (for example in `onServerStarted`) keeps that handling: the CLI checks for existing
+listeners once the server is listening and leaves signals alone when it finds one. Remove your own
+listener to use the managed drain.
+
+Configuration load errors in `ssr-boost dev` now stop the command with the original error instead
+of falling back to the Express server.
 
 ## Check the upgraded application
 

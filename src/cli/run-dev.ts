@@ -1,7 +1,8 @@
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
-import ownSignals from '@cli/helpers/own-signals';
-import getPluginConfig from '@helpers/plugin-config';
+import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
+import PLUGIN_NAME from '@constants/plugin-name';
+import type { IPluginConfig } from '@helpers/plugin-config';
 import printServerInfo from '@helpers/print-server-info';
 import type { ILifecycle } from '@node/lifecycle';
 import { setCurrentEntrypointName } from '@plugins/handle-custom-entrypoint';
@@ -27,15 +28,16 @@ interface IRunDevOut {
 
 /**
  * Read managedServer from the project's Vite config; projects without the plugin keep Express.
+ * A config that fails to load surfaces here instead of silently selecting Express. The chosen
+ * server resolves the config again with its own inline overrides, so nothing is reused from this read.
  */
 const resolveManagedServer = async (mode?: string): Promise<TManagedServer> => {
   const { resolveConfig } = await import('vite');
+  const { plugins } = await resolveConfig({ mode }, 'serve', mode);
+  const plugin = plugins.find(({ name }) => name === PLUGIN_NAME) as
+    { pluginOptions?: Partial<IPluginConfig> } | undefined;
 
-  try {
-    return getPluginConfig(await resolveConfig({ mode }, 'serve', mode)).managedServer ?? 'express';
-  } catch {
-    return 'express';
-  }
+  return plugin?.pluginOptions?.managedServer ?? 'express';
 };
 
 /**
@@ -58,7 +60,14 @@ const runNodeServer = async ({
     app.vite.config.server.host = host;
   }
 
-  await app.listen(resolvedPort, host);
+  try {
+    await app.listen(resolvedPort, host);
+  } catch (error) {
+    // a failed bind must not leave Vite watchers and HMR sockets behind
+    await app.close();
+
+    throw error;
+  }
 
   if (isPrintInfo) {
     void printServerInfo(app.config, { version, server: app.server });
@@ -79,21 +88,23 @@ async function runDev(params: IRunDevParams): Promise<IRunDevOut> {
     setCurrentEntrypointName(entrypointName);
   }
 
-  let out: IRunDevOut;
-
   if ((params.server ?? (await resolveManagedServer(mode))) === 'node') {
-    out = await runNodeServer(params);
-  } else {
-    const { default: createServer } = await import('@adapters/express/server');
-    const config = ServerConfig.init({ isHost, mode, entrypointName }, { port });
-    const { run, getLifecycle } = await createServer(config);
+    const out = await runNodeServer(params);
 
-    out = { server: run({ version, isPrintInfo }), config, lifecycle: getLifecycle() };
+    ownSignals(out.lifecycle);
+
+    return out;
   }
 
-  ownSignals(out.lifecycle);
+  const { default: createServer } = await import('@adapters/express/server');
+  const config = ServerConfig.init({ isHost, mode, entrypointName }, { port });
+  const { run, getLifecycle } = await createServer(config);
+  const server = run({ version, isPrintInfo });
+  const lifecycle = getLifecycle();
 
-  return out;
+  ownSignalsUnlessHandled(server, lifecycle);
+
+  return { server, config, lifecycle };
 }
 
 export default runDev;

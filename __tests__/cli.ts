@@ -1,5 +1,6 @@
 // @vitest-environment node
 import childProcess from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +14,7 @@ import runProd from '@cli/run-prod';
 import runServerless from '@cli/run-serverless';
 import runVercelBuild from '@cli/run-vercel-build';
 import cliContext from '@constants/cli-context';
+import PLUGIN_NAME from '@constants/plugin-name';
 
 const {
   BuildMock,
@@ -92,6 +94,11 @@ const createLifecycleMock = () => {
 };
 
 /**
+ * Express server double: the CLI waits for its listening event before taking signals.
+ */
+const expressServer = Object.assign(new EventEmitter(), { id: 'server' });
+
+/**
  * Let queued promise callbacks run.
  */
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -126,20 +133,21 @@ describe('cli integration', () => {
   });
 
   it('should run dev/prod/serverless wrappers', async () => {
+    resolveConfigMock.mockResolvedValue({ plugins: [] });
     createServerMock.mockResolvedValue({
-      run: vi.fn(() => 'server'),
+      run: vi.fn(() => expressServer),
       app: 'app',
       getLifecycle: vi.fn(() => undefined),
     });
 
     expect(await runDev({ version: '1', entrypointName: 'worker' })).toEqual({
-      server: 'server',
+      server: expressServer,
       config: expect.anything(),
     });
     expect(setCurrentEntrypointNameMock).toHaveBeenCalledWith('worker');
 
     expect(await runProd({ version: '1', focusOnly: 'client' })).toEqual({
-      server: 'server',
+      server: expressServer,
       config: expect.anything(),
     });
 
@@ -181,13 +189,13 @@ describe('cli integration', () => {
 
   it('should let the flag override a persisted node selection', async () => {
     createServerMock.mockResolvedValue({
-      run: vi.fn(() => 'server'),
+      run: vi.fn(() => expressServer),
       app: 'app',
       getLifecycle: vi.fn(() => undefined),
     });
     loadProductionConfigMock.mockReturnValueOnce({ managedServer: 'node' });
 
-    expect((await runProd({ version: '1', server: 'express' })).server).toBe('server');
+    expect((await runProd({ version: '1', server: 'express' })).server).toBe(expressServer);
     expect(createProductionServerMock).not.toHaveBeenCalled();
   });
 
@@ -224,8 +232,9 @@ describe('cli integration', () => {
   it('should read the dev server selection from the plugin options', async () => {
     const { lifecycle } = createLifecycleMock();
 
-    resolveConfigMock.mockResolvedValue({});
-    getPluginConfigMock.mockReturnValue({ managedServer: 'node' });
+    resolveConfigMock.mockResolvedValue({
+      plugins: [{ name: PLUGIN_NAME, pluginOptions: { managedServer: 'node' } }],
+    });
     createDevServerMock.mockResolvedValue({
       config: { getParams: () => ({ host: 'h', port: 1 }) },
       vite: { config: { server: {} } },
@@ -252,6 +261,74 @@ describe('cli integration', () => {
     expect(processStopMock).toHaveBeenCalledTimes(1);
     expect(processStopMock).toHaveBeenCalledWith(0);
     expect(cliContext.isExiting).toBe(true);
+  });
+
+  it('should leave signals to an Express app that subscribed to them', async () => {
+    const { lifecycle } = createLifecycleMock();
+    const server = new EventEmitter();
+    const appListener = () => undefined;
+
+    loadProductionConfigMock.mockReturnValue({});
+    createServerMock.mockResolvedValue({
+      run: vi.fn(() => server),
+      app: 'app',
+      getLifecycle: vi.fn(() => lifecycle),
+    });
+
+    await runProd({ version: '1', isPrintInfo: false });
+    process.on('SIGTERM', appListener);
+    server.emit('listening');
+    await flush();
+
+    expect(lifecycle.handleSignals).not.toHaveBeenCalled();
+
+    process.off('SIGTERM', appListener);
+    await runProd({ version: '1', isPrintInfo: false });
+    server.emit('listening');
+    await flush();
+
+    expect(lifecycle.handleSignals).toHaveBeenCalledTimes(1);
+    expect(lifecycle.handleSignals).toHaveBeenCalledWith(
+      expect.objectContaining({ onExit: processStopMock }),
+    );
+  });
+
+  it('should keep Express when the plugin leaves managedServer unset', async () => {
+    resolveConfigMock.mockResolvedValue({ plugins: [{ name: PLUGIN_NAME, pluginOptions: {} }] });
+    createServerMock.mockResolvedValue({
+      run: vi.fn(() => expressServer),
+      app: 'app',
+      getLifecycle: vi.fn(() => undefined),
+    });
+
+    expect((await runDev({ version: '1', isPrintInfo: false })).server).toBe(expressServer);
+    expect(createDevServerMock).not.toHaveBeenCalled();
+  });
+
+  it('should surface a Vite config that fails to load instead of falling back to Express', async () => {
+    resolveConfigMock.mockRejectedValue(new Error('broken config'));
+
+    await expect(runDev({ version: '1' })).rejects.toThrow('broken config');
+    expect(createServerMock).not.toHaveBeenCalled();
+    expect(createDevServerMock).not.toHaveBeenCalled();
+  });
+
+  it('should close the node dev server when it cannot bind', async () => {
+    const { lifecycle } = createLifecycleMock();
+    const close = vi.fn().mockResolvedValue(undefined);
+
+    createDevServerMock.mockResolvedValue({
+      config: { getParams: () => ({ host: 'h', port: 1 }) },
+      vite: { config: { server: {} } },
+      server: 'dev-server',
+      lifecycle,
+      close,
+      listen: vi.fn().mockRejectedValue(new Error('EADDRINUSE')),
+    });
+
+    await expect(runDev({ version: '1', server: 'node' })).rejects.toThrow('EADDRINUSE');
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(lifecycle.handleSignals).not.toHaveBeenCalled();
   });
 
   it('should exit through the lifecycle drain on ctrl+c', async () => {

@@ -1,6 +1,6 @@
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
-import ownSignals from '@cli/helpers/own-signals';
+import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
 import createFocusOnly from '@helpers/create-focus-only';
 import printServerInfo from '@helpers/print-server-info';
 import type { ILifecycle } from '@node/lifecycle';
@@ -81,21 +81,24 @@ async function runProd(params: IRunProdParams): Promise<IRunProdOut> {
       ...(base === undefined ? {} : { base, publicDir, indexFile, serverFile }),
     },
   );
-  let out: IRunProdOut;
 
   if ((params.server ?? managedServer ?? 'express') === 'node') {
-    out = await runNodeServer(config, params);
-  } else {
-    // Imported on demand: express and compression are optional for node server builds.
-    const { default: createServer } = await import('@adapters/express/server');
-    const { run, getLifecycle } = await createServer(config);
+    const out = await runNodeServer(config, params);
 
-    out = { server: run({ version, isPrintInfo }), config, lifecycle: getLifecycle() };
+    ownSignals(out.lifecycle);
+
+    return out;
   }
 
-  ownSignals(out.lifecycle);
+  // Imported on demand: express and compression are optional for node server builds.
+  const { default: createServer } = await import('@adapters/express/server');
+  const { run, getLifecycle } = await createServer(config);
+  const server = run({ version, isPrintInfo });
+  const lifecycle = getLifecycle();
 
-  return out;
+  ownSignalsUnlessHandled(server, lifecycle);
+
+  return { server, config, lifecycle };
 }
 
 export default runProd;

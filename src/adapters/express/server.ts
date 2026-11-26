@@ -194,10 +194,16 @@ async function createServer(
         ? https.createServer(config.getVite()!.config.server.https!, app)
         : http.createServer(app);
 
+      const { onDrain } = lifecycleOptions;
+
       lifecycle = createLifecycle(server, {
-        // Vite keeps HMR sockets open; closing it lets the dev drain finish.
-        onDrain: config.isProd ? undefined : () => config.getVite()?.close(),
         ...lifecycleOptions,
+        // Vite keeps HMR sockets open; closing it lets the dev drain finish, beside the user's hook.
+        onDrain: config.isProd
+          ? onDrain
+          : async () => {
+              await Promise.all([config.getVite()?.close(), onDrain?.()]);
+            },
       });
 
       server.listen(port, host, () => {
