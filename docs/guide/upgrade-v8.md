@@ -109,8 +109,9 @@ and the managed drain run on the same signal.
 
 Configuration load errors in `ssr-boost dev` now stop the command with the original error instead
 of falling back to the Express server. To pick the managed server, `ssr-boost dev` reads the Vite
-config file first, so with the Express server the config file is evaluated twice per start: keep
-side effects in it (logging, writing files) safe to repeat.
+config file first, so with the Express server the config file is evaluated twice per start, and
+three times with the node server (the server pick, HTTPS and the Vite server): keep side effects
+in it (logging, writing files) safe to repeat.
 
 An explicit `--build-dir` (or `buildDir`) is now used as given. If the directory is missing, `start`
 and `preview` stop with an error instead of silently serving `./build` or `./dist`.

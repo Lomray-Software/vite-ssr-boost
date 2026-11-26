@@ -196,8 +196,8 @@ Health probes are opt-in. The live path answers 200 while the process runs; the 
 `close()` is idempotent: every caller shares one drain. It stops accepting connections, closes idle
 keep-alive sockets, sends `Connection: close` on responses still in flight and resolves once every
 socket is gone. Upgraded and tunnelled sockets (WebSocket, HMR, `CONNECT`) are tracked too and
-destroyed once no HTTP response is active. `onDrain` runs as the drain starts, beside the socket
-drain, and `onClose` after it.
+destroyed once no HTTP response is active. `onDrain` runs after the readiness grace, beside the
+socket drain, and `onClose` after it.
 
 `drainTimeoutMs` bounds each phase on its own: the socket drain with `onDrain`, then `onClose`.
 When a phase runs out, its remaining sockets are destroyed and a hook still running makes `close()`
@@ -218,8 +218,8 @@ restart requested while the process is exiting is skipped. With the Express serv
 signals alone when the application subscribed its own handlers. Embedded and serverless hosts own
 their lifecycle and leave it uncalled.
 
-Timeouts stay at Node's defaults unless set. Behind a load balancer whose idle timeout is 60 seconds,
-keep the server's keep-alive longer than the balancer's so the balancer closes first:
+Timeouts stay at Node's defaults unless set. Behind a load balancer whose idle timeout is 60
+seconds, keep the server's keep-alive longer than the balancer's so the balancer closes first:
 
 ```ts
 createProductionServer({

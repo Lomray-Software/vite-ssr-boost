@@ -39,8 +39,8 @@ interface ILifecycleOptions {
   /** Node's requestTimeout; left at the Node default unless set. */
   requestTimeoutMs?: number;
   /**
-   * Runs as the drain starts, beside it: release what holds long-lived sockets
-   * (a Vite dev server terminates its HMR clients here).
+   * Runs after the readiness grace, beside the socket drain: release what holds
+   * long-lived sockets.
    */
   onDrain?: () => Promise<void> | void;
   /** Release resources the server depends on after the drain. */
