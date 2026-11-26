@@ -142,6 +142,8 @@ describe('node/server-kit', () => {
           res.setHeader('Content-Length', '999');
           res.setHeader('Content-Language', 'en');
           res.setHeader('ETag', 'W/"file"');
+          res.setHeader('Last-Modified', 'Thu, 01 Jan 2026 00:00:00 GMT');
+          res.setHeader('Accept-Ranges', 'bytes');
           next(
             Object.assign(new Error('Range Not Satisfiable'), {
               status: 416,
@@ -157,8 +159,39 @@ describe('node/server-kit', () => {
       expect(response.headers.get('content-range')).toBe('bytes */12');
       expect(response.headers.get('content-encoding')).toBeNull();
       expect(response.headers.get('content-language')).toBeNull();
-      expect(response.headers.get('etag')).toBe('W/"file"');
+      expect(response.headers.get('etag')).toBeNull();
+      expect(response.headers.get('last-modified')).toBeNull();
+      expect(response.headers.get('accept-ranges')).toBeNull();
       expect(await response.text()).toBe('Range Not Satisfiable');
+    });
+
+    it('should keep the framing of the error body over the error own headers', async () => {
+      const url = await serve([
+        (_req, _res, next) =>
+          next(
+            Object.assign(new Error('Unauthorized'), {
+              status: 401,
+              headers: {
+                'content-length': '999',
+                'Content-Encoding': 'gzip',
+                'Transfer-Encoding': 'chunked',
+                'WWW-Authenticate': 'Basic realm="app"',
+                'Content-Range': 'bytes */12',
+              },
+            }),
+          ),
+      ]);
+
+      const response = await fetch(url);
+      const body = await response.text();
+
+      expect(response.status).toBe(401);
+      expect(body).toBe('Unauthorized');
+      expect(response.headers.get('content-length')).toBe(String(Buffer.byteLength(body)));
+      expect(response.headers.get('content-encoding')).toBeNull();
+      expect(response.headers.get('transfer-encoding')).toBeNull();
+      expect(response.headers.get('www-authenticate')).toBe('Basic realm="app"');
+      expect(response.headers.get('content-range')).toBe('bytes */12');
     });
 
     it('should not forward the headers of a server error', async () => {

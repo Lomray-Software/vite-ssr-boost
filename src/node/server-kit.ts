@@ -20,12 +20,26 @@ interface IErrorLogger {
 /**
  * Headers a file response set for its own body, which an error body must not carry.
  */
-const ENTITY_HEADERS = ['Content-Encoding', 'Content-Language', 'Content-Length', 'Content-Range'];
+const ENTITY_HEADERS = [
+  'Accept-Ranges',
+  'Content-Encoding',
+  'Content-Language',
+  'Content-Length',
+  'Content-Range',
+  'ETag',
+  'Last-Modified',
+];
+
+/**
+ * Framing headers an error never takes from its own headers, since the error body replaces the entity.
+ */
+const FRAMING_HEADERS = new Set(['content-encoding', 'content-length', 'transfer-encoding']);
 
 /**
  * Final answer for errors no middleware handled, keeping the client status of file errors.
- * Like finalhandler, entity headers already set are dropped and a client error's own
- * headers, such as the Content-Range of a 416, are applied.
+ * Entity headers already set (validators, ranges, encoding, length) are dropped, and a client
+ * error's own headers, such as the Content-Range of a 416 or a WWW-Authenticate, are applied
+ * except framing headers, which describe the error body instead.
  */
 const sendError = (res: ServerResponse, error: unknown, logger: IErrorLogger): void => {
   const {
@@ -55,16 +69,21 @@ const sendError = (res: ServerResponse, error: unknown, logger: IErrorLogger): v
   // Server errors keep their details private, so only client errors forward headers.
   if (httpStatus < 500 && errorHeaders && typeof errorHeaders === 'object') {
     for (const [name, value] of Object.entries(errorHeaders as Record<string, string>)) {
-      res.setHeader(name, value);
+      if (!FRAMING_HEADERS.has(name.toLowerCase())) {
+        res.setHeader(name, value);
+      }
     }
   }
+
+  const body = STATUS_CODES[httpStatus] ?? '';
 
   res
     .writeHead(httpStatus, {
       'Cache-Control': 'no-store',
+      'Content-Length': Buffer.byteLength(body),
       'Content-Type': 'text/plain; charset=utf-8',
     })
-    .end(STATUS_CODES[httpStatus]);
+    .end(body);
 };
 
 /**
