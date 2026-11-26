@@ -192,6 +192,39 @@ describe('node/server-kit', () => {
       expect(headers['content-length']).toBe(String(Buffer.byteLength('Internal Server Error')));
     });
 
+    it('should drop a staged trailer announcement from a length-framed error', async () => {
+      const url = await serve([
+        (_req, res, next) => {
+          res.setHeader('Trailer', 'X-Checksum');
+          next(new Error('fail'));
+        },
+      ]);
+
+      const response = await fetch(url);
+
+      expect(response.status).toBe(500);
+      expect(response.headers.get('trailer')).toBeNull();
+      expect(await response.text()).toBe('Internal Server Error');
+    });
+
+    it('should not let a client error re-add a trailer announcement', async () => {
+      const url = await serve([
+        (_req, _res, next) =>
+          next(
+            Object.assign(new Error('Unauthorized'), {
+              status: 401,
+              headers: { Trailer: 'X-Checksum' },
+            }),
+          ),
+      ]);
+
+      const response = await fetch(url);
+
+      expect(response.status).toBe(401);
+      expect(response.headers.get('trailer')).toBeNull();
+      expect(await response.text()).toBe('Unauthorized');
+    });
+
     it('should keep the framing of the error body over the error own headers', async () => {
       const url = await serve([
         (_req, _res, next) =>

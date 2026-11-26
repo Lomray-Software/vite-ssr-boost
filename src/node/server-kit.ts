@@ -28,19 +28,25 @@ const ENTITY_HEADERS = [
   'Content-Range',
   'ETag',
   'Last-Modified',
+  'Trailer',
   'Transfer-Encoding',
 ];
 
 /**
  * Framing headers an error never takes from its own headers, since the error body replaces the entity.
  */
-const FRAMING_HEADERS = new Set(['content-encoding', 'content-length', 'transfer-encoding']);
+const FRAMING_HEADERS = new Set([
+  'content-encoding',
+  'content-length',
+  'trailer',
+  'transfer-encoding',
+]);
 
 /**
  * Final answer for errors no middleware handled, keeping the client status of file errors.
- * Entity headers already set (validators, ranges, encoding, length) are dropped, and a client
- * error's own headers, such as the Content-Range of a 416 or a WWW-Authenticate, are applied
- * except framing headers, which describe the error body instead.
+ * Entity headers already set (validators, ranges, encoding, length, trailers) are dropped,
+ * and a client error's own headers, such as the Content-Range of a 416 or a WWW-Authenticate,
+ * are applied except framing headers, which describe the error body instead.
  */
 const sendError = (res: ServerResponse, error: unknown, logger: IErrorLogger): void => {
   const {
