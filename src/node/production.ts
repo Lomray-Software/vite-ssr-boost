@@ -171,6 +171,9 @@ const loadServerEntry = async (
 const createSpaHandler = async (indexFile: string): Promise<TSsrHandler> => {
   const html = await readFile(indexFile, 'utf8');
 
+  /**
+   * Answer with the cached shell, without a body for HEAD.
+   */
   return (request) =>
     Promise.resolve(
       new Response(request.method === 'HEAD' ? null : html, {
