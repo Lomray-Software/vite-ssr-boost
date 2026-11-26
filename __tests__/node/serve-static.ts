@@ -306,6 +306,27 @@ describe('node serveStatic', () => {
     expect(await (await fetch(`${withExtensions}/about`)).text()).toBe('extension-fallback');
   });
 
+  it('hides the shell for raw paths with a fragment or a backslash', async () => {
+    await mkdir(path.join(root, 'nested'));
+    await writeFile(path.join(root, 'nested', 'shell.html'), 'nested-shell');
+
+    for (const extra of [{}, { shellFile: 'nested/shell.html' }]) {
+      const node = await startNode({ extensions: ['html'] }, false, extra);
+      const shell = extra.shellFile ? '/nested/shell' : '/index';
+
+      for (const pathname of [
+        `${shell}#x`,
+        `${shell}.html#x`,
+        `${shell}.html?a=1#x`,
+        `${shell.replace(/\//g, '\\')}.html`,
+      ]) {
+        const { body } = await observe(node + pathname);
+
+        expect(body ?? 'error', pathname).not.toMatch(/document|nested-shell/);
+      }
+    }
+  });
+
   it('hides a well-known shell under both spellings unless access is granted', async () => {
     await writeFile(path.join(root, '.well-known', 'shell.json'), 'well-known-shell');
     let isAllowed = false;

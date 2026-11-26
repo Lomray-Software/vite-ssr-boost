@@ -29,15 +29,23 @@ const WELL_KNOWN = '/.well-known/';
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 
 /**
- * Decoded pathname of a request URL, undefined for malformed encoding
+ * Decoded pathname of a request URL, undefined for malformed encoding.
+ * Query and fragment both end the path, as parseurl in serve-static reads it.
  */
 const getPathname = (url: string): string | undefined => {
   try {
-    return decodeURIComponent(url.split('?', 1)[0]);
+    return decodeURIComponent(url.split(/[?#]/, 1)[0]);
   } catch {
     return undefined;
   }
 };
+
+/**
+ * Lowercased resolved form of a pathname used to match the shell. A backslash counts as a
+ * separator, as it does for send on Windows, so no spelling of the shell slips past.
+ */
+const getShellKey = (pathname: string): string =>
+  path.posix.normalize(pathname.replace(/\\/g, '/')).toLowerCase();
 
 /**
  * Lowercased mount prefix without trailing slashes; the root mount is empty.
@@ -58,7 +66,7 @@ const getMountedUrl = (url: string, mount: string): string | undefined => {
 
   const rest = url.slice(mount.length);
 
-  if (rest === '' || rest.startsWith('?')) {
+  if (rest === '' || rest.startsWith('?') || rest.startsWith('#')) {
     return `/${rest}`;
   }
 
@@ -256,9 +264,7 @@ const serveStatic = ({
     // The shell is matched by the file it resolves to, so no URL spelling reaches it.
     if (
       pathname !== undefined &&
-      (isWellKnown ? wellKnownShellPaths : shellPaths).has(
-        path.posix.normalize(pathname).toLowerCase(),
-      ) &&
+      (isWellKnown ? wellKnownShellPaths : shellPaths).has(getShellKey(pathname)) &&
       !hasAccessIndexHtml?.()
     ) {
       next();
