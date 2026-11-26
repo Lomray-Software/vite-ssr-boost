@@ -1,6 +1,8 @@
 // @vitest-environment node
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
+import https from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,6 +28,11 @@ interface IWireResponse {
 
 const fixtureDir = fileURLToPath(new URL('../../__mocks__/production-build/', import.meta.url));
 const ASSET = '/assets/app-AbCdEf12.js';
+
+/**
+ * node:crypto cannot issue X.509 certificates, so the HTTPS case needs the openssl binary.
+ */
+const hasOpenssl = !spawnSync('openssl', ['version'], { stdio: 'ignore' }).error;
 let directory: string;
 let buildDir: string;
 let started: IProductionServer[];
@@ -95,6 +102,27 @@ const request = (
     );
 
     req.on('information', (info) => information.push(info));
+    req.on('error', reject);
+    req.end();
+  });
+
+/** Fetch one URL over TLS, trusting the self-signed test certificate. */
+const requestSecure = (url: string): Promise<{ status: number; body: string }> =>
+  new Promise((resolve, reject) => {
+    const req = https.request(
+      url,
+      { headers: { 'User-Agent': HUMAN }, rejectUnauthorized: false },
+      (res) => {
+        const chunks: Buffer[] = [];
+
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () =>
+          resolve({ status: res.statusCode!, body: Buffer.concat(chunks).toString() }),
+        );
+        res.on('error', reject);
+      },
+    );
+
     req.on('error', reject);
     req.end();
   });
@@ -604,4 +632,47 @@ describe('createProductionServer', () => {
     started.push(other);
     await expect(other.listen(port, '127.0.0.1')).rejects.toMatchObject({ code: 'EADDRINUSE' });
   });
+
+  it.skipIf(!hasOpenssl)(
+    'serves documents and files over HTTPS with the given options',
+    async () => {
+      const key = join(directory, 'key.pem');
+      const cert = join(directory, 'cert.pem');
+
+      execFileSync(
+        'openssl',
+        [
+          'req',
+          '-x509',
+          '-newkey',
+          'rsa:2048',
+          '-nodes',
+          '-subj',
+          '/CN=prod',
+          '-days',
+          '1',
+          '-keyout',
+          key,
+          '-out',
+          cert,
+        ],
+        { stdio: 'ignore' },
+      );
+
+      const { app, url } = await start({
+        https: { key: await readFile(key), cert: await readFile(cert) },
+      });
+      const secureUrl = url.replace('http:', 'https:');
+      const [document, file] = await Promise.all([
+        requestSecure(`${secureUrl}/`),
+        requestSecure(`${secureUrl}${ASSET}`),
+      ]);
+
+      expect(app.server).toBeInstanceOf(https.Server);
+      expect(document.status).toBe(200);
+      expect(document.body).toContain('Home');
+      expect(file.status).toBe(200);
+      expect(file.body).toBe('console.log("app");');
+    },
+  );
 });

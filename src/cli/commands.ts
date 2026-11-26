@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { Command, Option } from 'commander';
 import type { IDoctorOptions } from '@cli/doctor';
 import enableShortcuts from '@cli/helpers/enable-shortcuts';
+import onListening from '@cli/helpers/on-listening';
 import serverOption from '@cli/helpers/server-option';
 import type { IInitOptions } from '@cli/init';
 import type {
@@ -220,11 +221,7 @@ program
       };
 
       // The node server resolves after it listens; Express is still binding here.
-      if (prod.server.listening) {
-        announce();
-      } else {
-        prod.server.once('listening', announce);
-      }
+      onListening(prod.server, announce);
 
       cliContext.server = prod.server;
       cliContext.config = prod.config;
