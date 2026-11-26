@@ -135,6 +135,44 @@ describe('node/server-kit', () => {
       expect(later).not.toHaveBeenCalled();
     });
 
+    it('should drop entity headers and apply a client error own headers', async () => {
+      const url = await serve([
+        (_req, res, next) => {
+          res.setHeader('Content-Encoding', 'gzip');
+          res.setHeader('Content-Length', '999');
+          res.setHeader('Content-Language', 'en');
+          res.setHeader('ETag', 'W/"file"');
+          next(
+            Object.assign(new Error('Range Not Satisfiable'), {
+              status: 416,
+              headers: { 'Content-Range': 'bytes */12' },
+            }),
+          );
+        },
+      ]);
+
+      const response = await fetch(url);
+
+      expect(response.status).toBe(416);
+      expect(response.headers.get('content-range')).toBe('bytes */12');
+      expect(response.headers.get('content-encoding')).toBeNull();
+      expect(response.headers.get('content-language')).toBeNull();
+      expect(response.headers.get('etag')).toBe('W/"file"');
+      expect(await response.text()).toBe('Range Not Satisfiable');
+    });
+
+    it('should not forward the headers of a server error', async () => {
+      const url = await serve([
+        (_req, _res, next) =>
+          next(Object.assign(new Error('boom'), { headers: { 'X-Debug': '1' } })),
+      ]);
+
+      const response = await fetch(url);
+
+      expect(response.status).toBe(500);
+      expect(response.headers.get('x-debug')).toBeNull();
+    });
+
     it('should destroy the socket when the error comes after headers were sent', async () => {
       let serverResponse: http.ServerResponse | undefined;
       const url = await serve([

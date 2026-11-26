@@ -18,10 +18,21 @@ interface IErrorLogger {
 }
 
 /**
+ * Headers a file response set for its own body, which an error body must not carry.
+ */
+const ENTITY_HEADERS = ['Content-Encoding', 'Content-Language', 'Content-Length', 'Content-Range'];
+
+/**
  * Final answer for errors no middleware handled, keeping the client status of file errors.
+ * Like finalhandler, entity headers already set are dropped and a client error's own
+ * headers, such as the Content-Range of a 416, are applied.
  */
 const sendError = (res: ServerResponse, error: unknown, logger: IErrorLogger): void => {
-  const { status, statusCode } = (error ?? {}) as { status?: number; statusCode?: number };
+  const {
+    status,
+    statusCode,
+    headers: errorHeaders,
+  } = (error ?? {}) as { status?: number; statusCode?: number; headers?: unknown };
   const code = status ?? statusCode;
   const httpStatus = code && code >= 400 && code < 600 ? code : 500;
 
@@ -35,6 +46,17 @@ const sendError = (res: ServerResponse, error: unknown, logger: IErrorLogger): v
     res.destroy();
 
     return;
+  }
+
+  for (const name of ENTITY_HEADERS) {
+    res.removeHeader(name);
+  }
+
+  // Server errors keep their details private, so only client errors forward headers.
+  if (httpStatus < 500 && errorHeaders && typeof errorHeaders === 'object') {
+    for (const [name, value] of Object.entries(errorHeaders as Record<string, string>)) {
+      res.setHeader(name, value);
+    }
   }
 
   res

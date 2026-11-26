@@ -279,6 +279,24 @@ describe('createProductionServer', () => {
     expect(range.body.toString()).toBe('User-agent');
   });
 
+  it('answers a range past the end with 416 and the full size, for hashed files too', async () => {
+    const { url } = await start();
+
+    for (const [pathname, size] of [
+      [ASSET, 19],
+      ['/robots.txt', 13],
+    ] as const) {
+      const response = await request(`${url}${pathname}`, { headers: { Range: 'bytes=100-200' } });
+
+      expect(response.status, pathname).toBe(416);
+      expect(response.headers['content-range'], pathname).toBe(`bytes */${size}`);
+      expect(response.headers['cache-control'], pathname).toBe('no-store');
+      expect(response.body.toString(), pathname).toBe('Range Not Satisfiable');
+    }
+
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   it('revalidates hashed names when the build left no list of its files', async () => {
     await rm(join(buildDir, 'server/fingerprinted-files.json'));
     const { url } = await start();
