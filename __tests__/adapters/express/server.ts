@@ -143,29 +143,41 @@ describe('node server', () => {
     expect(server.close).toHaveBeenCalledTimes(1);
   });
 
-  it('should leave a bind error to the server error listeners without starting', async () => {
+  /**
+   * Make the next servers bind like Node: the listen() call returns and the caller emits
+   * the bind error, so a test can attach listeners first. The list fills as run() creates them.
+   */
+  const mockPendingServers = async (count = 1) => {
     const http = (await import('node:http')).default;
+    const { EventEmitter } = await import('node:events');
+    const servers: InstanceType<typeof EventEmitter>[] = [];
+
+    for (let index = 0; index < count; index += 1) {
+      vi.mocked(http.createServer).mockImplementationOnce(() => {
+        const server = Object.assign(new EventEmitter(), {
+          listening: false,
+          listen: vi.fn(() => server),
+        });
+
+        servers.push(server);
+
+        return server as never;
+      });
+    }
+
+    return servers;
+  };
+
+  it('should leave a bind error to the server error listeners without starting', async () => {
     const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
     const onError = vi.fn();
-
-    vi.mocked(http.createServer).mockImplementationOnce(() => {
-      const { EventEmitter } = require('node:events') as typeof import('node:events');
-      const server = Object.assign(new EventEmitter(), {
-        listening: false,
-        listen: vi.fn(() => {
-          queueMicrotask(() => server.emit('error', failure));
-
-          return server;
-        }),
-      });
-
-      return server as never;
-    });
+    const servers = await mockPendingServers();
 
     const result = await createServer(createDevConfig() as never);
     const server = result.run({ isPrintInfo: false });
 
     server.on('error', onError);
+    servers[0].emit('error', failure);
     await flush();
 
     expect(onError).toHaveBeenCalledOnce();
@@ -188,68 +200,77 @@ describe('node server', () => {
     expect(seen).toEqual([true, true]);
   });
 
-  it('should treat a once error listener as owning the bind error', async () => {
-    const http = (await import('node:http')).default;
+  it('should deliver a bind error to once and prepended once listeners alone', async () => {
     const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
-    const onError = vi.fn();
+    const onAppended = vi.fn();
+    const onPrepended = vi.fn();
     const onRejection = vi.fn();
-    const nextTick = process.nextTick.bind(process);
-    const thrown: unknown[] = [];
+    const servers = await mockPendingServers(2);
 
-    /**
-     * A server whose bind fails with EADDRINUSE.
-     */
-    const createTakenServer = () => {
-      const { EventEmitter } = require('node:events') as typeof import('node:events');
-      const server = Object.assign(new EventEmitter(), {
-        listening: false,
-        listen: vi.fn(() => {
-          queueMicrotask(() => server.emit('error', failure));
-
-          return server;
-        }),
-      });
-
-      return server as never;
-    };
-
-    vi.mocked(http.createServer)
-      .mockImplementationOnce(createTakenServer)
-      .mockImplementationOnce(createTakenServer);
-    // Collect what the adapter rethrows, so it does not reach the test runner.
-    vi.spyOn(process, 'nextTick').mockImplementation(((
-      callback: (...args: unknown[]) => void,
-      ...args: unknown[]
-    ) =>
-      nextTick(() => {
-        try {
-          callback(...args);
-        } catch (error) {
-          thrown.push(error);
-        }
-      })) as typeof process.nextTick);
     process.on('unhandledRejection', onRejection);
 
     try {
-      const owned = await createServer(createDevConfig() as never);
+      (await createServer(createDevConfig() as never))
+        .run({ isPrintInfo: false })
+        .once('error', onAppended);
+      (await createServer(createDevConfig() as never))
+        .run({ isPrintInfo: false })
+        .prependOnceListener('error', onPrepended);
 
-      owned.run({ isPrintInfo: false }).once('error', onError);
+      expect(() => servers[0].emit('error', failure)).not.toThrow();
+      expect(() => servers[1].emit('error', failure)).not.toThrow();
       await flush();
 
-      expect(onError).toHaveBeenCalledWith(failure);
-      expect(thrown).toEqual([]);
-
-      const unowned = await createServer(createDevConfig() as never);
-
-      unowned.run({ isPrintInfo: false });
-      await flush();
-      await flush();
-
-      expect(thrown).toEqual([failure]);
+      expect(onAppended).toHaveBeenCalledWith(failure);
+      expect(onPrepended).toHaveBeenCalledWith(failure);
       expect(onRejection).not.toHaveBeenCalled();
     } finally {
       process.off('unhandledRejection', onRejection);
     }
+  });
+
+  it('should let a bind error nobody listens for throw as Node does', async () => {
+    const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
+    const servers = await mockPendingServers();
+
+    (await createServer(createDevConfig() as never)).run({ isPrintInfo: false });
+
+    expect(() => servers[0].emit('error', failure)).toThrow(failure);
+  });
+
+  it('should throw an invalid port from run itself', async () => {
+    const http = (await import('node:http')).default;
+    const failure = Object.assign(new RangeError('bad port'), { code: 'ERR_SOCKET_BAD_PORT' });
+
+    vi.mocked(http.createServer).mockImplementationOnce(() => {
+      const { EventEmitter } = require('node:events') as typeof import('node:events');
+
+      return Object.assign(new EventEmitter(), {
+        listening: false,
+        listen: vi.fn(() => {
+          throw failure;
+        }),
+      }) as never;
+    });
+
+    const result = await createServer(createDevConfig() as never);
+
+    expect(() => result.run({ isPrintInfo: false })).toThrow(failure);
+  });
+
+  it('should not let a failed bind hold close', async () => {
+    const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
+    const servers = await mockPendingServers();
+    const close = vi.fn().mockResolvedValue(undefined);
+    const result = await createServer(createDevConfig({ close }) as never);
+
+    result.run({ isPrintInfo: false }).once('error', vi.fn());
+
+    const closed = result.getLifecycle()!.close();
+
+    servers[0].emit('error', failure);
+
+    await expect(closed).resolves.toBeUndefined();
   });
 
   it('should have no lifecycle before run', async () => {

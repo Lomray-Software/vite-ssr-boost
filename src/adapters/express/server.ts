@@ -9,7 +9,7 @@ import PrepareServer from '@adapters/express/prepare-server';
 import type { TRender } from '@adapters/express/render';
 import staticFiles from '@adapters/express/static-files';
 import printServerInfo from '@helpers/print-server-info';
-import createLifecycle from '@node/lifecycle';
+import createLifecycle, { trackNativeBind } from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions } from '@node/lifecycle';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
@@ -207,8 +207,8 @@ async function createServer(
       });
 
       /**
-       * Runs as the first `listening` listener, as the listen() callback did before,
-       * so listeners added after run() see the state onServerStarted prepared.
+       * The listen() callback, as in 8.6: it runs before listeners added after run(),
+       * so they see the state onServerStarted prepared.
        */
       const onListening = (): void => {
         lifecycle?.setReady();
@@ -221,43 +221,11 @@ async function createServer(
         void printServerInfo(config, { version, server });
       };
 
-      let isErrorOwned = false;
-      let ownErrorListeners = 0;
-
-      /**
-       * Decide during dispatch whether the application listens for the bind error,
-       * since Node drops a once() listener before calling it.
-       */
-      const onBindError = (): void => {
-        isErrorOwned = server.listenerCount('error') > ownErrorListeners;
-      };
-
-      server.once('listening', onListening);
-      server.prependListener('error', onBindError);
-
-      // Bind through the lifecycle, so a close() right after run() waits for the port.
-      const bound = lifecycle.listen(port, host);
-
-      // This listener and the one the lifecycle holds while binding.
-      ownErrorListeners = server.listenerCount('error');
-
-      void bound.then(
-        () => {
-          server.off('error', onBindError);
-        },
-        (error: unknown) => {
-          server.off('error', onBindError);
-          server.off('listening', onListening);
-
-          // Listeners on the server already saw the error; with none, fail loudly as before,
-          // as an uncaught exception rather than an unhandled rejection.
-          if (!isErrorOwned) {
-            process.nextTick(() => {
-              throw error;
-            });
-          }
-        },
-      );
+      // Node binds and reports errors itself: a bad port throws here, a bind error goes to the
+      // server's error listeners or crashes the process when it has none.
+      server.listen(port, host, onListening);
+      // A close() right after run() still waits for the port.
+      trackNativeBind(lifecycle);
 
       return server;
     },
