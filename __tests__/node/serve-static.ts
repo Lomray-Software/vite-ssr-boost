@@ -276,6 +276,16 @@ describe('node serveStatic', () => {
     expect(await (await fetch(`${withExtensions}/about`)).text()).toBe('extension-fallback');
   });
 
+  it('hides a shell whose name starts with two dots', async () => {
+    await writeFile(path.join(root, '..shell.html'), 'dotted-shell');
+    const node = await startNode({ dotfiles: 'allow' }, false, {
+      shellFile: path.join(root, '..shell.html'),
+      hasAccessIndexHtml: () => false,
+    });
+
+    expect(await (await fetch(`${node}/..shell.html`)).text()).toBe('SSR');
+  });
+
   it('only serves inside its mount and restores the URL for the next handler', async () => {
     const middleware = serveStatic({ root, basename: '/Base/' });
     const seen: string[] = [];

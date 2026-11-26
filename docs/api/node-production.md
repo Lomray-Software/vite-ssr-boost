@@ -128,7 +128,8 @@ serve-static; in SSR builds, URLs outside the client directory's top-level names
 SSR builds hide the raw HTML shell unless `hasAccessIndexHtml()` returns true, so that URL reaches
 the router. The shell is matched by the file it resolves to: any letter case, dot segments and,
 when `extensions` lists its extension, the extensionless URL. `prepareProduction` passes the
-`indexFile` from `ssr-boost.json`, so a renamed shell stays hidden too.
+`indexFile` from `ssr-boost.json`, so a renamed shell stays hidden too. The match is by path: a
+symlink or a copy of the shell under another name in the client directory is served as a file.
 
 Files listed in `immutableFiles` get `Cache-Control: public, max-age=31536000, immutable`. Every
 other file keeps serve-static's revalidating default, so a stable name such as
