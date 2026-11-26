@@ -15,7 +15,7 @@ import type { ILifecycle, ILifecycleOptions, TLifecycleServer } from '@node/life
 import renderToStream from '@node/render-to-stream';
 import serveStatic from '@node/serve-static';
 import type { IServeStaticOptions, TStaticMiddleware } from '@node/serve-static';
-import { createRequestListener, listenServer, toEntry } from '@node/server-kit';
+import { createRequestListener, toEntry } from '@node/server-kit';
 import type { IErrorLogger } from '@node/server-kit';
 import { splitHtmlShell } from '@services/diagnostics';
 import DefaultLogger from '@services/logger';
@@ -276,11 +276,7 @@ const createProductionServer = async ({
     server,
     lifecycle,
     close: lifecycle.close,
-
-    /**
-     * Listen and resolve with the bound address, rejecting bind errors.
-     */
-    listen: (port, host) => listenServer(server, port, host),
+    listen: lifecycle.listen,
   };
 };
 

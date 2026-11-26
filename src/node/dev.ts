@@ -12,7 +12,7 @@ import type { TSsrHandler } from '@core/types';
 import createLifecycle from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions, TLifecycleServer } from '@node/lifecycle';
 import renderToStream from '@node/render-to-stream';
-import { createRequestListener, listenServer, resolveTlsOptions, toEntry } from '@node/server-kit';
+import { createRequestListener, resolveTlsOptions, toEntry } from '@node/server-kit';
 import type { IErrorLogger } from '@node/server-kit';
 import { splitHtmlShell } from '@services/diagnostics';
 import ServerConfig from '@services/server-config';
@@ -266,11 +266,7 @@ const createDevServer = async ({
     ...app,
     lifecycle,
     close: lifecycle.close,
-
-    /**
-     * Listen and resolve with the bound address, rejecting bind errors.
-     */
-    listen: (listenPort, host) => listenServer(server, listenPort, host),
+    listen: lifecycle.listen,
   };
 };
 

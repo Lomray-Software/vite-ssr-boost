@@ -2,11 +2,9 @@ import { readFile } from 'node:fs/promises';
 import { STATUS_CODES } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ServerOptions as HttpsServerOptions } from 'node:https';
-import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { isEntry } from '@core/entry';
 import type { IEntry } from '@core/entry';
-import type { TLifecycleServer } from '@node/lifecycle';
 
 type TNext = (error?: unknown) => void;
 
@@ -84,22 +82,6 @@ const createRequestListener =
   };
 
 /**
- * Listen and resolve with the bound address, rejecting bind errors.
- */
-const listenServer = (
-  server: TLifecycleServer,
-  port?: number,
-  host?: string,
-): Promise<AddressInfo | string | null> =>
-  new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, host, () => {
-      server.off('error', reject);
-      resolve(server.address());
-    });
-  });
-
-/**
  * Read a file path option the way Vite does, keeping inline PEM values as they are.
  */
 const readTlsValue = async <T>(value: T): Promise<T | Buffer> =>
@@ -137,6 +119,6 @@ const toEntry = (file: string, module: unknown): IEntry => {
   return entry;
 };
 
-export { createRequestListener, listenServer, resolveTlsOptions, sendError, toEntry };
+export { createRequestListener, resolveTlsOptions, sendError, toEntry };
 
 export type { IErrorLogger, TMiddleware, TNext };

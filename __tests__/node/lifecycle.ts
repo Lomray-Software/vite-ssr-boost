@@ -140,9 +140,11 @@ describe('createLifecycle', () => {
         return lifecycle;
       },
     );
-    const status = await fetch(`${url}/healthz`, { method: 'POST' }).then(({ status: s }) => s);
+    const response = await fetch(`${url}/healthz`, { method: 'POST' });
 
-    expect(status).toBe(405);
+    expect(response.status).toBe(405);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('allow')).toBe('GET, HEAD');
   });
 
   it('lets an active stream finish, refuses new connections and closes idle keep-alive', async () => {
@@ -426,5 +428,202 @@ describe('createLifecycle', () => {
     await expect(lifecycle.close()).rejects.toThrow('vite close failed');
     expect(server.listening).toBe(false);
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('rejects close when onDrain stalls past its phase deadline and still runs onClose', async () => {
+    const onClose = vi.fn();
+    let lifecycle!: ILifecycle;
+    const { server } = await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance, {
+          drainTimeoutMs: 50,
+          onDrain: () => new Promise<void>(() => undefined),
+          onClose,
+        });
+
+        return lifecycle;
+      },
+    );
+
+    await expect(lifecycle.close()).rejects.toThrow(
+      '[ssr-boost] onDrain did not settle within 50 ms.',
+    );
+    expect(server.listening).toBe(false);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('rejects close when onClose stalls past its own deadline', async () => {
+    let lifecycle!: ILifecycle;
+    const { server } = await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance, {
+          drainTimeoutMs: 50,
+          onClose: () => new Promise<void>(() => undefined),
+        });
+
+        return lifecycle;
+      },
+    );
+
+    await expect(lifecycle.close()).rejects.toThrow(
+      '[ssr-boost] onClose did not settle within 50 ms.',
+    );
+    expect(server.listening).toBe(false);
+  });
+
+  it('ends a stalled drain at once on force', async () => {
+    let lifecycle!: ILifecycle;
+
+    await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance, {
+          onDrain: () => new Promise<void>(() => undefined),
+        });
+
+        return lifecycle;
+      },
+    );
+
+    const closed = lifecycle.close();
+
+    lifecycle.force();
+    await expect(closed).rejects.toThrow('[ssr-boost] onDrain did not settle within 30000 ms.');
+  });
+
+  it('destroys CONNECT tunnels so close resolves', async () => {
+    let lifecycle!: ILifecycle;
+    const { server } = await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance);
+
+        return lifecycle;
+      },
+    );
+
+    server.on('connect', (_req, socket: Socket) => {
+      socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+    });
+
+    const client = await new Promise<Socket>((resolve, reject) => {
+      const socket = net.connect((server.address() as AddressInfo).port, '127.0.0.1');
+
+      socket.once('error', reject);
+      socket.once('data', () => resolve(socket));
+      socket.write('CONNECT upstream:443 HTTP/1.1\r\nHost: upstream:443\r\n\r\n');
+    });
+    const clientClosed = new Promise((resolve) => client.once('close', resolve));
+
+    await lifecycle.close();
+    await clientClosed;
+    expect(server.listening).toBe(false);
+  });
+
+  it('refuses listen after close and lets close wait for a bind in flight', async () => {
+    const early = http.createServer();
+    const earlyLifecycle = createLifecycle(early);
+
+    servers.push(early);
+    await earlyLifecycle.close();
+    await expect(earlyLifecycle.listen(0, '127.0.0.1')).rejects.toThrow(
+      '[ssr-boost] listen() was called after close() started.',
+    );
+    expect(early.listening).toBe(false);
+
+    const late = http.createServer();
+    const lateLifecycle = createLifecycle(late);
+
+    servers.push(late);
+
+    const bound = lateLifecycle.listen(0, '127.0.0.1');
+
+    await lateLifecycle.close();
+    await expect(bound).resolves.toMatchObject({ address: '127.0.0.1' });
+    expect(late.listening).toBe(false);
+    expect(late.listenerCount('error')).toBe(0);
+  });
+
+  it('rejects listen with the bind error', async () => {
+    const first = http.createServer();
+    const second = http.createServer();
+
+    servers.push(first, second);
+
+    const address = (await createLifecycle(first).listen(0, '127.0.0.1')) as AddressInfo;
+
+    await expect(createLifecycle(second).listen(address.port, '127.0.0.1')).rejects.toThrow(
+      'EADDRINUSE',
+    );
+  });
+
+  it('answers 503 on readiness while still accepting during the grace period', async () => {
+    let lifecycle!: ILifecycle;
+    const { server, url } = await listen(
+      (req, res) => lifecycle.health(req, res, () => res.end('app')),
+      (instance) => {
+        lifecycle = createLifecycle(instance, { health: true, readinessGraceMs: 200 });
+
+        return lifecycle;
+      },
+    );
+
+    lifecycle.setReady();
+
+    const closed = lifecycle.close();
+
+    expect(await getText(`${url}/readyz`)).toEqual({ status: 503, body: 'unavailable' });
+    expect(server.listening).toBe(true);
+    await closed;
+    expect(server.listening).toBe(false);
+  });
+
+  it('joins a drain already under way on the first signal and exits once', async () => {
+    const listeners = new Map<string, () => void>();
+
+    vi.spyOn(process, 'on').mockImplementation(((signal: string, listener: () => void) => {
+      listeners.set(signal, listener);
+
+      return process;
+    }) as typeof process.on);
+    vi.spyOn(process, 'off').mockImplementation(((signal: string) => {
+      listeners.delete(signal);
+
+      return process;
+    }) as typeof process.off);
+
+    let release!: () => void;
+    let lifecycle!: ILifecycle;
+
+    await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance, {
+          onDrain: () =>
+            new Promise<void>((resolve) => {
+              release = resolve;
+            }),
+        });
+
+        return lifecycle;
+      },
+    );
+
+    const onExit = vi.fn();
+    const onSignal = vi.fn();
+    const unsubscribe = lifecycle.handleSignals({ onExit, onSignal });
+    const closed = lifecycle.close();
+
+    listeners.get('SIGTERM')!();
+    expect(onSignal).toHaveBeenCalledWith('SIGTERM');
+    expect(onExit).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    release();
+    await closed;
+    await vi.waitFor(() => expect(onExit).toHaveBeenCalledOnce());
+    expect(onExit).toHaveBeenCalledWith(0);
+    unsubscribe();
   });
 });

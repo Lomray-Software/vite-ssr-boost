@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
-import { createRequestListener, listenServer, resolveTlsOptions } from '@node/server-kit';
+import { createRequestListener, resolveTlsOptions } from '@node/server-kit';
 import type { TMiddleware } from '@node/server-kit';
 
 const servers: http.Server[] = [];
@@ -23,9 +23,9 @@ const serve = async (
 
   servers.push(server);
 
-  const address = (await listenServer(server, 0, '127.0.0.1')) as AddressInfo;
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
 
-  return `http://127.0.0.1:${address.port}`;
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 };
 
 /**
@@ -149,33 +149,6 @@ describe('node/server-kit', () => {
       await expect(fetch(url).then((response) => response.text())).rejects.toThrow();
       expect(serverResponse?.destroyed).toBe(true);
       expect(serverResponse?.writableFinished).toBe(false);
-    });
-  });
-
-  describe('listenServer', () => {
-    it('should resolve with the bound address', async () => {
-      const server = http.createServer();
-
-      servers.push(server);
-
-      const address = (await listenServer(server, 0, '127.0.0.1')) as AddressInfo;
-
-      expect(address.address).toBe('127.0.0.1');
-      expect(address.port).toBeGreaterThan(0);
-      expect(server.listenerCount('error')).toBe(0);
-    });
-
-    it('should reject when the port is taken', async () => {
-      const first = http.createServer();
-      const second = http.createServer();
-
-      servers.push(first);
-
-      const { port } = (await listenServer(first, 0, '127.0.0.1')) as AddressInfo;
-
-      await expect(listenServer(second, port, '127.0.0.1')).rejects.toMatchObject({
-        code: 'EADDRINUSE',
-      });
     });
   });
 
