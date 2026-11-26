@@ -126,6 +126,8 @@ const prepareDev = async ({
   config: givenConfig,
   loadEntry = viteLoadEntry,
 }: IPrepareDevOptions): Promise<IDevApp> => {
+  // The config exists before Vite starts, so only setVite can leave a server to close.
+  const config = givenConfig ?? ServerConfig.init({ isHost, mode, entrypointName }, { port });
   const { createServer, mergeConfig, version } = await import('vite');
   const vite = await createServer(
     mergeConfig(inlineConfig, {
@@ -138,7 +140,6 @@ const prepareDev = async ({
       },
     }),
   );
-  const config = givenConfig ?? ServerConfig.init({ isHost, mode, entrypointName }, { port });
 
   try {
     config.setVite(vite);

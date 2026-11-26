@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
@@ -51,6 +51,11 @@ const INDEX_HTML = `<!doctype html>
   </body>
 </html>
 `;
+
+/**
+ * node:crypto cannot issue X.509 certificates, so the HTTPS case needs the openssl binary.
+ */
+const hasOpenssl = !spawnSync('openssl', ['version'], { stdio: 'ignore' }).error;
 
 let root: string;
 let started: IDevServer[];
@@ -237,6 +242,7 @@ const connectHmr = (app: IDevServer, url: string): Promise<{ socket: Duplex; mes
 
 beforeEach(() => {
   global.viteBoostAction = 'dev';
+  // Projects live under the repository so Vite resolves react from its node_modules.
   root = mkdtempSync(path.resolve('.ssr-boost-dev-test-'));
   started = [];
   logger = { error: vi.fn() };
@@ -350,7 +356,7 @@ describe('createDevServer', { timeout: 30000 }, () => {
     started = [];
   });
 
-  it('serves HTTPS from the Vite config, HMR included', async () => {
+  it.skipIf(!hasOpenssl)('serves HTTPS from the Vite config, HMR included', async () => {
     writeProject();
 
     const key = path.join(root, 'key.pem');
@@ -414,8 +420,33 @@ describe('createDevServer', { timeout: 30000 }, () => {
   it('explains a missing plugin and leaves no Vite server running', async () => {
     writeProject();
 
-    await expect(createDevServer({ logger, vite: viteConfig({ plugins: [] }) })).rejects.toThrow(
-      'Failed to get to plugin config',
-    );
+    const viteClose = vi.fn();
+
+    await expect(
+      createDevServer({
+        logger,
+        vite: viteConfig({
+          plugins: [
+            {
+              name: 'observe-close',
+
+              /**
+               * Record when the dev server this test cannot reach is closed.
+               */
+              configureServer: (vite) => {
+                const close = vite.close.bind(vite);
+
+                vite.close = () => {
+                  viteClose();
+
+                  return close();
+                };
+              },
+            },
+          ],
+        }),
+      }),
+    ).rejects.toThrow('Failed to get to plugin config');
+    expect(viteClose).toHaveBeenCalledTimes(1);
   });
 });
