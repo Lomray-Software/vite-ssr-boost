@@ -127,7 +127,8 @@ serve-static; in SSR builds, URLs outside the client directory's top-level names
 `/.well-known/` is served even though other dotfiles stay hidden, resolving `name` to `name.json`.
 SSR builds hide the raw HTML shell unless `hasAccessIndexHtml()` returns true, so that URL reaches
 the router. The shell is matched by the file it resolves to: any letter case, dot segments and,
-when `extensions` lists its extension, the extensionless URL. `prepareProduction` passes the
+when the file server for that path appends its extension (`extensions`, or `json` under
+`/.well-known/`), the extensionless URL. `prepareProduction` passes the
 `indexFile` from `ssr-boost.json`, so a renamed shell stays hidden too. The match is by path: a
 symlink or a copy of the shell under another name in the client directory is served as a file.
 
@@ -139,7 +140,9 @@ client files Vite emitted (scripts, styles and imported assets, nested chunks in
 own. A build without the file, such as one made before 8.7, revalidates everything. A file is
 listed only when its name comes from an `entryFileNames`, `chunkFileNames` or `assetFileNames`
 string pattern with `[hash]`, so a stable name such as `assets/app.js` keeps revalidating. Names
-from a function pattern are never listed; give your own `immutableFiles` for them. Setting
+from a function pattern are never listed; give your own `immutableFiles` for them. With several
+outputs, a kind of file is listed only when every output names it with `[hash]`, since the
+manifest does not say which output wrote a file. Setting
 `maxAge`, `immutable` or `cacheControl: false` hands the policy for every file to you.
 
 ## `createLifecycle`
