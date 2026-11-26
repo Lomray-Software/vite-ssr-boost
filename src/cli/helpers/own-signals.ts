@@ -20,12 +20,26 @@ const ownSignals = (lifecycle?: ILifecycle): void => {
   release = lifecycle?.handleSignals({ onSignal: markExiting, onExit: processStop });
 };
 
+const SIGNALS = ['SIGTERM', 'SIGINT'] as const;
+
+/**
+ * Record the signal listeners present before the application loads, so they are not taken as
+ * its own.
+ */
+const snapshotSignalListeners = (): ReadonlySet<unknown> =>
+  new Set(SIGNALS.flatMap((signal) => process.listeners(signal)));
+
 /**
  * Express servers before 8.7 left signals to the application, so one that already subscribed in its
  * entry or in onServerStarted keeps them. The check runs once the server listens and the
- * synchronous part of onServerStarted has run.
+ * synchronous part of onServerStarted has run; listeners in `before` were there earlier and do
+ * not count.
  */
-const ownSignalsUnlessHandled = (server: Server, lifecycle?: ILifecycle): void => {
+const ownSignalsUnlessHandled = (
+  server: Server,
+  lifecycle?: ILifecycle,
+  before: ReadonlySet<unknown> = new Set(),
+): void => {
   release?.();
   release = undefined;
 
@@ -35,7 +49,11 @@ const ownSignalsUnlessHandled = (server: Server, lifecycle?: ILifecycle): void =
 
   server.once('listening', () => {
     setImmediate(() => {
-      if (process.listenerCount('SIGTERM') > 0 || process.listenerCount('SIGINT') > 0) {
+      const isHandled = SIGNALS.some((signal) =>
+        process.listeners(signal).some((listener) => !before.has(listener)),
+      );
+
+      if (isHandled) {
         return;
       }
 
@@ -44,6 +62,6 @@ const ownSignalsUnlessHandled = (server: Server, lifecycle?: ILifecycle): void =
   });
 };
 
-export { ownSignalsUnlessHandled };
+export { ownSignalsUnlessHandled, snapshotSignalListeners };
 
 export default ownSignals;
