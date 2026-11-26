@@ -38,16 +38,36 @@ describe('createFingerprintMatcher', () => {
     expect(isFingerprinted('media/logo.svg', 'asset')).toBe(false);
   });
 
-  it('prefers rolldownOptions and accepts several outputs', () => {
+  it('prefers rolldownOptions and accepts several hashed outputs', () => {
     const isFingerprinted = createFingerprintMatcher({
-      rollupOptions: { output: { entryFileNames: '[name]-[hash].js' } },
+      rollupOptions: { output: { entryFileNames: 'app.js' } },
       rolldownOptions: {
-        output: [{ entryFileNames: 'app.js' }, { entryFileNames: 'legacy/[name]-[hash].js' }],
+        output: [
+          { entryFileNames: 'modern/[name]-[hash].js' },
+          { entryFileNames: 'legacy/[name]-[hash].js' },
+        ],
       },
     });
 
-    expect(isFingerprinted('index-AbCd1234.js', 'entry')).toBe(false);
+    expect(isFingerprinted('modern/index-AbCd1234.js', 'entry')).toBe(true);
     expect(isFingerprinted('legacy/index-AbCd1234.js', 'entry')).toBe(true);
+    expect(isFingerprinted('index-AbCd1234.js', 'entry')).toBe(false);
+  });
+
+  it('lists no file of a kind when one output names that kind without a hash', () => {
+    const isFingerprinted = createFingerprintMatcher({
+      rolldownOptions: {
+        output: [
+          { entryFileNames: 'assets/app-facebook.js' },
+          { entryFileNames: 'assets/[name]-[hash].js' },
+        ],
+      },
+    });
+
+    // The stable name fits the other output's pattern, and the manifest cannot tell them apart.
+    expect(isFingerprinted('assets/app-facebook.js', 'entry')).toBe(false);
+    expect(isFingerprinted('assets/index-AbCd1234.js', 'entry')).toBe(false);
+    expect(isFingerprinted('assets/About-AbCd1234.js', 'chunk')).toBe(true);
   });
 
   it('never trusts a name returned by a function', () => {

@@ -65,7 +65,8 @@ const toMatcher = (pattern: TFileNames): RegExp | undefined => {
 
 /**
  * Decide from the client build's output patterns which emitted files carry a content hash.
- * A file counts only when a pattern with a hash placeholder of its kind produces its name.
+ * A file counts only when a pattern with a hash placeholder of its kind produces its name,
+ * and, with several outputs, only when every output names that kind with a hash.
  */
 const createFingerprintMatcher = (build: IBuildOutputConfig = {}): TFingerprintMatcher => {
   const assetsDir = build.assetsDir ?? 'assets';
@@ -77,12 +78,15 @@ const createFingerprintMatcher = (build: IBuildOutputConfig = {}): TFingerprintM
   const output = (build.rolldownOptions ?? build.rollupOptions)?.output;
   const outputs = Array.isArray(output) ? output : [output ?? {}];
   const matchers = Object.fromEntries(
-    (Object.keys(KIND_OPTION) as TOutputKind[]).map((kind) => [
-      kind,
-      outputs
-        .map((options) => toMatcher(options[KIND_OPTION[kind]] ?? defaults[kind]))
-        .filter((matcher): matcher is RegExp => Boolean(matcher)),
-    ]),
+    (Object.keys(KIND_OPTION) as TOutputKind[]).map((kind) => {
+      const patterns = outputs.map((options) =>
+        toMatcher(options[KIND_OPTION[kind]] ?? defaults[kind]),
+      );
+
+      // The manifest does not say which output wrote a file, so one output with stable names
+      // could have written any name another output's pattern matches: none of the kind counts.
+      return [kind, patterns.every(Boolean) ? (patterns as RegExp[]) : []];
+    }),
   ) as Record<TOutputKind, RegExp[]>;
 
   return (file, kind) => matchers[kind].some((matcher) => matcher.test(file));
