@@ -17,8 +17,8 @@ interface IServeStaticOptions extends ServeStaticOptions<ServerResponse> {
   basename?: string;
   /** SPA builds serve every file, including the document. */
   isSPA?: boolean;
-  /** Directory under root holding fingerprinted bundles; they get an immutable one-year policy. */
-  assetsDir?: string;
+  /** Content-hashed files relative to root; only these get an immutable one-year policy. */
+  immutableFiles?: Iterable<string>;
   /** SSR builds hide the raw `/index.html` shell unless this returns true. */
   hasAccessIndexHtml?: () => boolean;
 }
@@ -65,27 +65,32 @@ const getMountedUrl = (url: string, mount: string): string | undefined => {
 };
 
 /**
- * Give fingerprinted bundles a long-lived policy and leave every other file revalidating.
+ * Give the listed content-hashed files a long-lived policy and leave every other file revalidating.
  */
 const createCachePolicy = (
   root: string,
-  assetsDir: string,
+  immutableFiles: Iterable<string> | undefined,
   { cacheControl, immutable, maxAge, setHeaders }: ServeStaticOptions<ServerResponse>,
 ): ServeStaticOptions<ServerResponse>['setHeaders'] => {
+  const fingerprinted = new Set(
+    [...(immutableFiles ?? [])].map((file) => path.posix.normalize(file).replace(/^\/+/, '')),
+  );
+
   // An explicit maxAge or immutable option means the caller owns the policy for every file.
-  if (cacheControl === false || maxAge !== undefined || immutable !== undefined) {
+  if (
+    !fingerprinted.size ||
+    cacheControl === false ||
+    maxAge !== undefined ||
+    immutable !== undefined
+  ) {
     return setHeaders;
   }
-
-  const fingerprinted = new RegExp(
-    String.raw`^${assetsDir.replace(/^\/+|\/+$/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/[^/]+-[\w-]{8,}\.[^/]+$`,
-  );
 
   /**
    * send keeps a Cache-Control header that is already set, so this runs before its default.
    */
   return (res, filePath, stat) => {
-    if (fingerprinted.test(path.relative(root, filePath).split(path.sep).join('/'))) {
+    if (fingerprinted.has(path.relative(root, filePath).split(path.sep).join('/'))) {
       res.setHeader('Cache-Control', IMMUTABLE);
     }
 
@@ -156,7 +161,7 @@ const serveStatic = ({
   root,
   basename,
   isSPA = false,
-  assetsDir = 'assets',
+  immutableFiles,
   hasAccessIndexHtml,
   ...options
 }: IServeStaticOptions): TStaticMiddleware => {
@@ -164,7 +169,7 @@ const serveStatic = ({
   const fileOptions: ServeStaticOptions<ServerResponse> = {
     ...options,
     index: isSPA ? options.index : false,
-    setHeaders: createCachePolicy(root, assetsDir, options),
+    setHeaders: createCachePolicy(root, immutableFiles, options),
   };
   const plain = createServeStatic(root, fileOptions) as TStaticMiddleware;
   const serve = isSPA ? plain : createSsrServe(root, plain, fileOptions);

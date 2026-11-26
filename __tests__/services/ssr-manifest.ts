@@ -171,6 +171,11 @@ describe('SsrManifest', () => {
       writeFileSync.mock.calls[0][1],
       { encoding: 'utf-8' },
     );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      '/root/dist/server/fingerprinted-files.json',
+      `${JSON.stringify(['dep.css', 'dep.js', 'img.png', 'route.js', 'style.css'], null, 2)}\n`,
+      { encoding: 'utf-8' },
+    );
   });
 
   it('fails the build when a lazy route is neither in the client manifest nor on disk', () => {

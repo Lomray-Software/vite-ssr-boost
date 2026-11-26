@@ -90,6 +90,10 @@ describe('node serveStatic', () => {
     await mkdir(path.join(root, 'assets'));
     await writeFile(path.join(root, 'assets', 'app.js'), 'built-script');
     await writeFile(path.join(root, 'assets', 'index-AbCd1234.js'), 'fingerprinted');
+    await writeFile(path.join(root, 'assets', 'site-settings.js'), 'stable');
+    await writeFile(path.join(root, 'assets', 'icon-facebook.svg'), 'public-icon');
+    await mkdir(path.join(root, 'assets', 'chunks'));
+    await writeFile(path.join(root, 'assets', 'chunks', 'page.B7x_k2Qa.js'), 'nested-chunk');
     await writeFile(path.join(root, 'robots.txt'), 'public-file');
     await writeFile(path.join(root, 'health'), 'extensionless');
     await writeFile(path.join(root, 'about.html'), 'extension-fallback');
@@ -199,23 +203,36 @@ describe('node serveStatic', () => {
     expect(await (await fetch(`${node}/assets/app.js`, { method: 'POST' })).text()).toBe('SSR');
   });
 
-  it('caches only fingerprinted bundles under the assets dir as immutable', async () => {
+  it('caches only the listed build files as immutable', async () => {
+    const immutableFiles = ['assets/index-AbCd1234.js', '/assets/chunks/page.B7x_k2Qa.js'];
+    const node = await startNode({}, false, { immutableFiles });
+
+    /**
+     * Cache-Control the node middleware sends for one path.
+     */
+    const policy = async (url: string) => (await fetch(url)).headers.get('cache-control');
+
+    expect(await policy(`${node}/assets/index-AbCd1234.js`)).toBe(
+      'public, max-age=31536000, immutable',
+    );
+    expect(await policy(`${node}/assets/chunks/page.B7x_k2Qa.js`)).toBe(
+      'public, max-age=31536000, immutable',
+    );
+    expect(await policy(`${node}/assets/site-settings.js`)).toBe('public, max-age=0');
+    expect(await policy(`${node}/assets/icon-facebook.svg`)).toBe('public, max-age=0');
+    expect(await policy(`${node}/assets/app.js`)).toBe('public, max-age=0');
+    expect(await policy(`${node}/robots.txt`)).toBe('public, max-age=0');
+
+    const custom = await startNode({ maxAge: '1h' }, false, { immutableFiles });
+
+    expect(await policy(`${custom}/assets/index-AbCd1234.js`)).toBe('public, max-age=3600');
+  });
+
+  it('revalidates every file when the build listed no hashed files', async () => {
     const node = await startNode({}, false);
 
     expect((await fetch(`${node}/assets/index-AbCd1234.js`)).headers.get('cache-control')).toBe(
-      'public, max-age=31536000, immutable',
-    );
-    expect((await fetch(`${node}/assets/app.js`)).headers.get('cache-control')).toBe(
       'public, max-age=0',
-    );
-    expect((await fetch(`${node}/robots.txt`)).headers.get('cache-control')).toBe(
-      'public, max-age=0',
-    );
-
-    const custom = await startNode({ assetsDir: 'static', maxAge: '1h' }, false);
-
-    expect((await fetch(`${custom}/assets/index-AbCd1234.js`)).headers.get('cache-control')).toBe(
-      'public, max-age=3600',
     );
   });
 

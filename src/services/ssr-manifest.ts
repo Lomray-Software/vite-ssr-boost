@@ -7,6 +7,7 @@ import type { IAsyncRoute } from '@helpers/import-route';
 import type { TRoutesTree } from '@services/parse-routes';
 import ParseRoutes from '@services/parse-routes';
 import PathNormalize from '@services/path-normalize';
+import { FINGERPRINTED_FILES } from '@services/production-config';
 import type { IAsset, TAssets } from '@services/route-assets';
 import RouteAssets, { AssetType } from '@services/route-assets';
 import type ServerConfig from '@services/server-config';
@@ -337,6 +338,28 @@ class SsrManifest extends RouteAssets {
     if (fs.existsSync(clientDir)) {
       fs.writeFileSync(path.join(clientDir, 'assets-manifest.json'), json, { encoding: 'utf-8' });
     }
+
+    // A server-only build keeps the list the last client build wrote.
+    if (Object.keys(manifest).length) {
+      fs.writeFileSync(
+        path.join(this.getOutDir(), FINGERPRINTED_FILES),
+        `${JSON.stringify(this.getEmittedFiles(manifest), null, 2)}\n`,
+        { encoding: 'utf-8' },
+      );
+    }
+  }
+
+  /**
+   * Every file Vite emitted for the client build; Vite names them with a content hash.
+   */
+  protected getEmittedFiles(manifest: IManifest): string[] {
+    const files = Object.values(manifest).flatMap(({ file, css = [], assets = [] }) => [
+      file,
+      ...css,
+      ...assets,
+    ]);
+
+    return [...new Set(files.filter(Boolean))].sort((a, b) => a.localeCompare(b));
   }
 
   /**

@@ -19,6 +19,9 @@ const managedServers: ReadonlySet<unknown> = new Set(['node', 'express']);
 
 const DEFAULT_BUILD_DIRS = ['./build', './dist'];
 
+// Client files the build emitted with a content hash, relative to the client directory.
+const FINGERPRINTED_FILES = 'server/fingerprinted-files.json';
+
 /**
  * Pick the build directory: an explicit one alone, otherwise the first conventional one present.
  */
@@ -72,7 +75,33 @@ const loadProductionConfig = (buildDir?: string): IProductionConfig | undefined 
   return { ...config, root: path.resolve(path.dirname(filename), config.root) };
 };
 
-export { DEFAULT_BUILD_DIRS, findBuildDir };
+/**
+ * Read the hashed client files a build recorded; undefined when the build left no list.
+ */
+const loadFingerprintedFiles = (root: string): string[] | undefined => {
+  const filename = path.join(root, FINGERPRINTED_FILES);
+  let contents: string;
+
+  try {
+    contents = fs.readFileSync(filename, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return;
+    }
+
+    throw error;
+  }
+
+  const files = JSON.parse(contents) as unknown;
+
+  if (!Array.isArray(files) || files.some((file) => typeof file !== 'string')) {
+    throw new Error(`Invalid fingerprinted files list: ${filename}. Run ssr-boost build again.`);
+  }
+
+  return files as string[];
+};
+
+export { DEFAULT_BUILD_DIRS, FINGERPRINTED_FILES, findBuildDir, loadFingerprintedFiles };
 
 export type { IProductionConfig, TManagedServer };
 

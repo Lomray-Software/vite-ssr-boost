@@ -99,7 +99,7 @@ interface IServeStaticOptions extends ServeStaticOptions {
   root: string;
   basename?: string;
   isSPA?: boolean;
-  assetsDir?: string; // Default: 'assets'
+  immutableFiles?: Iterable<string>; // Paths relative to root
   hasAccessIndexHtml?: () => boolean;
 }
 
@@ -114,9 +114,14 @@ serve-static; in SSR builds, URLs outside the client directory's top-level names
 SSR builds hide the raw `/index.html` shell (any letter case) unless `hasAccessIndexHtml()` returns
 true, so that URL reaches the router.
 
-Fingerprinted bundles in `assetsDir` (`name-<hash>.ext`) get
-`Cache-Control: public, max-age=31536000, immutable`. Every other file keeps serve-static's
-revalidating default. Setting `maxAge`, `immutable` or `cacheControl: false` hands the policy for
+Files listed in `immutableFiles` get `Cache-Control: public, max-age=31536000, immutable`. Every
+other file keeps serve-static's revalidating default, so a stable name such as
+`assets/icon-facebook.svg` from `public/` is never pinned for a year. `ssr-boost build` writes the
+files Vite emitted for the client (scripts, styles and imported assets, nested chunks included) to
+`server/fingerprinted-files.json`, and `prepareProduction` passes that list unless you give your
+own. A build without the file, such as one made before 8.7, revalidates everything. The list
+trusts Vite's hashed output names; if your output file names drop `[hash]`, set `maxAge` or your
+own `immutableFiles`. Setting `maxAge`, `immutable` or `cacheControl: false` hands the policy for
 every file to you.
 
 ## `createLifecycle`

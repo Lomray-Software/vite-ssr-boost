@@ -107,8 +107,8 @@ a filesystem lookup. Built assets and public files retain Express's validators, 
 responses and directory redirects. Add new top-level public files before starting the server;
 restart after changing the build. Custom extension fallbacks and `fallthrough: false` retain
 the unrestricted static middleware. The managed node server applies the same rules through
-[`serveStatic`](/api/node-production#servestatic), and gives only fingerprinted assets an immutable
-one-year cache policy.
+[`serveStatic`](/api/node-production#servestatic), and gives only the hashed files the build listed
+an immutable one-year cache policy.
 
 On React versions that expose `renderToReadableStream`, the Node renderer uses that native
 Web stream directly. React 18 retains the pipeable renderer and its bounded Node-to-Web bridge.

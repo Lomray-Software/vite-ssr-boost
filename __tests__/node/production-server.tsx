@@ -113,6 +113,11 @@ beforeEach(async () => {
   await cp(fixtureDir, buildDir, { recursive: true });
   await mkdir(join(buildDir, 'client/assets'), { recursive: true });
   await writeFile(join(buildDir, `client${ASSET}`), 'console.log("app");');
+  await writeFile(join(buildDir, 'client/assets/icon-facebook.svg'), '<svg/>');
+  await writeFile(
+    join(buildDir, 'server/fingerprinted-files.json'),
+    JSON.stringify([ASSET.slice(1)]),
+  );
   await writeFile(join(buildDir, 'client/robots.txt'), 'User-agent: *');
 });
 
@@ -259,17 +264,26 @@ describe('createProductionServer', () => {
     expect(file.body.length).toBe(0);
   });
 
-  it('caches fingerprinted assets for a year and revalidates other files', async () => {
+  it('caches the hashed files the build listed for a year and revalidates other files', async () => {
     const { url } = await start();
     const asset = await request(`${url}${ASSET}`);
+    const icon = await request(`${url}/assets/icon-facebook.svg`);
     const file = await request(`${url}/robots.txt`);
     const range = await request(`${url}/robots.txt`, { headers: { Range: 'bytes=0-9' } });
 
     expect(asset.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    expect(icon.headers['cache-control']).toBe('public, max-age=0');
     expect(file.headers['cache-control']).toBe('public, max-age=0');
     expect(file.headers.etag).toBeDefined();
     expect(range.status).toBe(206);
     expect(range.body.toString()).toBe('User-agent');
+  });
+
+  it('revalidates hashed names when the build left no list of its files', async () => {
+    await rm(join(buildDir, 'server/fingerprinted-files.json'));
+    const { url } = await start();
+
+    expect((await request(`${url}${ASSET}`)).headers['cache-control']).toBe('public, max-age=0');
   });
 
   it('hides the raw SSR shell and leaves the path to the router', async () => {

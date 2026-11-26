@@ -22,6 +22,7 @@ import DefaultLogger from '@services/logger';
 import loadProductionConfig, {
   DEFAULT_BUILD_DIRS,
   findBuildDir,
+  loadFingerprintedFiles,
 } from '@services/production-config';
 import createAssetPreparer from '@services/route-asset-preparer';
 import RouteAssets from '@services/route-assets';
@@ -212,6 +213,7 @@ const prepareProduction = async ({
         ? undefined
         : serveStatic({
             ...staticOptions,
+            immutableFiles: staticOptions.immutableFiles ?? loadFingerprintedFiles(paths.root),
             root: paths.publicDir,
             basename: new URL(paths.base, 'http://localhost').pathname,
             isSPA,

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import loadProductionConfig from '@services/production-config';
+import loadProductionConfig, { loadFingerprintedFiles } from '@services/production-config';
 
 describe('production build configuration', () => {
   const originalCwd = process.cwd();
@@ -104,5 +104,20 @@ describe('production build configuration', () => {
     fs.writeFileSync(path.join(directory, 'server/ssr-boost.json'), '{');
 
     expect(() => loadProductionConfig(directory)).toThrow(SyntaxError);
+  });
+
+  it('reads the hashed client files a build listed and tolerates older builds without one', () => {
+    expect(loadFingerprintedFiles(directory)).toBeUndefined();
+
+    fs.writeFileSync(
+      path.join(directory, 'server/fingerprinted-files.json'),
+      JSON.stringify(['assets/app-AbCd1234.js']),
+    );
+
+    expect(loadFingerprintedFiles(directory)).toEqual(['assets/app-AbCd1234.js']);
+
+    fs.writeFileSync(path.join(directory, 'server/fingerprinted-files.json'), '{"a":1}');
+
+    expect(() => loadFingerprintedFiles(directory)).toThrow('Invalid fingerprinted files list');
   });
 });
