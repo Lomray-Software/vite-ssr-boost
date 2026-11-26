@@ -174,7 +174,7 @@ describe('node/server-kit', () => {
       ]);
 
       // A raw request shows the headers as sent, before a client would reject the framing.
-      const headers = await new Promise<http.IncomingHttpHeaders & { status?: number }>(
+      const headers = await new Promise<Record<string, string | string[] | number | undefined>>(
         (resolve, reject) => {
           http
             .get(url, (response) => {
