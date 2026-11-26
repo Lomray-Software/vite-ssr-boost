@@ -1,3 +1,4 @@
+import type { EventEmitter } from 'node:events';
 import { errorMonitor } from 'node:events';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
@@ -387,19 +388,22 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
    */
   const trackBind = (): void => {
     isBinding = true;
+    // http.Server typings take only string events, so errorMonitor uses the base type.
+    const emitter: EventEmitter = server;
+
     binding = new Promise<void>((resolve) => {
       /**
        * Stop watching once the bind ended either way.
        */
       const settle = (): void => {
         server.off('listening', settle);
-        server.off(errorMonitor, settle);
+        emitter.off(errorMonitor, settle);
         isBinding = false;
         resolve();
       };
 
       server.on('listening', settle);
-      server.on(errorMonitor, settle);
+      emitter.on(errorMonitor, settle);
     });
   };
 
