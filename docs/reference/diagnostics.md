@@ -59,7 +59,7 @@ The hooks keep working through 8.x; removal is planned for **9.0**, subject to t
 | `shouldSkip` (calls `next()`) | Return a `Response` from `onRequest`, or mount your own route before the SSR handler |
 | `onServerCreated` | Register routes and middleware on your own server before mounting the handler |
 | `onServerStarted` | Await `listen()` from `createProductionServer`, or use the server's `listening` event |
-| `middlewares.expressStatic` | The `static` option of `prepareProduction` / `createProductionServer` |
+| `middlewares.expressStatic` | The `static` option of `prepareProduction` / `createProductionServer` when you run your own launcher |
 
 See [Runtime adapters](/guide/runtime-adapters) for the managed node:http server.
 `SSR_BOOST_DIAGNOSTICS=0` silences these warnings.

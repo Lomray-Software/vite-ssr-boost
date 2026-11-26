@@ -155,6 +155,7 @@ Common flags:
 - `--port`
 - `--mode`
 - `--build-dir`
+- `--server <node|express>`
 
 ## Deployment helpers
 
