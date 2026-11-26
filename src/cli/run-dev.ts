@@ -1,5 +1,6 @@
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
+import type { Plugin, PluginOption } from 'vite';
 import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
 import PLUGIN_NAME from '@constants/plugin-name';
 import type { IPluginConfig } from '@helpers/plugin-config';
@@ -27,13 +28,31 @@ interface IRunDevOut {
 }
 
 /**
- * Read managedServer from the project's Vite config; projects without the plugin keep Express.
- * A config that fails to load surfaces here instead of silently selecting Express. The chosen
- * server resolves the config again with its own inline overrides, so nothing is reused from this read.
+ * Flatten a Vite plugin option (nested arrays, promises, falsy entries) into plugin objects.
  */
-const resolveManagedServer = async (mode?: string): Promise<TManagedServer> => {
-  const { resolveConfig } = await import('vite');
-  const { plugins } = await resolveConfig({ mode }, 'serve', mode);
+const flattenPlugins = async (option: PluginOption): Promise<Plugin[]> => {
+  const value = await option;
+
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return (await Promise.all(value.map(flattenPlugins))).flat();
+  }
+
+  return [value as Plugin];
+};
+
+/**
+ * Read managedServer from the project's Vite config; projects without the plugin keep Express.
+ * The config file is only loaded, never resolved, so no plugin hook runs before the chosen server
+ * resolves it. A config that fails to load surfaces here instead of silently selecting Express.
+ */
+const resolveManagedServer = async (mode = 'development'): Promise<TManagedServer> => {
+  const { loadConfigFromFile } = await import('vite');
+  const loaded = await loadConfigFromFile({ command: 'serve', mode });
+  const plugins = await flattenPlugins(loaded?.config.plugins);
   const plugin = plugins.find(({ name }) => name === PLUGIN_NAME) as
     { pluginOptions?: Partial<IPluginConfig> } | undefined;
 

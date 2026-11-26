@@ -20,6 +20,7 @@ const {
   BuildMock,
   createServerMock,
   resolveConfigMock,
+  loadConfigFromFileMock,
   getPluginConfigMock,
   setCurrentEntrypointNameMock,
   printServerInfoMock,
@@ -34,6 +35,7 @@ const {
   BuildMock: vi.fn(),
   createServerMock: vi.fn(),
   resolveConfigMock: vi.fn(),
+  loadConfigFromFileMock: vi.fn(),
   getPluginConfigMock: vi.fn(),
   setCurrentEntrypointNameMock: vi.fn(),
   printServerInfoMock: vi.fn(),
@@ -52,6 +54,7 @@ vi.mock('vite', async (importOriginal) => {
   return {
     ...actual,
     resolveConfig: resolveConfigMock,
+    loadConfigFromFile: loadConfigFromFileMock,
   };
 });
 vi.mock('@helpers/plugin-config', () => ({
@@ -133,7 +136,7 @@ describe('cli integration', () => {
   });
 
   it('should run dev/prod/serverless wrappers', async () => {
-    resolveConfigMock.mockResolvedValue({ plugins: [] });
+    loadConfigFromFileMock.mockResolvedValue({ config: { plugins: [] } });
     createServerMock.mockResolvedValue({
       run: vi.fn(() => expressServer),
       app: 'app',
@@ -232,8 +235,18 @@ describe('cli integration', () => {
   it('should read the dev server selection from the plugin options', async () => {
     const { lifecycle } = createLifecycleMock();
 
-    resolveConfigMock.mockResolvedValue({
-      plugins: [{ name: PLUGIN_NAME, pluginOptions: { managedServer: 'node' } }],
+    loadConfigFromFileMock.mockResolvedValue({
+      config: {
+        plugins: [
+          false,
+          [
+            Promise.resolve([
+              { name: 'other' },
+              { name: PLUGIN_NAME, pluginOptions: { managedServer: 'node' } },
+            ]),
+          ],
+        ],
+      },
     });
     createDevServerMock.mockResolvedValue({
       config: { getParams: () => ({ host: 'h', port: 1 }) },
@@ -294,7 +307,9 @@ describe('cli integration', () => {
   });
 
   it('should keep Express when the plugin leaves managedServer unset', async () => {
-    resolveConfigMock.mockResolvedValue({ plugins: [{ name: PLUGIN_NAME, pluginOptions: {} }] });
+    loadConfigFromFileMock.mockResolvedValue({
+      config: { plugins: [{ name: PLUGIN_NAME, pluginOptions: {} }] },
+    });
     createServerMock.mockResolvedValue({
       run: vi.fn(() => expressServer),
       app: 'app',
@@ -305,8 +320,25 @@ describe('cli integration', () => {
     expect(createDevServerMock).not.toHaveBeenCalled();
   });
 
+  it('should pick the server without resolving the Vite config', async () => {
+    resolveConfigMock.mockClear();
+    loadConfigFromFileMock.mockResolvedValue(null);
+    createServerMock.mockResolvedValue({
+      run: vi.fn(() => expressServer),
+      app: 'app',
+      getLifecycle: vi.fn(() => undefined),
+    });
+
+    expect((await runDev({ version: '1', isPrintInfo: false })).server).toBe(expressServer);
+    expect(loadConfigFromFileMock).toHaveBeenLastCalledWith({
+      command: 'serve',
+      mode: 'development',
+    });
+    expect(resolveConfigMock).not.toHaveBeenCalled();
+  });
+
   it('should surface a Vite config that fails to load instead of falling back to Express', async () => {
-    resolveConfigMock.mockRejectedValue(new Error('broken config'));
+    loadConfigFromFileMock.mockRejectedValue(new Error('broken config'));
 
     await expect(runDev({ version: '1' })).rejects.toThrow('broken config');
     expect(createServerMock).not.toHaveBeenCalled();
