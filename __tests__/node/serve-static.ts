@@ -61,24 +61,49 @@ const listen = async (server: Server): Promise<string> => {
 
 /**
  * Compare the observable outcome of one request, leaving out per-response headers.
+ * The path goes out byte for byte, as a client that skips URL normalization sends it.
  */
-const observe = async (url: string, init?: RequestInit) => {
-  const response = await fetch(url, { redirect: 'manual', ...init });
+const observe = (
+  url: string,
+  init: { method?: string; headers?: Record<string, string> } = {},
+): Promise<Record<string, unknown>> => {
+  const { origin } = new URL(url);
 
-  // Error bodies come from each host's own error handler; the status is the contract.
-  if (response.status >= 400) {
-    return { status: response.status };
-  }
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      origin,
+      { path: url.slice(origin.length), method: init.method ?? 'GET', headers: init.headers },
+      (response) => {
+        const chunks: Buffer[] = [];
 
-  return {
-    status: response.status,
-    body: await response.text(),
-    type: response.headers.get('content-type'),
-    length: response.headers.get('content-length'),
-    location: response.headers.get('location'),
-    ranges: response.headers.get('accept-ranges'),
-    etag: Boolean(response.headers.get('etag')),
-  };
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('error', reject);
+        response.on('end', () => {
+          const status = response.statusCode!;
+
+          // Error bodies come from each host's own error handler; the status is the contract.
+          if (status >= 400) {
+            resolve({ status });
+
+            return;
+          }
+
+          resolve({
+            status,
+            body: Buffer.concat(chunks).toString('utf8'),
+            type: response.headers['content-type'] ?? null,
+            length: response.headers['content-length'] ?? null,
+            location: response.headers.location ?? null,
+            ranges: response.headers['accept-ranges'] ?? null,
+            etag: Boolean(response.headers.etag),
+          });
+        });
+      },
+    );
+
+    request.on('error', reject);
+    request.end();
+  });
 };
 
 describe('node serveStatic', () => {
@@ -169,6 +194,11 @@ describe('node serveStatic', () => {
         observe(node + pathname),
       ]);
 
+      // Only an explicit `dotfiles: 'allow'` may expose a dotfile, whatever the spelling.
+      if (options.dotfiles !== 'allow') {
+        expect(actual.body, pathname).not.toBe('secret');
+      }
+
       // Express labels its own text fallback differently; the body decides the route.
       if (expected.body === 'SSR') {
         expect(actual.body, pathname).toBe('SSR');
@@ -187,7 +217,7 @@ describe('node serveStatic', () => {
       { method: 'HEAD' },
       { headers: { Range: 'bytes=0-4' } },
       { headers: { Range: 'bytes=50-60' } },
-    ] as RequestInit[]) {
+    ]) {
       expect(await observe(`${node}/assets/app.js`, init)).toEqual(
         await observe(`${legacy}/assets/app.js`, init),
       );
