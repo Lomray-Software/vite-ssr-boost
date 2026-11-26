@@ -183,7 +183,8 @@ function createLifecycle(server: http.Server | https.Server, options?: ILifecycl
 ```
 
 Bind through `listen`, not `server.listen`: it applies the timeouts, rejects once `close()` has
-started, and `close()` waits for a bind still in flight.
+started, and `close()` waits for a bind still in flight within the drain deadline. A bind that
+completes after the drain moved on is closed at once, so the port is not left open.
 
 Health probes are opt-in. The live path answers 200 while the process runs; the ready path answers
 200 after `setReady()` and 503 once a drain starts. Both answer `GET` and `HEAD` with

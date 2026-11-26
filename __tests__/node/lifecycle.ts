@@ -7,7 +7,7 @@ import type { AddressInfo, Socket } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { transformSync } from 'esbuild';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import createLifecycle from '@node/lifecycle';
+import createLifecycle, { trackNativeBind } from '@node/lifecycle';
 import type { ILifecycle } from '@node/lifecycle';
 
 const servers: http.Server[] = [];
@@ -617,6 +617,40 @@ describe('createLifecycle', () => {
     );
     await expect(bound).resolves.toBeTruthy();
     expect(server.listenerCount('error')).toBe(0);
+  });
+
+  it('bounds a pending native bind by the drain deadline and releases a bind that lands later', async () => {
+    const server = http.createServer();
+    const lifecycle = createLifecycle(server, { drainTimeoutMs: 50 });
+
+    servers.push(server);
+    trackNativeBind(lifecycle);
+    await expect(lifecycle.close()).resolves.toBeUndefined();
+
+    const released = new Promise<void>((resolve) => server.once('close', () => resolve()));
+
+    server.listen(0, '127.0.0.1');
+    await released;
+    expect(server.listening).toBe(false);
+  });
+
+  it('lets force end a pending native bind at once', async () => {
+    const server = http.createServer();
+    const lifecycle = createLifecycle(server);
+
+    servers.push(server);
+    trackNativeBind(lifecycle);
+
+    const closed = lifecycle.close();
+
+    lifecycle.force();
+    await expect(closed).resolves.toBeUndefined();
+
+    const released = new Promise<void>((resolve) => server.once('close', () => resolve()));
+
+    server.listen(0, '127.0.0.1');
+    await released;
+    expect(server.listening).toBe(false);
   });
 
   it('keeps the drain deadline alive on an otherwise idle process', () => {

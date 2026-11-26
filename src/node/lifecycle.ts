@@ -1,3 +1,4 @@
+import { errorMonitor } from 'node:events';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
 import type { AddressInfo, Socket } from 'node:net';
@@ -66,7 +67,7 @@ interface ILifecycle {
   /**
    * Bind the server and resolve with its address, rejecting bind errors.
    * Refused while another bind is in flight and once close() has started;
-   * close() waits for a bind in flight.
+   * close() waits for a bind in flight, within its deadline.
    */
   listen: (port?: number, host?: string) => Promise<AddressInfo | string | null>;
   /**
@@ -91,6 +92,11 @@ const DEFAULT_HEALTH: Required<IHealthOptions> = { livePath: '/healthz', readyPa
 const TUNNEL_EVENTS = new Set<string | symbol>(['upgrade', 'connect']);
 
 const DEFAULT_SIGNALS: TSignal[] = ['SIGTERM', 'SIGINT'];
+
+/**
+ * Bind trackers of each lifecycle, for adapters that call server.listen() themselves.
+ */
+const bindTrackers = new WeakMap<ILifecycle, () => void>();
 
 /**
  * Apply only the timeouts the caller set, keeping Node defaults otherwise.
@@ -189,6 +195,8 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   // Bound at some point and not yet through the native 'close' event.
   let hasListened = server.listening;
   let isClosed = false;
+  // stopServer() ran, so a bind that completes later must not keep the port open.
+  let isStopped = false;
   let cancelGrace: (() => void) | undefined;
   let activeResponses = 0;
   const upgradedSockets = new Set<Duplex>();
@@ -231,6 +239,12 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   server.on('listening', () => {
     hasListened = true;
     isClosed = false;
+
+    // The drain moved past a bind that outlived its deadline: release the port at once.
+    if (isStopped) {
+      server.close();
+      destroyAll();
+    }
   });
   server.on('close', () => {
     isClosed = true;
@@ -368,10 +382,34 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   };
 
   /**
+   * Hold close() until a bind the caller started natively ends. The bind error is observed
+   * through errorMonitor, so an error nobody listens for still crashes the process as in Node.
+   */
+  const trackBind = (): void => {
+    isBinding = true;
+    binding = new Promise<void>((resolve) => {
+      /**
+       * Stop watching once the bind ended either way.
+       */
+      const settle = (): void => {
+        server.off('listening', settle);
+        server.off(errorMonitor, settle);
+        isBinding = false;
+        resolve();
+      };
+
+      server.on('listening', settle);
+      server.on(errorMonitor, settle);
+    });
+  };
+
+  /**
    * Stop accepting and resolve once the server released its port and connections.
    */
   const stopServer = (): Promise<void> =>
     new Promise<void>((done, fail) => {
+      isStopped = true;
+
       if (server.listening) {
         server.close((error) => (error ? fail(error) : done()));
       } else if (hasListened && !isClosed) {
@@ -427,7 +465,12 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
    * The drain itself: grace, sockets with onDrain, then onClose, each bounded.
    */
   const runClose = async (): Promise<void> => {
-    await binding;
+    // A bind that never settles (a hanging host lookup) must not hold the drain past its bound.
+    if (binding) {
+      const pending = binding;
+
+      await withDeadline((deadline) => Promise.race([pending, deadline]));
+    }
 
     if (readinessGraceMs > 0 && server.listening && !isForced) {
       await waitGrace();
@@ -524,7 +567,7 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     return () => listeners.forEach(([signal, listener]) => process.off(signal, listener));
   };
 
-  return {
+  const lifecycle: ILifecycle = {
     /**
      * Readiness may answer 200 from now on.
      */
@@ -547,7 +590,21 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     force,
     handleSignals,
   };
+
+  bindTrackers.set(lifecycle, trackBind);
+
+  return lifecycle;
 };
+
+/**
+ * Let a lifecycle follow a bind started with server.listen() directly, so close() waits for
+ * the port within its deadline while the server keeps Node's own bind error semantics.
+ */
+const trackNativeBind = (lifecycle: ILifecycle): void => {
+  bindTrackers.get(lifecycle)?.();
+};
+
+export { trackNativeBind };
 
 export type { IHealthOptions, ILifecycle, ILifecycleOptions, ISignalOptions, TLifecycleServer };
 
