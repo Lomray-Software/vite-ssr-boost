@@ -206,16 +206,25 @@ async function createServer(
             },
       });
 
-      server.listen(port, host, () => {
-        lifecycle?.setReady();
-        void prepareServer.onServerStarted?.(app, serverApi, server);
+      // Bind through the lifecycle, so a close() right after run() waits for the port.
+      void lifecycle.listen(port, host).then(
+        () => {
+          lifecycle?.setReady();
+          void prepareServer.onServerStarted?.(app, serverApi, server);
 
-        if (!isPrintInfo) {
-          return;
-        }
+          if (!isPrintInfo) {
+            return;
+          }
 
-        void printServerInfo(config, { version, server });
-      });
+          void printServerInfo(config, { version, server });
+        },
+        (error: unknown) => {
+          // Listeners on the server already saw the error; with none, fail loudly as before.
+          if (server.listenerCount('error') === 0) {
+            throw error;
+          }
+        },
+      );
 
       return server;
     },

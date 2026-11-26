@@ -62,6 +62,7 @@ vi.mock('node:http', async () => {
           listening: false,
           closeIdleConnections: vi.fn(),
           closeAllConnections: vi.fn(),
+          address: vi.fn(() => null),
           close: vi.fn((cb?: () => void) => cb?.()),
           listen: vi.fn(function listen(
             this: { listening: boolean },
@@ -127,6 +128,48 @@ describe('node server', () => {
       server,
     );
     expect(printServerInfoMock).toHaveBeenCalled();
+  });
+
+  it('should wait for the bind when close follows run at once', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    const result = await createServer(createDevConfig({ close }) as never);
+    const server = result.run({ isPrintInfo: false });
+
+    await result.getLifecycle()!.close();
+
+    expect(server.listen).toHaveBeenCalledTimes(1);
+    expect(server.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('should leave a bind error to the server error listeners without starting', async () => {
+    const http = (await import('node:http')).default;
+    const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
+    const onError = vi.fn();
+
+    vi.mocked(http.createServer).mockImplementationOnce(() => {
+      const { EventEmitter } = require('node:events') as typeof import('node:events');
+      const server = Object.assign(new EventEmitter(), {
+        listening: false,
+        listen: vi.fn(() => {
+          queueMicrotask(() => server.emit('error', failure));
+
+          return server;
+        }),
+      });
+
+      return server as never;
+    });
+
+    const result = await createServer(createDevConfig() as never);
+    const server = result.run({ isPrintInfo: false });
+
+    server.on('error', onError);
+    await flush();
+
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledWith(failure);
+    expect(result.getLifecycle()?.isReady()).toBe(false);
+    expect(prepareServer.onServerStarted).not.toHaveBeenCalled();
   });
 
   it('should have no lifecycle before run', async () => {
