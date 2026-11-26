@@ -53,6 +53,25 @@ describe('SsrManifest', () => {
     expect(SsrManifest.get(config)).toBe(second);
   });
 
+  it('should replace the instance when a restart puts a new Vite on the same config', () => {
+    let vite: unknown = { config: { resolve: { alias: [] } } };
+    const config = {
+      isModulePreload: true,
+      getParams: () => ({ root: '/root' }),
+      getPluginConfig: () => ({ clientFile: 'client.ts' }),
+      getVite: () => vite,
+    } as never;
+    const first = SsrManifest.get(config);
+
+    expect(SsrManifest.get(config)).toBe(first);
+
+    vite = { config: { resolve: { alias: [] } } };
+    const second = SsrManifest.get(config);
+
+    expect(second).not.toBe(first);
+    expect(SsrManifest.get(config)).toBe(second);
+  });
+
   it('should load and cleanup client manifest', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(

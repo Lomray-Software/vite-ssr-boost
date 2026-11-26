@@ -44,6 +44,11 @@ class SsrManifest extends RouteAssets {
   protected readonly config: ServerConfig;
 
   /**
+   * Vite server the instance was created with, if any
+   */
+  protected readonly vite?: ReturnType<ServerConfig['getVite']>;
+
+  /**
    * Path normalize service
    */
   protected readonly pathNormalize: PathNormalize;
@@ -88,6 +93,7 @@ class SsrManifest extends RouteAssets {
     super(path.resolve(config.getParams().root, buildDir || ''), config.isModulePreload);
 
     this.config = config;
+    this.vite = config.getVite();
     this.root = config.getParams().root;
     this.buildDir = buildDir;
     this.viteAliases = viteAliases ?? config.getVite()?.config?.resolve.alias;
@@ -100,10 +106,14 @@ class SsrManifest extends RouteAssets {
    * Get singleton instance
    */
   public static get(config: ServerConfig, params: ISsrManifestParams = {}): SsrManifest {
-    // A restarted dev server brings a new config with a new Vite; the old instance holds the closed one.
-    if (SsrManifest.instance === null || SsrManifest.instance.config !== config) {
-      SsrManifest.instance = new SsrManifest(config, params);
+    const { instance } = SsrManifest;
+
+    // A dev restart brings a new Vite, on a new config or the same one; the old instance holds the closed one.
+    if (instance && instance.config === config && instance.vite === config.getVite()) {
+      return instance;
     }
+
+    SsrManifest.instance = new SsrManifest(config, params);
 
     return SsrManifest.instance;
   }
