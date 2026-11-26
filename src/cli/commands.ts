@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { Command, Option } from 'commander';
 import type { IDoctorOptions } from '@cli/doctor';
 import enableShortcuts from '@cli/helpers/enable-shortcuts';
+import serverOption from '@cli/helpers/server-option';
 import type { IInitOptions } from '@cli/init';
 import type {
   IBuildActionParams,
@@ -54,10 +55,6 @@ const envModeOption = new Option('--mode [mode]', 'Env mode.')
   .env('VITE_ENV_MODE')
   .default('production');
 const buildDirOption = new Option('--build-dir [buildDir]', 'Build directory output.');
-const serverOption = new Option(
-  '--server [server]',
-  'Managed server: node or express (default: plugin managedServer, then express).',
-).choices(['node', 'express']);
 
 /**
  * Cli commands
