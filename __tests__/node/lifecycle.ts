@@ -755,6 +755,61 @@ describe('createLifecycle', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('keeps waiting for a native close when the connection count fails', async () => {
+    /**
+     * Start a server, hold an upgraded socket, close it natively and break its connection count.
+     */
+    const startClosing = async (): Promise<{ server: http.Server; release: () => void }> => {
+      const { server } = await listen(
+        () => undefined,
+        () => createLifecycle(http.createServer()),
+      );
+      let accepted: Socket | undefined;
+
+      server.on('upgrade', (_req, socket: Socket) => {
+        accepted = socket;
+        socket.write(
+          'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+        );
+      });
+
+      const client = await upgrade(server);
+
+      server.close();
+      vi.spyOn(server, 'getConnections').mockImplementation((callback) => {
+        callback(new Error('count failed'), 0);
+
+        return server;
+      });
+
+      return {
+        server,
+        release: () => {
+          accepted?.destroy();
+          client.destroy();
+        },
+      };
+    };
+
+    const joined = await startClosing();
+    const onClose = vi.fn();
+    const closed = createLifecycle(joined.server, { drainTimeoutMs: 5000, onClose }).close();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(onClose).not.toHaveBeenCalled();
+    joined.release();
+    await closed;
+    expect(onClose).toHaveBeenCalledOnce();
+
+    const stuck = await startClosing();
+
+    await expect(createLifecycle(stuck.server, { drainTimeoutMs: 50 }).close()).rejects.toThrow(
+      '[ssr-boost] the server did not close within 50 ms: ' +
+        'connections opened before the lifecycle remain.',
+    );
+    stuck.release();
+  });
+
   it('rejects close when a socket from before the lifecycle outlives the deadline', async () => {
     const { server } = await listen(
       () => undefined,

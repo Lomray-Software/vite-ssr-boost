@@ -522,8 +522,9 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
         const onNativeClose = (): void => done();
 
         server.once('close', onNativeClose);
+        // An unknown count is not an empty server: the native close or the deadline ends it.
         server.getConnections((error, count) => {
-          if (error || count === 0) {
+          if (!error && count === 0) {
             server.off('close', onNativeClose);
             done();
           }
