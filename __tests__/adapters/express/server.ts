@@ -895,9 +895,12 @@ describe('node server', () => {
 
     Object.assign(rebound, { close, address: vi.fn(() => null) });
 
+    const bindListeners = rebound.listenerCount('listening');
     // The caller retries through the lifecycle of the run whose bind failed.
     const bound = first.listen(0);
 
+    // A first managed bind starts on the next turn of the event loop.
+    await vi.waitFor(() => expect(rebound.listenerCount('listening')).toBe(bindListeners + 1));
     rebound.listening = true;
     rebound.emit('listening');
 

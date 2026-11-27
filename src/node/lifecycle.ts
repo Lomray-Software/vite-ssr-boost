@@ -74,7 +74,8 @@ interface ILifecycle {
    * Bind the server and resolve with its address, rejecting bind errors and a bind that was
    * closed as it landed.
    * Refused while another bind is in flight, before an earlier close() emitted `close`, and once
-   * close() has started;
+   * close() has started; a native close() that emits `close` before the first bind starts
+   * cancels it;
    * close() waits for a bind in flight, within its deadline.
    */
   listen: (port?: number, host?: string) => Promise<AddressInfo | string | null>;
@@ -360,7 +361,8 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   server.prependListener('request', (_req: IncomingMessage, res: ServerResponse) => {
     activeResponses += 1;
 
-    if (closing) {
+    // A request listener prepended after the lifecycle may have answered already.
+    if (closing && !res.headersSent) {
       res.setHeader('Connection', 'close');
     }
 
@@ -410,6 +412,41 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   };
 
   /**
+   * Wait out a native close() queued before the first bind, which the lifecycle cannot see:
+   * its `close` event would otherwise cancel the bind while the port still opens.
+   */
+  const settleNativeClose = (): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      let isCancelled = false;
+
+      /**
+       * Note a `close` event that landed before the bind started.
+       */
+      const onEarlyClose = (): void => {
+        isCancelled = true;
+      };
+
+      server.once('close', onEarlyClose);
+      // A close() with no connections emits on the next tick, so it has landed by setImmediate.
+      setImmediate(() => {
+        server.getConnections((error, count) => {
+          server.off('close', onEarlyClose);
+
+          if (isCancelled) {
+            reject(new Error('[ssr-boost] the bind was cancelled by close().'));
+          } else if (!error && count > 0 && !server.listening) {
+            // Connections without a listening port: a close() still waits for them.
+            reject(
+              new Error('[ssr-boost] listen() was called before the previous close() finished.'),
+            );
+          } else {
+            resolve();
+          }
+        });
+      });
+    });
+
+  /**
    * Bind once, unless the drain has already begun.
    */
   const listen: ILifecycle['listen'] = (port, host) => {
@@ -432,56 +469,64 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
 
     isBinding = true;
 
-    const bound = new Promise<AddressInfo | string | null>((resolve, reject) => {
-      /**
-       * Drop every bind observer, whichever way the bind ended.
-       */
-      const detach = (): void => {
-        server.off('listening', onListening);
-        server.off('error', fail);
-        server.off('close', onCancel);
-      };
+    /**
+     * Start the bind and settle with its outcome.
+     */
+    const bind = (): Promise<AddressInfo | string | null> =>
+      new Promise<AddressInfo | string | null>((resolve, reject) => {
+        /**
+         * Drop every bind observer, whichever way the bind ended.
+         */
+        const detach = (): void => {
+          server.off('listening', onListening);
+          server.off('error', fail);
+          server.off('close', onCancel);
+        };
 
-      /**
-       * Resolve with the bound address, unless an earlier listener already closed the server.
-       */
-      function onListening(): void {
-        if (!server.listening) {
-          fail(new Error('[ssr-boost] the server was closed as its bind landed.'));
+        /**
+         * Resolve with the bound address, unless an earlier listener already closed the server.
+         */
+        function onListening(): void {
+          if (!server.listening) {
+            fail(new Error('[ssr-boost] the server was closed as its bind landed.'));
 
-          return;
+            return;
+          }
+
+          detach();
+          hasListened = true;
+          resolve(server.address());
         }
 
-        detach();
-        hasListened = true;
-        resolve(server.address());
-      }
+        /**
+         * Reject with the bind error.
+         */
+        function fail(error: unknown): void {
+          detach();
+          reject(error);
+        }
 
-      /**
-       * Reject with the bind error.
-       */
-      function fail(error: unknown): void {
-        detach();
-        reject(error);
-      }
+        /**
+         * A native close() during the host lookup cancels the bind with only a `close` event.
+         */
+        function onCancel(): void {
+          fail(new Error('[ssr-boost] the bind was cancelled by close().'));
+        }
 
-      /**
-       * A native close() during the host lookup cancels the bind with only a `close` event.
-       */
-      function onCancel(): void {
-        fail(new Error('[ssr-boost] the bind was cancelled by close().'));
-      }
+        server.once('listening', onListening);
+        server.once('error', fail);
+        server.once('close', onCancel);
 
-      server.once('listening', onListening);
-      server.once('error', fail);
-      server.once('close', onCancel);
-
-      try {
-        server.listen(port, host);
-      } catch (error) {
-        fail(error);
-      }
-    }).finally(() => {
+        try {
+          server.listen(port, host);
+        } catch (error) {
+          fail(error);
+        }
+      });
+    // Only a server never seen bound can carry a close() from before the lifecycle.
+    const bound = (
+      hasListened || server.listening ? bind() : settleNativeClose().then(bind)
+    ).finally(() => {
       isBinding = false;
       binding = undefined;
     });

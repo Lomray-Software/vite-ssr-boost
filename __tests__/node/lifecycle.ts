@@ -1008,6 +1008,49 @@ describe('createLifecycle', () => {
     await expect(lifecycle.listen(0)).resolves.toMatchObject({ port: expect.any(Number) });
   });
 
+  it('cancels a first managed listen with a native close from before the lifecycle', async () => {
+    const server = http.createServer();
+
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    // Queued before the lifecycle exists, so its `close` event is still pending.
+    server.close();
+
+    const lifecycle = createLifecycle(server);
+
+    await expect(lifecycle.listen(0)).rejects.toThrow('cancelled by close()');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(server.listening).toBe(false);
+    await expect(lifecycle.listen(0)).resolves.toMatchObject({ port: expect.any(Number) });
+  });
+
+  it('refuses a first managed listen while a close from before the lifecycle drains', async () => {
+    const server = http.createServer();
+
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+
+    const client = net.connect((server.address() as AddressInfo).port);
+
+    await new Promise((resolve) => client.once('connect', resolve));
+    await vi.waitFor(
+      () =>
+        new Promise<void>((resolve, reject) =>
+          server.getConnections((_error, count) => (count === 1 ? resolve() : reject())),
+        ),
+    );
+
+    // The open connection keeps this close() pending past the lifecycle's creation.
+    const closed = new Promise((resolve) => server.close(resolve));
+    const lifecycle = createLifecycle(server);
+
+    await expect(lifecycle.listen(0)).rejects.toThrow('before the previous close() finished');
+    expect(server.listening).toBe(false);
+    client.destroy();
+    await closed;
+    await expect(lifecycle.listen(0)).resolves.toMatchObject({ port: expect.any(Number) });
+  });
+
   it('lets a new managed listen start once a cancelled one ended', async () => {
     const server = http.createServer();
     const lifecycle = createLifecycle(server);
@@ -1134,6 +1177,31 @@ setTimeout(() => process.exit(0), 50);
     expect(await getText(`${url}/readyz`)).toEqual({ status: 503, body: 'unavailable' });
     expect(server.listening).toBe(true);
     await closed;
+    expect(server.listening).toBe(false);
+  });
+
+  it('drains a response that an earlier request listener ended during the grace', async () => {
+    let lifecycle!: ILifecycle;
+    const { server, url } = await listen(
+      (_req, res) => {
+        if (!res.headersSent) {
+          res.end('app');
+        }
+      },
+      (instance) => {
+        lifecycle = createLifecycle(instance, { readinessGraceMs: 200 });
+
+        return lifecycle;
+      },
+    );
+
+    // Prepended after the lifecycle, so it answers before the lifecycle tracker runs.
+    server.prependListener('request', (_req, res) => res.end('early'));
+
+    const closed = lifecycle.close();
+
+    expect(await getText(url)).toEqual({ status: 200, body: 'early' });
+    await expect(closed).resolves.toBeUndefined();
     expect(server.listening).toBe(false);
   });
 

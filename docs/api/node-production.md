@@ -207,7 +207,9 @@ function createLifecycle(server: http.Server | https.Server, options?: ILifecycl
 
 Bind through `listen`, not `server.listen`: it applies the timeouts, rejects once `close()` has
 started or while an earlier native `server.close()` has not emitted `close`, and `close()` waits
-for a bind still in flight within the drain deadline. A bind that
+for a bind still in flight within the drain deadline. The first bind starts on the next turn of
+the event loop, so a native `close()` called just before or after it, even one from before the
+lifecycle existed, cancels it instead of leaving a port the promise does not report. A bind that
 completes after the drain moved on is closed at once, so the port is not left open.
 
 Health probes are opt-in. The live path answers 200 while the process runs; the ready path answers
