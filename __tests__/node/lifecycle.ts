@@ -594,6 +594,10 @@ describe('createLifecycle', () => {
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let started!: () => void;
+    const begun = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     let lifecycle!: ILifecycle;
     const { server, url } = await listen(
       (_req, res) => res.end('app'),
@@ -610,6 +614,7 @@ describe('createLifecycle', () => {
       }
 
       res.write('first;');
+      started();
       void held.then(() => res.end('last'));
     });
     server.on('upgrade', (_req, socket: Socket) => {
@@ -639,10 +644,73 @@ describe('createLifecycle', () => {
       req.end();
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await begun;
 
     const closed = lifecycle.close();
 
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.destroyed).toBe(false);
+    release();
+    expect(await streamed).toBe('first;last');
+    await closed;
+    await vi.waitFor(() => expect(client.destroyed).toBe(true));
+  });
+
+  it('keeps upgraded sockets when a listener prepended ahead of the tracker starts the drain', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let lifecycle!: ILifecycle;
+    const { server, url } = await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance);
+
+        return lifecycle;
+      },
+    );
+    let closed: Promise<void> | undefined;
+
+    server.on('upgrade', (_req, socket: Socket) => {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const client = await upgrade(server);
+
+    server.prependListener(
+      'checkContinue',
+      (_req: http.IncomingMessage, res: http.ServerResponse) => {
+        res.writeContinue();
+        res.write('first;');
+        closed = lifecycle.close();
+        void held.then(() => res.end('last'));
+      },
+    );
+
+    const streamed = new Promise<string>((resolve, reject) => {
+      const req = http.request(
+        url,
+        { method: 'POST', headers: { Expect: '100-continue', 'Content-Length': 0 } },
+        (res) => {
+          let body = '';
+
+          res.setEncoding('utf8');
+          res.on('data', (chunk: string) => {
+            body += chunk;
+          });
+          res.on('end', () => resolve(body));
+          res.on('error', reject);
+        },
+      );
+
+      req.on('error', reject);
+      req.end();
+    });
+
+    await vi.waitFor(() => expect(closed).toBeDefined());
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(client.destroyed).toBe(false);
     release();

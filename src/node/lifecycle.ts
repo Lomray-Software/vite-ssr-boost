@@ -275,11 +275,8 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
 
     // A tunnel whose request finished arriving after the stop has nothing left to wait for:
     // the application handler still runs, then the socket goes so the drain can end.
-    if (isStopped && activeResponses === 0) {
-      process.nextTick(() => {
-        upgradedSockets.delete(socket);
-        socket.destroy();
-      });
+    if (isStopped) {
+      sweepTunnels();
     }
   };
 
@@ -289,6 +286,18 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   const destroyUpgraded = (): void => {
     upgradedSockets.forEach((socket) => socket.destroy());
     upgradedSockets.clear();
+  };
+
+  /**
+   * Destroy the tunnels after the current dispatch when no response is left by then.
+   * A listener prepended ahead of a tracker can start the drain before its response is counted.
+   */
+  const sweepTunnels = (): void => {
+    process.nextTick(() => {
+      if (activeResponses === 0) {
+        destroyUpgraded();
+      }
+    });
   };
 
   /**
@@ -612,10 +621,7 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
       }
 
       server.closeIdleConnections();
-
-      if (activeResponses === 0) {
-        destroyUpgraded();
-      }
+      sweepTunnels();
     });
 
   /**
