@@ -466,6 +466,11 @@ export default defineEntry(App, routes, {
       expect(resolved[key]).toMatchObject({ port });
       expect((resolved[key] as { server?: unknown }).server).toBeUndefined();
       expect((await request(`${url}/`)).body).toContain('Home v1');
+
+      const { socket, message } = await connectHmr(app, url.replace(/:\d+$/, `:${port}`));
+
+      expect(JSON.parse(message)).toMatchObject({ type: 'connected' });
+      socket.destroy();
     }
   });
 
