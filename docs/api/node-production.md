@@ -137,7 +137,8 @@ serve-static; in SSR builds, URLs outside the client directory's top-level names
 SSR builds hide the raw HTML shell unless `hasAccessIndexHtml()` returns true, so that URL reaches
 the router. The shell is matched by the file it resolves to: any letter case, dot segments and,
 when the file server for that path appends its extension (`extensions`, or `json` under
-`/.well-known/`), the extensionless URL. `prepareProduction` passes the
+`/.well-known/`), the extensionless URL, unless a real file has that extensionless name, which
+is then served as send would. `prepareProduction` passes the
 `indexFile` from `ssr-boost.json`, so a renamed shell stays hidden too. The match is by path: a
 symlink or a copy of the shell under another name in the client directory is served as a file.
 
@@ -160,7 +161,8 @@ that with stable content. Setting
 With the default `fallthrough` and no `extensions`, SSR builds read the top-level names of the
 client directory once, when the middleware is created. A top-level file or folder added later
 goes to `next()` until the server restarts; files added under a name that already existed are
-served at once. With `fallthrough: false` or `extensions`, every request reaches the file server.
+served at once. With `fallthrough: false` or `extensions`, requests skip that prefix filter;
+the mount and shell checks still run first.
 
 With `isSPA`, the shell file is sent with `Cache-Control: no-cache`, the same policy as the route
 fallback, whether it is reached as `/` or by its own name. This differs from the managed Express

@@ -338,6 +338,29 @@ describe('node serveStatic', () => {
     expect(await (await fetch(`${withExtensions}/about`)).text()).toBe('extension-fallback');
   });
 
+  it('serves a real extensionless file that shares a name with the shell alias', async () => {
+    const withExtensions = await startNode({ extensions: ['html'] }, false);
+
+    expect(await (await fetch(`${withExtensions}/index`)).text()).toBe('SSR');
+
+    await writeFile(path.join(root, 'index'), 'extensionless-index');
+
+    expect(await (await fetch(`${withExtensions}/index`)).text()).toBe('extensionless-index');
+    expect(await (await fetch(`${withExtensions}/index.html`)).text()).toBe('SSR');
+
+    await writeFile(path.join(root, '.well-known', 'shell.json'), 'well-known-shell');
+    const wellKnown = await startNode({}, false, {
+      shellFile: path.join(root, '.well-known', 'shell.json'),
+    });
+
+    expect(await (await fetch(`${wellKnown}/.well-known/shell`)).text()).toBe('SSR');
+
+    await writeFile(path.join(root, '.well-known', 'shell'), 'well-known-file');
+
+    expect(await (await fetch(`${wellKnown}/.well-known/shell`)).text()).toBe('well-known-file');
+    expect(await (await fetch(`${wellKnown}/.well-known/shell.json`)).text()).toBe('SSR');
+  });
+
   it('hides the shell for raw paths with a fragment or a backslash', async () => {
     await mkdir(path.join(root, 'nested'));
     await writeFile(path.join(root, 'nested', 'shell.html'), 'nested-shell');

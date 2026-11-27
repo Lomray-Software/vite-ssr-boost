@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
@@ -188,6 +188,24 @@ const getShellPaths = (
 };
 
 /**
+ * Whether a request path names a real file other than the shell. send serves such a file
+ * before it tries an extension, so an extensionless alias of the shell is not the shell then.
+ */
+const isOtherFile = (root: string, shellFile: string, pathname: string): boolean => {
+  const file = path.join(root, path.posix.normalize(pathname.replace(/\\/g, '/')));
+
+  if (file.toLowerCase() === path.resolve(root, shellFile).toLowerCase()) {
+    return false;
+  }
+
+  try {
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Send HTML routes straight on while retaining static handling for built file prefixes.
  */
 const createSsrServe = (
@@ -305,7 +323,8 @@ const serveStatic = ({
     if (
       pathname !== undefined &&
       (isWellKnown ? wellKnownShellPaths : shellPaths).has(getShellKey(pathname)) &&
-      !hasAccessIndexHtml?.()
+      !hasAccessIndexHtml?.() &&
+      !isOtherFile(root, shellFile, pathname)
     ) {
       next();
 
