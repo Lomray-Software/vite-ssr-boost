@@ -141,7 +141,14 @@ const createRequestListener =
       }
 
       try {
-        middleware(req, res, (nextError) => run(index + 1, nextError));
+        const result: unknown = middleware(req, res, (nextError) => run(index + 1, nextError));
+
+        // An async middleware rejects instead of throwing; without this the request stays open.
+        if (typeof (result as PromiseLike<unknown> | undefined)?.then === 'function') {
+          (result as PromiseLike<unknown>).then(undefined, (rejected: unknown) =>
+            sendError(res, rejected, logger),
+          );
+        }
       } catch (thrown) {
         sendError(res, thrown, logger);
       }

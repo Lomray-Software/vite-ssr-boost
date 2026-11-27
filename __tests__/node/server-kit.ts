@@ -112,6 +112,31 @@ describe('node/server-kit', () => {
       });
     });
 
+    it('should answer 500 and log when an async middleware rejects', async () => {
+      const logger = { error: vi.fn<(message: string) => void>() };
+      const url = await serve(
+        [
+          async () => {
+            await Promise.resolve();
+
+            throw new Error('async boom');
+          },
+        ],
+        logger,
+      );
+
+      const result = await request(url);
+
+      expect(result).toEqual({
+        status: 500,
+        cacheControl: 'no-store',
+        body: 'Internal Server Error',
+      });
+      expect(logger.error).toHaveBeenCalledWith('Failed to handle request: async boom', {
+        error: expect.any(Error),
+      });
+    });
+
     it('should keep a client error status passed to next without logging', async () => {
       const logger = { error: vi.fn<(message: string) => void>() };
       const url = await serve(
