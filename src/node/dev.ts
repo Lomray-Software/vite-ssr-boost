@@ -59,12 +59,20 @@ interface IDevServer extends IDevApp {
 }
 
 /**
+ * Whether this Vite reads HMR server options from server.ws: Vite 8.1 moved them from server.hmr.
+ */
+const readsWsOptions = (version: string): boolean => {
+  const [major, minor] = version.split('.').map(Number);
+
+  return major > 8 || (major === 8 && minor >= 1);
+};
+
+/**
  * Vite 8.1 moved the custom HMR server from server.hmr to server.ws and warns on the old key.
  */
 const hmrOption = (version: string, server: TLifecycleServer): InlineConfig['server'] => {
-  const [major, minor] = version.split('.').map(Number);
   // Vite 6 and 7 types know neither server.ws nor WsOptions, so the key is chosen untyped.
-  const key = major > 8 || (major === 8 && minor >= 1) ? 'ws' : 'hmr';
+  const key = readsWsOptions(version) ? 'ws' : 'hmr';
   const option: Record<string, unknown> = { [key]: { server } };
 
   return option;
@@ -82,19 +90,24 @@ const isOwnHmr = (option: unknown): boolean =>
       ('port' in option && option.port !== undefined)));
 
 /**
+ * Whether the project set its own HMR: before Vite 8.1 server.ws only turns the websocket off,
+ * so an object there is ignored by Vite and leaves HMR to the parent server.
+ */
+const hasOwnHmr = (version: string, options?: Record<string, unknown>): boolean =>
+  isOwnHmr(options?.hmr) ||
+  (readsWsOptions(version) ? isOwnHmr(options?.ws) : options?.ws === false);
+
+/**
  * Put HMR on the parent server unless the project turned it off or gave it a server of its own:
  * the hook reads the config file and inline config merged, under both `server.hmr` and `server.ws`.
  */
 const parentHmrPlugin = (version: string, server: TLifecycleServer): Plugin => ({
   name: 'vite-ssr-boost:parent-hmr',
   enforce: 'post',
-  config: (userConfig) => {
-    const options = userConfig.server as Record<string, unknown> | undefined;
-
-    return isOwnHmr(options?.hmr) || isOwnHmr(options?.ws)
+  config: (userConfig) =>
+    hasOwnHmr(version, userConfig.server as Record<string, unknown> | undefined)
       ? undefined
-      : { server: hmrOption(version, server) };
-  },
+      : { server: hmrOption(version, server) },
 });
 
 /**
@@ -367,6 +380,6 @@ const createDevServer = async ({
   };
 };
 
-export { createDevServer, prepareDev };
+export { createDevServer, hasOwnHmr, prepareDev };
 
 export type { ICreateDevServerOptions, IDevApp, IDevServer, IPrepareDevOptions };

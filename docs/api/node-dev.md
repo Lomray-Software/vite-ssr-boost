@@ -84,6 +84,10 @@ and attaches HMR to `server` instead of opening a port of its own. Mount `viteMi
 the handler and pass the URL the browser sent: Vite strips the base path from `req.url`, and keeps
 the original in `req.originalUrl`.
 
+A project that sets its own HMR server or turns HMR off keeps that setting. Vite reads HMR server
+options from `server.hmr`, and from `server.ws` since Vite 8.1. Before 8.1, `server.ws` only takes
+`false`, so an object there leaves HMR on the parent server.
+
 ```ts
 import http from 'node:http';
 import adapterNode from '@lomray/vite-ssr-boost/adapters/node';

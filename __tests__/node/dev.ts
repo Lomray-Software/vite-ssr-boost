@@ -8,10 +8,10 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { InlineConfig, Logger } from 'vite';
-import { createLogger } from 'vite';
+import { createLogger, version as viteVersion } from 'vite';
 import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDevServer } from '@node/dev';
+import { createDevServer, hasOwnHmr } from '@node/dev';
 import type { ICreateDevServerOptions, IDevServer } from '@node/dev';
 import ServerConfig from '@services/server-config';
 import ViteSsrBoostPlugin from '../../src/plugin';
@@ -271,6 +271,29 @@ afterEach(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
+describe('hasOwnHmr', () => {
+  it('reads server.ws options only on Vite 8.1 and later', () => {
+    const own = http.createServer();
+
+    for (const version of ['6.4.3', '7.3.6', '8.0.9']) {
+      expect(hasOwnHmr(version, { ws: { port: 24680 } })).toBe(false);
+      expect(hasOwnHmr(version, { ws: { server: own } })).toBe(false);
+      expect(hasOwnHmr(version, { ws: false })).toBe(true);
+      expect(hasOwnHmr(version, { hmr: { port: 24680 } })).toBe(true);
+    }
+
+    for (const version of ['8.1.0', '8.3.8', '9.0.0']) {
+      expect(hasOwnHmr(version, { ws: { port: 24680 } })).toBe(true);
+      expect(hasOwnHmr(version, { ws: { server: own } })).toBe(true);
+      expect(hasOwnHmr(version, { ws: false })).toBe(true);
+      expect(hasOwnHmr(version, { hmr: { port: 24680 } })).toBe(true);
+    }
+
+    expect(hasOwnHmr('8.3.8', undefined)).toBe(false);
+    expect(hasOwnHmr('8.3.8', { ws: {}, hmr: true })).toBe(false);
+  });
+});
+
 describe('createDevServer', { timeout: 30000 }, () => {
   it('renders through Vite and keeps the client entry synchronous', async () => {
     writeProject();
@@ -454,9 +477,21 @@ export default defineEntry(App, routes, {
       });
       const resolved = app.vite.config.server as unknown as Record<string, unknown>;
 
+      expect((await request(`${url}/`)).body).toContain('Home v1');
+
+      // Before Vite 8.1 server.ws only turns HMR off, so a server there leaves HMR on the parent.
+      if (key === 'ws' && !hasOwnHmr(viteVersion, { ws: { server: own } })) {
+        expect(app.server.listenerCount('upgrade')).toBeGreaterThan(0);
+
+        const { socket, message } = await connectHmr(app, url);
+
+        expect(JSON.parse(message)).toMatchObject({ type: 'connected' });
+        socket.destroy();
+        continue;
+      }
+
       expect(app.server.listenerCount('upgrade')).toBe(0);
       expect(resolved[key]).toMatchObject({ server: own });
-      expect((await request(`${url}/`)).body).toContain('Home v1');
     }
   });
 
@@ -477,10 +512,22 @@ export default defineEntry(App, routes, {
       });
       const resolved = app.vite.config.server as unknown as Record<string, unknown>;
 
+      expect((await request(`${url}/`)).body).toContain('Home v1');
+
+      // Before Vite 8.1 server.ws only turns HMR off, so a port there leaves HMR on the parent.
+      if (key === 'ws' && !hasOwnHmr(viteVersion, { ws: { port } })) {
+        expect(app.server.listenerCount('upgrade')).toBeGreaterThan(0);
+
+        const { socket, message } = await connectHmr(app, url);
+
+        expect(JSON.parse(message)).toMatchObject({ type: 'connected' });
+        socket.destroy();
+        continue;
+      }
+
       expect(app.server.listenerCount('upgrade')).toBe(0);
       expect(resolved[key]).toMatchObject({ port });
       expect((resolved[key] as { server?: unknown }).server).toBeUndefined();
-      expect((await request(`${url}/`)).body).toContain('Home v1');
 
       const { socket, message } = await connectHmr(app, url.replace(/:\d+$/, `:${port}`));
 
