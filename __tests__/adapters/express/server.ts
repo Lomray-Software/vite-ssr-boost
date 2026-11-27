@@ -1,7 +1,10 @@
 // @vitest-environment node
+import http from 'node:http';
 import type { RequestListener } from 'node:http';
+import type { Express } from 'express';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import createServer from '@adapters/express/server';
+import type { ICreateServerOut } from '@adapters/express/server';
 
 const {
   appUse,
@@ -32,7 +35,7 @@ const {
   printServerInfoMock: vi.fn(),
 }));
 
-appDisable.mockImplementation(() => ({ use: appUse, set: vi.fn() }));
+appDisable.mockImplementation(() => Object.assign(vi.fn(), { use: appUse, set: vi.fn() }));
 expressStaticMock.mockImplementation(() => 'static-middleware');
 compressionMock.mockImplementation(() => 'compression-middleware');
 createViteServer.mockResolvedValue({
@@ -440,24 +443,73 @@ describe('node server', () => {
 
   it('should answer health probes before application middleware once running', async () => {
     const result = await createServer(createDevConfig() as never, { health: true });
-    const [health] = appUse.mock.calls[0] as [
-      (req: unknown, res: unknown, next: () => void) => void,
-    ];
-    const next = vi.fn();
+
+    result.run({ isPrintInfo: false });
+
+    const [listener] = vi.mocked(http.createServer).mock.calls[0] as [RequestListener];
     const end = vi.fn();
     const res = { writeHead: vi.fn(() => ({ end })) };
+    const page = { url: '/about', method: 'GET' };
 
-    health({ url: '/readyz', method: 'GET' }, res, next);
+    expect(appUse).not.toHaveBeenCalledWith(expect.any(Function));
 
-    expect(next).toHaveBeenCalledTimes(1);
+    listener({ url: '/readyz', method: 'GET' } as never, res as never);
+
+    expect(res.writeHead).toHaveBeenLastCalledWith(503, expect.anything());
+
+    await flush();
+    listener({ url: '/readyz', method: 'GET' } as never, res as never);
+    listener(page as never, res as never);
+
+    expect(res.writeHead).toHaveBeenLastCalledWith(200, expect.anything());
+    expect(end).toHaveBeenLastCalledWith('ok');
+    expect(result.app).toHaveBeenCalledTimes(1);
+    expect(result.app).toHaveBeenCalledWith(page, res);
+  });
+
+  it('should answer readiness of each started server from its own lifecycle', async () => {
+    const result = await createServer(createDevConfig() as never, {
+      health: true,
+      readinessGraceMs: 50,
+    });
 
     result.run({ isPrintInfo: false });
     await flush();
-    health({ url: '/readyz', method: 'GET' }, res, next);
 
-    expect(next).toHaveBeenCalledTimes(1);
-    expect(res.writeHead).toHaveBeenCalledWith(200, expect.anything());
-    expect(end).toHaveBeenCalledWith('ok');
+    const first = result.getLifecycle()!;
+
+    result.run({ isPrintInfo: false });
+    await flush();
+
+    const [[draining], [running]] = vi.mocked(http.createServer).mock.calls as [RequestListener][];
+    const closed = first.close();
+    const res = { writeHead: vi.fn(() => ({ end: vi.fn() })) };
+
+    draining({ url: '/readyz', method: 'GET' } as never, res as never);
+
+    expect(res.writeHead).toHaveBeenLastCalledWith(503, expect.anything());
+
+    running({ url: '/readyz', method: 'GET' } as never, res as never);
+
+    expect(res.writeHead).toHaveBeenLastCalledWith(200, expect.anything());
+
+    await closed;
+    await result.getLifecycle()!.close();
+  });
+
+  it('should keep the 8.6 result shape for code that implements it', () => {
+    // Type-checked by ts:check: an 8.6 double with app and run alone still satisfies the type.
+    const double = { app: vi.fn() as unknown as Express, run: vi.fn() } satisfies ICreateServerOut;
+
+    expect(Object.keys(double)).toEqual(['app', 'run']);
+  });
+
+  it('should pass the application itself to the server without health probes', async () => {
+    const result = await createServer(createDevConfig() as never);
+
+    result.run({ isPrintInfo: false });
+
+    expect(vi.mocked(http.createServer)).toHaveBeenCalledWith(result.app);
   });
 
   it('should create its own dev Vite in middleware mode when none is supplied', async () => {

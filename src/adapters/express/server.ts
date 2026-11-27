@@ -1,4 +1,5 @@
 import http from 'node:http';
+import type { RequestListener } from 'node:http';
 import https from 'node:https';
 import type { Server } from 'node:net';
 import path from 'node:path';
@@ -21,6 +22,9 @@ import type ServerConfig from '@services/server-config';
 export interface ICreateServerOut {
   run: (options?: { version?: string; isPrintInfo?: boolean }) => Server;
   app: Express;
+}
+
+export interface ICreateServerResult extends ICreateServerOut {
   /** Drain, timeouts and health of the server the last run() started. */
   getLifecycle: () => ILifecycle | undefined;
 }
@@ -33,16 +37,9 @@ async function createServer(
   config: ServerConfig,
   lifecycleOptions: ILifecycleOptions = {},
   devVite?: ViteDevServer,
-): Promise<ICreateServerOut> {
+): Promise<ICreateServerResult> {
   const app = express().disable('x-powered-by');
   let lifecycle: ILifecycle | undefined;
-
-  if (lifecycleOptions.health) {
-    /**
-     * Answer health probes before any application middleware.
-     */
-    app.use((req, res, next) => (lifecycle ? lifecycle.health(req, res, next) : next()));
-  }
 
   if (config.isProd) {
     app.set('env', 'production');
@@ -190,9 +187,17 @@ async function createServer(
         mountedVite.config.server.host = host;
       }
 
+      /**
+       * Answer health probes of this server from its own lifecycle, before the application.
+       */
+      const healthListener: RequestListener = (req, res) =>
+        runLifecycle.health(req, res, () => {
+          app(req, res);
+        });
+      const listener = lifecycleOptions.health ? healthListener : app;
       const server = isHTTPS
-        ? https.createServer(transportVite!.config.server.https!, app)
-        : http.createServer(app);
+        ? https.createServer(transportVite!.config.server.https!, listener)
+        : http.createServer(listener);
 
       const { onClose } = lifecycleOptions;
 
