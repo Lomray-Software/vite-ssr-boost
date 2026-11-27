@@ -701,7 +701,7 @@ describe('node server', () => {
     expect(vite.close).toHaveBeenCalledOnce();
   });
 
-  it('should hold a drain after a native close until the shared Vite closed', async () => {
+  it('should close the shared Vite from a drain after a native close and wait for it', async () => {
     let release: (() => void) | undefined;
     let isSettled = false;
     const close = vi.fn(
@@ -716,7 +716,7 @@ describe('node server', () => {
     await flush();
     server.emit('close');
 
-    expect(close).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
 
     const closed = result
       .getLifecycle()!
@@ -751,24 +751,34 @@ describe('node server', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('should log a shared Vite close that throws at once after a native close', async () => {
-    const failure = new Error('vite close failed');
-    const error = vi.fn();
-    const close = vi.fn((): Promise<void> => {
-      throw failure;
-    });
-    const config = { ...createClosingDevConfig(close), getLogger: () => ({ error }) };
-    const server = (await createServer(config as never)).run({ isPrintInfo: false });
+  it('should keep the shared Vite open after a native close so a later run serves on it', async () => {
+    const vite = createViteDouble('shared-middleware');
+
+    createViteServer.mockResolvedValueOnce(vite);
+
+    const started = await createServer(createStatefulDevConfig() as never);
+    const server = started.run({ isPrintInfo: false });
 
     await flush();
 
-    expect(() => server.emit('close')).not.toThrow();
+    const first = started.getLifecycle()!;
 
+    server.emit('close');
+
+    expect(vite.close).not.toHaveBeenCalled();
+
+    started.run({ isPrintInfo: false });
     await flush();
 
-    expect(error).toHaveBeenCalledWith(expect.stringContaining('vite close failed'), {
-      error: failure,
-    });
+    const second = started.getLifecycle()!;
+
+    await first.close();
+
+    expect(vite.close).not.toHaveBeenCalled();
+
+    await second.close();
+
+    expect(vite.close).toHaveBeenCalledOnce();
   });
 
   it('should mount a supplied dev Vite without creating another', async () => {

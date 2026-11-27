@@ -55,8 +55,10 @@ async function createServer(
   let ownVite: ViteDevServer | undefined;
   // The Vite this start mounted: its drain closes this one, never a later start's.
   let mountedVite: ViteDevServer | undefined;
-  // Servers run() started on the mounted Vite; the last one to drain closes it.
+  // Servers run() started on the mounted Vite that still hold it; a drain finding none closes it.
   let viteUsers = 0;
+  // The mounted Vite's close, started once, so every drain that closes it waits for the same one.
+  let viteClosing: Promise<void> | undefined;
 
   try {
     if (!config.isProd) {
@@ -204,32 +206,39 @@ async function createServer(
       const { onClose } = lifecycleOptions;
       // Set once listen() returned: a run whose listen threw never held the shared Vite.
       let isCounted = false;
-      // The last holder's Vite close, once this run released its hold.
-      let viteRelease: Promise<void> | undefined;
 
       /**
-       * Give up this run's hold on the shared dev Vite once; the last holder closes it.
-       * Decided before any await, so two closes at once never both close the Vite. A later call
-       * answers the same close, so a drain after a native close still waits for it.
+       * Give up this run's hold on the shared dev Vite once. A native close does only this, as in
+       * 8.6, so a later run() on the same result still serves on that Vite.
        */
-      const releaseVite = (): Promise<void> | undefined => {
+      const releaseHold = (): void => {
         if (!isCounted) {
-          return viteRelease;
+          return;
         }
 
         isCounted = false;
         viteUsers -= 1;
+      };
+
+      /**
+       * Release this run's hold and close the shared dev Vite when no run holds it any more.
+       * Decided before any await, so two drains at once never both close the Vite.
+       */
+      const closeViteWhenFree = (): Promise<void> | undefined => {
+        releaseHold();
 
         const vite = viteUsers === 0 ? mountedVite : undefined;
 
-        // A synchronous throw rejects the promise, so the onClose hook and the logger still run.
-        viteRelease =
-          vite &&
-          new Promise<void>((resolve) => {
-            resolve(vite.close());
-          });
+        if (!vite) {
+          return undefined;
+        }
 
-        return viteRelease;
+        // A synchronous throw rejects the promise, so the onClose hook still runs.
+        viteClosing ??= new Promise<void>((resolve) => {
+          resolve(vite.close());
+        });
+
+        return viteClosing;
       };
 
       const runLifecycle = createLifecycle(server, {
@@ -238,10 +247,10 @@ async function createServer(
         onClose: config.isProd
           ? onClose
           : async () => {
-              const viteClosing = releaseVite();
+              const closing = closeViteWhenFree();
 
               await settleAll(
-                () => viteClosing,
+                () => closing,
                 () => onClose?.(),
               );
             },
@@ -276,20 +285,12 @@ async function createServer(
         isCounted = true;
         viteUsers += 1;
 
-        // A native close() releases the hold too; during a drain the lifecycle releases it after
-        // its hooks, so the Vite still closes last.
+        // A native close() releases the hold but leaves the Vite open; during a drain the
+        // lifecycle releases it after its hooks, so the Vite still closes last.
         server.once('close', () => {
-          if (runLifecycle.isDraining()) {
-            return;
+          if (!runLifecycle.isDraining()) {
+            releaseHold();
           }
-
-          releaseVite()?.catch((error: unknown) => {
-            config
-              .getLogger()
-              .error(`Failed to close the dev server: ${(error as Error)?.message}`, {
-                error: error as Error,
-              });
-          });
         });
       }
 
