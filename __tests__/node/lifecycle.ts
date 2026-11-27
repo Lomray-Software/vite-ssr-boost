@@ -1,16 +1,27 @@
 // @vitest-environment node
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import type { AddressInfo, Socket } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { transformSync } from 'esbuild';
+import { buildSync } from 'esbuild';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import createLifecycle, { trackNativeBind } from '@node/lifecycle';
+import createLifecycle, { resolveHealthPaths, trackNativeBind } from '@node/lifecycle';
 import type { ILifecycle } from '@node/lifecycle';
 
 const servers: http.Server[] = [];
+
+/**
+ * Bundle the lifecycle module with its imports into one ESM source that a child process runs.
+ */
+const bundleLifecycle = (): string =>
+  buildSync({
+    entryPoints: [fileURLToPath(new URL('../../src/node/lifecycle.ts', import.meta.url))],
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    write: false,
+  }).outputFiles[0].text;
 
 /**
  * Start a server whose handler is supplied by the test.
@@ -50,6 +61,23 @@ const getText = (url: string, agent?: http.Agent): Promise<{ status: number; bod
         res.on('error', reject);
       })
       .on('error', reject);
+  });
+
+/**
+ * Send one GET with the given request target over a raw socket and collect the whole answer.
+ */
+const rawGet = (server: http.Server, target: string): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const socket = net.connect((server.address() as AddressInfo).port, '127.0.0.1');
+    let answer = '';
+
+    socket.setEncoding('utf8');
+    socket.on('data', (chunk: string) => {
+      answer += chunk;
+    });
+    socket.on('end', () => resolve(answer));
+    socket.on('error', reject);
+    socket.write(`GET ${target} HTTP/1.1\r\nHost: service\r\nConnection: close\r\n\r\n`);
   });
 
 /**
@@ -152,6 +180,35 @@ describe('createLifecycle', () => {
     const closing = lifecycle.close();
 
     expect(await getText(`${url}/readyz`)).toEqual({ status: 503, body: 'unavailable' });
+    await lifecycle.force();
+    await closing.catch(() => undefined);
+  });
+
+  it('returns new probe paths on each call, so changing one leaves the defaults', () => {
+    const first = resolveHealthPaths(true)!;
+
+    first.readyPath = '/changed';
+
+    expect(resolveHealthPaths(true)).toEqual({ livePath: '/healthz', readyPath: '/readyz' });
+  });
+
+  it('matches an absolute-form probe target by its path', async () => {
+    let lifecycle!: ILifecycle;
+    const { server } = await listen(
+      (req, res) => lifecycle.health(req, res, () => res.end('app')),
+      (instance) => {
+        lifecycle = createLifecycle(instance, { health: true, readinessGraceMs: 2000 });
+
+        return lifecycle;
+      },
+    );
+
+    lifecycle.setReady();
+
+    const closing = lifecycle.close();
+
+    expect(await rawGet(server, 'http://service/readyz?probe=1')).toMatch(/^HTTP\/1\.1 503 /);
+    expect(await rawGet(server, 'http://service/healthz')).toMatch(/^HTTP\/1\.1 200 /);
     await lifecycle.force();
     await closing.catch(() => undefined);
   });
@@ -1391,11 +1448,7 @@ describe('createLifecycle', () => {
   });
 
   it('keeps the drain deadline alive on an otherwise idle process', () => {
-    const source = readFileSync(
-      fileURLToPath(new URL('../../src/node/lifecycle.ts', import.meta.url)),
-      'utf8',
-    );
-    const { code } = transformSync(source, { loader: 'ts', format: 'esm' });
+    const code = bundleLifecycle();
     const script = `${code}
 const lifecycle = createLifecycle((await import('node:http')).createServer(), {
   drainTimeoutMs: 50,
@@ -1407,15 +1460,12 @@ lifecycle.close().then(() => process.exit(0), () => process.exit(1));
       encoding: 'utf8',
     });
 
+    expect(child.stderr).toBe('');
     expect(child.status).toBe(1);
   });
 
   it('lets lifecycles of two loaded copies of the module hold signals at once', () => {
-    const source = readFileSync(
-      fileURLToPath(new URL('../../src/node/lifecycle.ts', import.meta.url)),
-      'utf8',
-    );
-    const { code } = transformSync(source, { loader: 'ts', format: 'esm' });
+    const code = bundleLifecycle();
     const script = `
 const http = await import('node:http');
 const toUrl = (copy) => 'data:text/javascript,' + encodeURIComponent(copy);
@@ -1465,11 +1515,7 @@ setTimeout(() => process.exit(0), 50);
   });
 
   it('reports a bind error of a listen nobody awaits as an unhandled rejection', () => {
-    const source = readFileSync(
-      fileURLToPath(new URL('../../src/node/lifecycle.ts', import.meta.url)),
-      'utf8',
-    );
-    const { code } = transformSync(source, { loader: 'ts', format: 'esm' });
+    const code = bundleLifecycle();
     const script = `${code}
 const http = await import('node:http');
 const address = await createLifecycle(http.createServer()).listen(0);

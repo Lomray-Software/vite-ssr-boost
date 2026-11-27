@@ -248,13 +248,14 @@ const createProductionServer = async ({
   onClose,
   ...prepareOptions
 }: ICreateProductionServerOptions = {}): Promise<IProductionServer> => {
-  resolveHealthPaths(health);
+  // Checked and copied before the entry loads, so a later change to the options never reaches it.
+  const healthPaths = resolveHealthPaths(health);
 
   const app = await prepareProduction(prepareOptions);
   const render = adapterNode(app.handler, { compression });
   const server = tls ? https.createServer(tls) : http.createServer();
   const lifecycle = createLifecycle(server, {
-    health,
+    health: healthPaths,
     drainTimeoutMs,
     readinessGraceMs,
     keepAliveTimeoutMs,

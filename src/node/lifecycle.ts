@@ -4,6 +4,7 @@ import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node
 import type { Server as HttpsServer } from 'node:https';
 import type { AddressInfo, Socket } from 'node:net';
 import type { Duplex } from 'node:stream';
+import getOriginForm from '@helpers/origin-form';
 
 type TNext = (error?: unknown) => void;
 
@@ -248,14 +249,13 @@ const resolveHealthPaths = (
     return undefined;
   }
 
-  // Path by path, so an explicit undefined (an unset environment variable) keeps its default.
-  const paths =
-    health === true
-      ? DEFAULT_HEALTH
-      : {
-          livePath: health.livePath ?? DEFAULT_HEALTH.livePath,
-          readyPath: health.readyPath ?? DEFAULT_HEALTH.readyPath,
-        };
+  const { livePath, readyPath } = health === true ? DEFAULT_HEALTH : health;
+  // Path by path, so an explicit undefined (an unset environment variable) keeps its default,
+  // and a new object on each call, so changing one result never moves another probe.
+  const paths = {
+    livePath: livePath ?? DEFAULT_HEALTH.livePath,
+    readyPath: readyPath ?? DEFAULT_HEALTH.readyPath,
+  };
 
   // One path for both probes would answer liveness on the readiness URL, 200 while draining.
   if (paths.livePath === paths.readyPath) {
@@ -430,9 +430,10 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
    * Answer probes without touching the application handler.
    */
   const health: ILifecycle['health'] = (req, res, next) => {
-    const [pathname] = (req.url ?? '/').split('?', 1);
-    const isLive = paths?.livePath === pathname;
-    const isReadyProbe = paths?.readyPath === pathname;
+    // An absolute-form target (`GET http://host/readyz`) matches by its path, as in serveStatic.
+    const pathname = getOriginForm(req.url ?? '/')?.split('?', 1)[0];
+    const isLive = pathname !== undefined && paths?.livePath === pathname;
+    const isReadyProbe = pathname !== undefined && paths?.readyPath === pathname;
 
     if (!isLive && !isReadyProbe) {
       next();

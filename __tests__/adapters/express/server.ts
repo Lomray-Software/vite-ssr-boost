@@ -448,6 +448,23 @@ describe('node server', () => {
     expect(createViteServer).not.toHaveBeenCalled();
   });
 
+  it('should keep the health paths it checked when the options change later', async () => {
+    const health = { readyPath: '/ready' };
+    const result = await createServer(createDevConfig() as never, { health });
+
+    health.readyPath = '/healthz';
+
+    expect(() => result.run({ isPrintInfo: false })).not.toThrow();
+
+    const [listener] = vi.mocked(http.createServer).mock.calls[0] as [RequestListener];
+    const end = vi.fn();
+    const res = { writeHead: vi.fn(() => ({ end })) };
+
+    listener({ url: '/ready', method: 'GET' } as never, res as never);
+
+    expect(res.writeHead).toHaveBeenLastCalledWith(503, expect.anything());
+  });
+
   it('should answer health probes before application middleware once running', async () => {
     const result = await createServer(createDevConfig() as never, { health: true });
 

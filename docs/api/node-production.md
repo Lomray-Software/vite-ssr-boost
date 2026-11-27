@@ -209,7 +209,8 @@ The two health probes need two paths: `createLifecycle` throws a `TypeError` whe
 `readyPath` resolve to the same path, since liveness would then answer 200 on the readiness URL
 while the server drains. A path given as `undefined` keeps its default. `createProductionServer`,
 `createDevServer` and the Express `createServer` check this before they start Vite or load the
-entry.
+entry, and keep the paths they checked. A probe matches an absolute-form target such as
+`GET http://host/readyz` by its path.
 
 Bind through `listen`, not `server.listen`: it applies the timeouts, rejects once `close()` has
 started or while an earlier native `server.close()` has not emitted `close`, and `close()` waits

@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import createServeStatic from 'serve-static';
 import type { ServeStaticOptions } from 'serve-static';
+import getOriginForm from '@helpers/origin-form';
 
 type TNext = (error?: unknown) => void;
 
@@ -79,25 +80,6 @@ const getShellKey = (pathname: string): string =>
   path.posix.normalize(pathname.replace(/\\/g, '/')).toLowerCase();
 
 export { getShellKey };
-
-/**
- * Origin-form target of a request: an absolute-form target (`GET http://host/path`) keeps only
- * its path and query, so the shell check and serve-static read the same path. Undefined when
- * the target is neither form, which leaves the request to the next handler.
- */
-const getOriginForm = (url: string): string | undefined => {
-  if (url.startsWith('/')) {
-    return url;
-  }
-
-  try {
-    const { protocol, pathname, search } = new URL(url);
-
-    return protocol === 'http:' || protocol === 'https:' ? `${pathname}${search}` : undefined;
-  } catch {
-    return undefined;
-  }
-};
 
 /**
  * Lowercased mount prefix without trailing slashes; the root mount is empty.

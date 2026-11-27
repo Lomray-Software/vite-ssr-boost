@@ -655,6 +655,23 @@ export default defineEntry(App, routes, {
     expect(configureServer).not.toHaveBeenCalled();
   });
 
+  it('keeps the health paths it checked when the options change during the start', async () => {
+    writeProject();
+
+    const health = { readyPath: '/ready' };
+    const starting = start({ health, readinessGraceMs: 300 });
+
+    health.readyPath = '/healthz';
+
+    const { app, url } = await starting;
+    const closed = app.close();
+
+    expect((await request(`${url}/ready`)).status).toBe(503);
+
+    await closed;
+    started = [];
+  });
+
   it('answers readiness 503 and keeps accepting during the readiness grace', async () => {
     writeProject();
 

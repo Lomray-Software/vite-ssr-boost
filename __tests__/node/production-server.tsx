@@ -211,6 +211,17 @@ describe('prepareProduction', () => {
     expect(loadEntry).not.toHaveBeenCalled();
   });
 
+  it('keeps the health paths it checked when the options change during the start', async () => {
+    const health = { livePath: '/live' };
+    const starting = start({ health });
+
+    health.livePath = '/readyz';
+
+    const { url } = await starting;
+
+    expect((await request(`${url}/live`)).body.toString()).toBe('ok');
+  });
+
   it('rejects a missing explicit build directory beside a valid conventional one', async () => {
     const originalCwd = process.cwd();
 

@@ -284,7 +284,8 @@ const createDevServer = async ({
   onClose,
   ...prepareOptions
 }: ICreateDevServerOptions = {}): Promise<IDevServer> => {
-  resolveHealthPaths(health);
+  // Checked and copied before Vite starts, so a later change to the options never reaches it.
+  const healthPaths = resolveHealthPaths(health);
 
   const { resolveConfig } = await import('vite');
   // TLS is chosen in the same mode Vite then runs in.
@@ -299,7 +300,7 @@ const createDevServer = async ({
   const app = await prepareDev({ ...prepareOptions, mode, server });
   const render = adapterNode(app.handler, { compression });
   const lifecycle = createLifecycle(server, {
-    health,
+    health: healthPaths,
     drainTimeoutMs,
     readinessGraceMs,
     keepAliveTimeoutMs,
