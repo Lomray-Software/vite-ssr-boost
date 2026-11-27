@@ -1,44 +1,54 @@
 import path from 'node:path';
+import { parse } from 'parse5';
+import type { DefaultTreeAdapterTypes } from 'parse5';
 
-const SCRIPT_TAG = /<script\b[^>]*>/gi;
-const ATTRIBUTE = /(\s+)([^\s"'<>/=]+)(?:(\s*=\s*)("[^"]*"|'[^']*'|[^\s"'=<>`]+))?/g;
-
-/**
- * Value of an HTML attribute with its quotes removed.
- */
-const unquote = (value: string): string =>
-  value.startsWith('"') || value.startsWith("'") ? value.slice(1, -1) : value;
+type TNode = DefaultTreeAdapterTypes.ChildNode | DefaultTreeAdapterTypes.Document;
 
 /**
- * Pathname of a script src without query and fragment, with one leading slash.
+ * Pathname of a script src without query and fragment, normalized with one leading slash.
  */
-const getSrcPath = (src: string): string => `/${src.split(/[?#]/, 1)[0].replace(/^\/+/, '')}`;
+const getSrcPath = (src: string): string =>
+  path.posix.normalize(`/${src.split(/[?#]/, 1)[0].replace(/^\/+/, '')}`);
+
+/**
+ * Collect the source ranges of async attributes on scripts whose src is the entry.
+ */
+const collectAsyncRanges = (node: TNode, entryPath: string, ranges: [number, number][]): void => {
+  if ('tagName' in node && node.tagName === 'script') {
+    const src = node.attrs.find(({ name }) => name === 'src');
+    const location = node.sourceCodeLocation?.attrs?.async;
+
+    if (src?.value && location && getSrcPath(src.value) === entryPath) {
+      ranges.push([location.startOffset, location.endOffset]);
+    }
+  }
+
+  if ('childNodes' in node) {
+    node.childNodes.forEach((child) => collectAsyncRanges(child, entryPath, ranges));
+  }
+};
 
 /**
  * Remove async from the client entry script, so plugin preambles run before it.
- * The entry is found by the exact pathname of its src, wherever the attributes stand.
+ * The entry is found by the exact pathname of its src, as the HTML parser reads the document.
  */
 const stripEntryAsync = (html: string, base: string | undefined, clientFile: string): string => {
   const entryPath = getSrcPath(path.posix.normalize(`${base ?? '/'}/${clientFile}`));
+  const ranges: [number, number][] = [];
 
-  return html.replace(SCRIPT_TAG, (tag) => {
-    const attributes = [...tag.matchAll(ATTRIBUTE)];
-    const src = attributes.find(([, , name, , value]) => name.toLowerCase() === 'src' && value);
+  collectAsyncRanges(parse(html, { sourceCodeLocationInfo: true }), entryPath, ranges);
 
-    if (!src || getSrcPath(unquote(src[4])) !== entryPath) {
-      return tag;
-    }
+  if (!ranges.length) {
+    return html;
+  }
 
-    // Cut by position from the end, so text inside another attribute value is never touched.
-    return attributes
-      .filter(([, , name]) => name.toLowerCase() === 'async')
-      .reverse()
-      .reduce(
-        (result, { 0: attribute, index }) =>
-          result.slice(0, index) + result.slice(index + attribute.length),
-        tag,
-      );
-  });
+  // Cut by position from the end, together with the whitespace before each attribute.
+  const result = ranges
+    .sort(([left], [right]) => right - left)
+    .reduce((text, [start, end]) => text.slice(0, start).trimEnd() + text.slice(end), html);
+
+  // The parser reports only the first of repeated attributes, so a repeated async needs a pass.
+  return stripEntryAsync(result, base, clientFile);
 };
 
 export default stripEntryAsync;

@@ -54,4 +54,38 @@ describe('stripEntryAsync', () => {
       '<script src="app/client.ts"></script><script src="/client.ts" async></script>',
     );
   });
+
+  it('should read a tag whose attribute value holds a closing bracket', () => {
+    const html = '<script data-note="a > b" src="/client.ts" async></script>';
+
+    expect(stripEntryAsync(html, '/', 'client.ts')).toBe(
+      '<script data-note="a > b" src="/client.ts"></script>',
+    );
+  });
+
+  it('should leave a script tag written inside an inline script byte for byte', () => {
+    const html = [
+      '<script>const tag = \'<script src="/client.ts" async>\';</script>',
+      '<script src="/client.ts" async></script>',
+    ].join('');
+
+    expect(stripEntryAsync(html, '/', 'client.ts')).toBe(
+      '<script>const tag = \'<script src="/client.ts" async>\';</script>' +
+        '<script src="/client.ts"></script>',
+    );
+  });
+
+  it('should match the entry under a relative base', () => {
+    const html = '<script type="module" src="./client.ts" async></script>';
+
+    expect(stripEntryAsync(html, './', 'client.ts')).toBe(
+      '<script type="module" src="./client.ts"></script>',
+    );
+  });
+
+  it('should remove a repeated async attribute', () => {
+    const html = '<script async src="/client.ts" async></script>';
+
+    expect(stripEntryAsync(html, '/', 'client.ts')).toBe('<script src="/client.ts"></script>');
+  });
 });
