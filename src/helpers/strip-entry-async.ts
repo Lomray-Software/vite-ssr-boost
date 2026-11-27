@@ -5,30 +5,51 @@ import type { DefaultTreeAdapterTypes } from 'parse5';
 type TNode = DefaultTreeAdapterTypes.ChildNode | DefaultTreeAdapterTypes.Document;
 
 /**
- * Pathname a src resolves to from a directory, without query and fragment, as the browser reads
- * it: surrounding ASCII whitespace dropped, a relative src under the directory.
- * A src naming another host or scheme, or climbing with `..`, is never the entry.
+ * Origin the document, base and src URLs are resolved against; the reserved TLD never resolves.
  */
-const getSrcPath = (src: string, directory: string): string | undefined => {
-  const [pathname] = src.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '').split(/[?#]/, 1);
+const ORIGIN = 'http://document.invalid';
 
-  if (
-    /^[a-z][a-z\d+.-]*:/i.test(pathname) ||
-    /^[\\/]{2}/.test(pathname) ||
-    pathname.includes('\\') ||
-    pathname.split('/').includes('..')
-  ) {
+/**
+ * Drop the ASCII whitespace the browser trims around an attribute URL.
+ */
+const trimUrl = (value: string): string => value.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '');
+
+/**
+ * Parse a URL against a base as the browser does, or undefined when it does not parse.
+ */
+const parseUrl = (value: string, base?: URL | string): URL | undefined => {
+  try {
+    return new URL(value, base);
+  } catch {
     return undefined;
   }
-
-  return path.posix.normalize(pathname.startsWith('/') ? pathname : `${directory}/${pathname}`);
 };
 
 /**
- * Directory of a resolved pathname: the path itself when it ends with a slash.
+ * Whether a src names a scheme or another host, contains a backslash or climbs with a dot
+ * segment. Such a src is never the entry.
  */
-const getDirectory = (pathname: string): string =>
-  pathname.endsWith('/') ? pathname : path.posix.dirname(pathname);
+const isForeignSrc = (src: string): boolean => {
+  const [pathname] = src.split(/[?#]/, 1);
+
+  return (
+    /^[a-z][a-z\d+.-]*:/i.test(pathname) ||
+    /^[\\/]{2}/.test(pathname) ||
+    pathname.includes('\\') ||
+    pathname.split('/').some((segment) => /^(\.|%2e){2}$/i.test(segment))
+  );
+};
+
+/**
+ * Pathname a src resolves to from the base URL with the browser URL rules, query and fragment
+ * ignored and empty segments kept.
+ */
+const getSrcPath = (src: string, base: URL): string | undefined => {
+  const value = trimUrl(src);
+  const url = isForeignSrc(value) ? undefined : parseUrl(value, base);
+
+  return url?.origin === base.origin ? url.pathname : undefined;
+};
 
 /**
  * Find the first base element with an href, which the browser resolves every src against.
@@ -61,27 +82,27 @@ const findBaseHref = (node: TNode): string | undefined => {
 const collectAsyncRanges = (
   node: TNode,
   entryPath: string,
-  directory: string,
+  base: URL,
   ranges: [number, number][],
 ): void => {
   if ('tagName' in node && node.tagName === 'script') {
     const src = node.attrs.find(({ name }) => name === 'src');
     const location = node.sourceCodeLocation?.attrs?.async;
 
-    if (src?.value && location && getSrcPath(src.value, directory) === entryPath) {
+    if (src?.value && location && getSrcPath(src.value, base) === entryPath) {
       ranges.push([location.startOffset, location.endOffset]);
     }
   }
 
   if ('childNodes' in node) {
-    node.childNodes.forEach((child) => collectAsyncRanges(child, entryPath, directory, ranges));
+    node.childNodes.forEach((child) => collectAsyncRanges(child, entryPath, base, ranges));
   }
 };
 
 /**
  * Remove async from the client entry script, so plugin preambles run before it.
  * The entry is found by the exact pathname its src resolves to from the document URL, or from
- * the base element, as the HTML parser reads the document.
+ * the base element, with the URL rules the browser applies.
  */
 const stripEntryAsync = (
   html: string,
@@ -89,20 +110,24 @@ const stripEntryAsync = (
   clientFile: string,
   documentUrl = '/',
 ): string => {
-  const entryPath = path.posix.normalize(`/${base ?? '/'}/${clientFile}`);
+  const entryPath = new URL(path.posix.normalize(`/${base ?? '/'}/${clientFile}`), ORIGIN).pathname;
   const document = parse(html, { sourceCodeLocationInfo: true });
-  const documentPath = getSrcPath(documentUrl, '/') ?? '/';
+  // The request target is a path on this origin, even when it starts with two slashes.
+  const documentBase =
+    (documentUrl.startsWith('/') && parseUrl(`${ORIGIN}${documentUrl}`)) || new URL('/', ORIGIN);
   const baseHref = findBaseHref(document);
-  const basePath =
-    baseHref === undefined ? documentPath : getSrcPath(baseHref, getDirectory(documentPath));
+  const baseValue = baseHref === undefined ? undefined : trimUrl(baseHref);
+  // A base href that does not parse leaves the document URL as the base, as in the browser.
+  const baseUrl =
+    baseValue === undefined ? documentBase : (parseUrl(baseValue, documentBase) ?? documentBase);
   const ranges: [number, number][] = [];
 
-  // A base element for another host or scheme sends every src there, so none is the entry.
-  if (basePath === undefined) {
+  // A base element with a scheme or for another host sends every src there, so none is the entry.
+  if (baseUrl.origin !== documentBase.origin) {
     return html;
   }
 
-  collectAsyncRanges(document, entryPath, getDirectory(basePath), ranges);
+  collectAsyncRanges(document, entryPath, baseUrl, ranges);
 
   if (!ranges.length) {
     return html;

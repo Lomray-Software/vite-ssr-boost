@@ -90,11 +90,18 @@ describe('stripEntryAsync', () => {
       '<script src="\\\\app/client.ts" async></script>',
       '<script src="https://cdn.test/app/client.ts" async></script>',
       '<script src="/app/../app/client.ts" async></script>',
+      '<script src="/app/x/%2E%2e/client.ts" async></script>',
     ].join('');
 
     expect(stripEntryAsync(others + entry, '/app/', 'client.ts')).toBe(
       `${others}<script src="/app/client.ts"></script>`,
     );
+  });
+
+  it('should keep async on a src with an empty segment, which names another path', () => {
+    const html = '<script src="/app//client.ts" async></script>';
+
+    expect(stripEntryAsync(html, '/app/', 'client.ts')).toBe(html);
   });
 
   it('should keep a no-break space that ends the attribute value before async', () => {
@@ -132,6 +139,15 @@ describe('stripEntryAsync', () => {
     const foreign = '<base href="https://cdn.test/"><script src="/client.ts" async></script>';
 
     expect(stripEntryAsync(foreign, '/', 'client.ts')).toBe(foreign);
+  });
+
+  it('should resolve a parent-relative base element from the document URL', () => {
+    const html = '<base href=" ../"><script src="client.ts" async></script>';
+
+    expect(stripEntryAsync(html, '/app/', 'client.ts', '/app/blog/post')).toBe(
+      '<base href=" ../"><script src="client.ts"></script>',
+    );
+    expect(stripEntryAsync(html, '/app/', 'client.ts', '/app/post')).toBe(html);
   });
 
   it('should drop the whitespace the browser trims around a src', () => {
