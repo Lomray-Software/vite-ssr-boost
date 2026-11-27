@@ -1,3 +1,5 @@
+import { errorMonitor } from 'node:events';
+import type { EventEmitter } from 'node:events';
 import http from 'node:http';
 import type { RequestListener } from 'node:http';
 import https from 'node:https';
@@ -178,6 +180,13 @@ async function createServer(
      * Start the configured transport and notify the server lifecycle hook.
      */
     run: ({ version, isPrintInfo = true } = {}): Server => {
+      // A drain closed the mounted Vite: a new server would serve on a closed one.
+      if (viteClosing) {
+        throw new Error(
+          'The dev Vite of this server was closed by a drain: call createServer again.',
+        );
+      }
+
       const { port, host } = config.getParams();
       // As in 8.6, prod takes TLS options only from a Vite the caller set on the config; the CLI
       // sets none in prod, so its production server is plain HTTP.
@@ -292,6 +301,22 @@ async function createServer(
             releaseHold();
           }
         });
+
+        /**
+         * A failed bind emits no close: release the hold there too. The monitor leaves the error
+         * to the server's own listeners, so an unhandled one still throws as Node does.
+         */
+        const onBindError = (): void => {
+          if (!server.listening) {
+            releaseHold();
+          }
+        };
+
+        // The http.Server typings list only string events; errorMonitor is a symbol.
+        const emitter: EventEmitter = server;
+
+        emitter.on(errorMonitor, onBindError);
+        server.once('listening', () => emitter.off(errorMonitor, onBindError));
       }
 
       lifecycle = runLifecycle;

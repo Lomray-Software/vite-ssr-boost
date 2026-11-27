@@ -781,6 +781,49 @@ describe('node server', () => {
     expect(vite.close).toHaveBeenCalledOnce();
   });
 
+  it('should release the hold of a run whose bind failed so a retry drain closes Vite', async () => {
+    const vite = createViteDouble('shared-middleware');
+    const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
+    const servers = await mockPendingServers();
+
+    createViteServer.mockResolvedValueOnce(vite);
+
+    const started = await createServer(createStatefulDevConfig() as never);
+    const onError = vi.fn();
+
+    started.run({ isPrintInfo: false }).once('error', onError);
+    servers[0].emit('error', failure);
+
+    expect(onError).toHaveBeenCalledWith(failure);
+
+    started.run({ isPrintInfo: false });
+    await flush();
+    await started.getLifecycle()!.close();
+
+    expect(vite.close).toHaveBeenCalledOnce();
+  });
+
+  it('should refuse a run after a drain closed the shared Vite', async () => {
+    const vite = createViteDouble('shared-middleware');
+
+    createViteServer.mockResolvedValueOnce(vite);
+
+    const started = await createServer(createStatefulDevConfig() as never);
+
+    started.run({ isPrintInfo: false });
+    await flush();
+
+    const first = started.getLifecycle()!;
+
+    await first.close();
+
+    const created = vi.mocked(http.createServer).mock.calls.length;
+
+    expect(() => started.run({ isPrintInfo: false })).toThrow(/createServer again/);
+    expect(vi.mocked(http.createServer).mock.calls.length).toBe(created);
+    expect(started.getLifecycle()).toBe(first);
+  });
+
   it('should mount a supplied dev Vite without creating another', async () => {
     const supplied = createViteDouble('supplied-middleware');
     const config = createStatefulDevConfig();
