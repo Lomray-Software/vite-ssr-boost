@@ -6,6 +6,7 @@ import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
 import PLUGIN_NAME from '@constants/plugin-name';
 import type { IPluginConfig } from '@helpers/plugin-config';
 import printServerInfo from '@helpers/print-server-info';
+import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
 import type { ILifecycle } from '@node/lifecycle';
 import { setCurrentEntrypointName } from '@plugins/handle-custom-entrypoint';
 import type { TManagedServer } from '@services/production-config';
@@ -62,9 +63,7 @@ const runNodeServer = async ({
     await app.listen(resolvedPort, host);
   } catch (error) {
     // a failed bind must not leave Vite watchers and HMR sockets behind
-    await app.close();
-
-    throw error;
+    return rethrowAfterCleanup(error, app.close, app.config.getLogger());
   }
 
   if (isPrintInfo) {
@@ -125,9 +124,7 @@ async function runDev(params: IRunDevParams): Promise<IRunDevOut> {
     server = created.run({ version, isPrintInfo });
     lifecycle = created.getLifecycle();
   } catch (error) {
-    await vite?.close();
-
-    throw error;
+    return rethrowAfterCleanup(error, () => vite?.close(), config.getLogger());
   }
 
   ownSignalsUnlessHandled(lifecycle);

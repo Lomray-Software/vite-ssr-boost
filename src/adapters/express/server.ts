@@ -11,6 +11,7 @@ import type { TRender } from '@adapters/express/render';
 import staticFiles from '@adapters/express/static-files';
 import createDevVite from '@cli/helpers/create-dev-vite';
 import printServerInfo from '@helpers/print-server-info';
+import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
 import createLifecycle, { trackNativeBind } from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions } from '@node/lifecycle';
 import ServerApi from '@services/server-api';
@@ -74,101 +75,100 @@ async function createServer(
     if (!config.getParams().isSPA) {
       await prepareServer.onAppCreated();
     }
-  } catch (error) {
-    await ownVite?.close();
 
-    throw error;
-  }
+    const { isSPA } = config.getParams();
 
-  const { isSPA } = config.getParams();
+    if (config.isProd) {
+      const { root, publicDir } = config.getParams();
+      const { compression: compressionConfig, expressStatic } =
+        prepareServer.getMiddlewaresConfig();
 
-  if (config.isProd) {
-    const { root, publicDir } = config.getParams();
-    const { compression: compressionConfig, expressStatic } = prepareServer.getMiddlewaresConfig();
+      if (compressionConfig) {
+        app.use(compression(compressionConfig));
+      }
 
-    if (compressionConfig) {
-      app.use(compression(compressionConfig));
+      if (!isSPA) {
+        /**
+         * ignore index.html file in SSR mode
+         */
+        app.use((req, _, next) => {
+          if (req.url === '/index.html' && !serverApi.hasAccessIndexHtml()) {
+            req.url = '/index-not-found.html';
+          }
+
+          next();
+        });
+      }
+
+      if (expressStatic) {
+        const { basename, ...expressStaticOpts } = expressStatic;
+
+        app.use(
+          basename!,
+          staticFiles(
+            path.resolve(`${root}/${publicDir}`),
+            { ...expressStaticOpts, index: isSPA ? undefined : false },
+            isSPA,
+          ),
+        );
+      }
     }
 
+    /**
+     * SSR mode
+     */
     if (!isSPA) {
-      /**
-       * ignore index.html file in SSR mode
-       */
-      app.use((req, _, next) => {
-        if (req.url === '/index.html' && !serverApi.hasAccessIndexHtml()) {
-          req.url = '/index-not-found.html';
-        }
+      app.use(/(.*)/, (req, res, next) => {
+        void (async () => {
+          try {
+            const { render, onRequest, ...renderParams } = await prepareServer.loadEntrypoint();
+            const renderInput: Parameters<TRender>[1] = {
+              req,
+              res,
+              appProps: {},
+              html: { header: '', footer: '' },
+            };
 
-        next();
+            await render(config, renderInput, {
+              ...renderParams,
+              onRequest,
+              onSkip: next,
+              /** Load and transform the template only after the Fetch guard allows it. */
+              getHtml: async () => {
+                const [header, footer] = await prepareServer.loadHtml(req);
+
+                return { header, footer };
+              },
+            });
+          } catch (e) {
+            config
+              .getLogger()
+              .error(`Failed to handle request: ${(e as Error)?.message}`, { error: e as Error });
+            next(e);
+          }
+        })();
+      });
+    } else {
+      /**
+       * SPA mode, redirect any request to index.html
+       */
+      app.use(/(.*)/, (req, res, next) => {
+        void (async () => {
+          try {
+            const html = (await prepareServer.loadHtml(req)).join('');
+
+            res.send(html);
+          } catch (e) {
+            config
+              .getLogger()
+              .error(`Failed to handle request: ${(e as Error)?.message}`, { error: e as Error });
+            next(e);
+          }
+        })();
       });
     }
-
-    if (expressStatic) {
-      const { basename, ...expressStaticOpts } = expressStatic;
-
-      app.use(
-        basename!,
-        staticFiles(
-          path.resolve(`${root}/${publicDir}`),
-          { ...expressStaticOpts, index: isSPA ? undefined : false },
-          isSPA,
-        ),
-      );
-    }
-  }
-
-  /**
-   * SSR mode
-   */
-  if (!isSPA) {
-    app.use(/(.*)/, (req, res, next) => {
-      void (async () => {
-        try {
-          const { render, onRequest, ...renderParams } = await prepareServer.loadEntrypoint();
-          const renderInput: Parameters<TRender>[1] = {
-            req,
-            res,
-            appProps: {},
-            html: { header: '', footer: '' },
-          };
-
-          await render(config, renderInput, {
-            ...renderParams,
-            onRequest,
-            onSkip: next,
-            /** Load and transform the template only after the Fetch guard allows it. */
-            getHtml: async () => {
-              const [header, footer] = await prepareServer.loadHtml(req);
-
-              return { header, footer };
-            },
-          });
-        } catch (e) {
-          config
-            .getLogger()
-            .error(`Failed to handle request: ${(e as Error)?.message}`, { error: e as Error });
-          next(e);
-        }
-      })();
-    });
-  } else {
-    /**
-     * SPA mode, redirect any request to index.html
-     */
-    app.use(/(.*)/, (req, res, next) => {
-      void (async () => {
-        try {
-          const html = (await prepareServer.loadHtml(req)).join('');
-
-          res.send(html);
-        } catch (e) {
-          config
-            .getLogger()
-            .error(`Failed to handle request: ${(e as Error)?.message}`, { error: e as Error });
-          next(e);
-        }
-      })();
-    });
+  } catch (error) {
+    return rethrowAfterCleanup(error, () => ownVite?.close(), config.getLogger());
   }
 
   return {

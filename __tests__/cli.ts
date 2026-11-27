@@ -476,7 +476,7 @@ describe('cli integration', () => {
     const close = vi.fn().mockResolvedValue(undefined);
 
     createDevServerMock.mockResolvedValue({
-      config: { getParams: () => ({ host: 'h', port: 1 }) },
+      config: { getParams: () => ({ host: 'h', port: 1 }), getLogger: () => ({ error: vi.fn() }) },
       vite: { config: { server: {} } },
       server: 'dev-server',
       lifecycle,
@@ -486,6 +486,24 @@ describe('cli integration', () => {
 
     await expect(runDev({ version: '1', server: 'node' })).rejects.toThrow('EADDRINUSE');
     expect(close).toHaveBeenCalledTimes(1);
+    expect(lifecycle.handleSignals).not.toHaveBeenCalled();
+  });
+
+  it('should keep the bind error when closing the node dev server fails', async () => {
+    const { lifecycle } = createLifecycleMock();
+    const error = vi.fn();
+
+    createDevServerMock.mockResolvedValue({
+      config: { getParams: () => ({ host: 'h', port: 1 }), getLogger: () => ({ error }) },
+      vite: { config: { server: {} } },
+      server: 'dev-server',
+      lifecycle,
+      close: vi.fn().mockRejectedValue(new Error('close failed')),
+      listen: vi.fn().mockRejectedValue(new Error('EADDRINUSE')),
+    });
+
+    await expect(runDev({ version: '1', server: 'node' })).rejects.toThrow('EADDRINUSE');
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('close failed'), expect.anything());
     expect(lifecycle.handleSignals).not.toHaveBeenCalled();
   });
 
