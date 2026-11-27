@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
+import net from 'node:net';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
@@ -440,6 +441,30 @@ export default defineEntry(App, routes, {
 
       expect(app.server.listenerCount('upgrade')).toBe(0);
       expect(resolved[key]).toMatchObject({ server: own });
+      expect((await request(`${url}/`)).body).toContain('Home v1');
+    }
+  });
+
+  it('keeps HMR on a port the project chose', async () => {
+    writeProject();
+
+    for (const key of ['hmr', 'ws']) {
+      const probe = net.createServer();
+
+      await new Promise<void>((resolve) => probe.listen(0, resolve));
+
+      const { port } = probe.address() as AddressInfo;
+
+      await new Promise<void>((resolve) => probe.close(() => resolve()));
+
+      const { app, url } = await start({
+        vite: viteConfig({ server: { [key]: { port } } as InlineConfig['server'] }),
+      });
+      const resolved = app.vite.config.server as unknown as Record<string, unknown>;
+
+      expect(app.server.listenerCount('upgrade')).toBe(0);
+      expect(resolved[key]).toMatchObject({ port });
+      expect((resolved[key] as { server?: unknown }).server).toBeUndefined();
       expect((await request(`${url}/`)).body).toContain('Home v1');
     }
   });

@@ -71,11 +71,15 @@ const hmrOption = (version: string, server: TLifecycleServer): InlineConfig['ser
 };
 
 /**
- * Whether the project set this HMR key itself: off, or on a server of its own.
+ * Whether the project set this HMR key itself: off, on a server of its own or on its own port.
+ * The client connects to a configured port even when a server is injected, so a port stays Vite's.
  */
 const isOwnHmr = (option: unknown): boolean =>
   option === false ||
-  (typeof option === 'object' && option !== null && 'server' in option && Boolean(option.server));
+  (typeof option === 'object' &&
+    option !== null &&
+    (('server' in option && Boolean(option.server)) ||
+      ('port' in option && option.port !== undefined)));
 
 /**
  * Put HMR on the parent server unless the project turned it off or gave it a server of its own:
