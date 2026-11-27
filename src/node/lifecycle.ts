@@ -248,6 +248,12 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
       : options.health
         ? { ...DEFAULT_HEALTH, ...options.health }
         : undefined;
+
+  // One path for both probes would answer liveness on the readiness URL, 200 while draining.
+  if (paths && paths.livePath === paths.readyPath) {
+    throw new TypeError(`Health probes need two paths, got "${paths.livePath}" for both`);
+  }
+
   let isPrepared = false;
   let isForced = false;
   let closing: Promise<void> | undefined;

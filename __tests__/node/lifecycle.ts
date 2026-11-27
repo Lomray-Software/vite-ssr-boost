@@ -120,6 +120,16 @@ describe('createLifecycle', () => {
     expect(await getText(`${url}/readyz`)).toEqual({ status: 200, body: 'app' });
   });
 
+  it.each([
+    [{ readyPath: '/healthz' }, '/healthz'],
+    [{ livePath: '/readyz' }, '/readyz'],
+    [{ livePath: '/probe', readyPath: '/probe' }, '/probe'],
+  ])('refuses one path for both health probes (%o)', (health, path) => {
+    expect(() => createLifecycle(http.createServer(), { health })).toThrow(
+      `Health probes need two paths, got "${path}" for both`,
+    );
+  });
+
   it('passes every request through when health is not configured', async () => {
     let lifecycle!: ILifecycle;
     const { url } = await listen(
@@ -246,16 +256,21 @@ describe('createLifecycle', () => {
       release = resolve;
     });
     const onClose = vi.fn();
+    let started!: () => void;
+    const begun = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     const { url, lifecycle } = await listen(
       (_req, res) => {
         res.write('first;');
+        started();
         void held.then(() => res.end('last'));
       },
       (server) => createLifecycle(server, { onDrain: () => void server.close(), onClose }),
     );
     const streamed = getText(url);
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await begun;
 
     const closed = lifecycle.close();
 
@@ -269,9 +284,14 @@ describe('createLifecycle', () => {
 
   it('destroys a stream held by a native close at the drain deadline', async () => {
     const onClose = vi.fn();
+    let started!: () => void;
+    const begun = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     const { url, lifecycle } = await listen(
       (_req, res) => {
         res.write('stuck');
+        started();
       },
       (server) =>
         createLifecycle(server, {
@@ -282,7 +302,7 @@ describe('createLifecycle', () => {
     );
     const streamed = getText(url);
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await begun;
 
     const startedAt = Date.now();
 
