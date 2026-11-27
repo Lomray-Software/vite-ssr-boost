@@ -408,6 +408,21 @@ describe('node serveStatic', () => {
     expect(await (await fetch(`${both}/page`)).text()).toBe('plain-page');
   });
 
+  it('keeps a leading dot in an extension the way send appends it', async () => {
+    await writeFile(path.join(root, 'page..html'), 'double-dot-shell');
+    const shellFile = 'page..html';
+    const dotted = await startNode({ extensions: ['.html'] }, false, { shellFile });
+
+    expect(await (await fetch(`${dotted}/page`)).text()).toBe('SSR');
+    expect(await (await fetch(`${dotted}/page..html`)).text()).toBe('SSR');
+    expect(await (await fetch(`${dotted}/about`)).text()).toBe('SSR');
+
+    const plain = await startNode({ extensions: ['html'] }, false);
+
+    expect(await (await fetch(`${plain}/index`)).text()).toBe('SSR');
+    expect(await (await fetch(`${plain}/about`)).text()).toBe('extension-fallback');
+  });
+
   it('sends a shell alias miss to the router under fallthrough false', async () => {
     const node = await startNode({ extensions: ['html'], fallthrough: false }, false);
     const alias = await fetch(`${node}/index`);

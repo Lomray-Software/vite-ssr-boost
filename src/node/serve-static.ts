@@ -196,9 +196,9 @@ const createShellGuard = (
   }
 
   /**
-   * Extension as send appends it, compared by its lowercased spelling.
+   * Extension as send appends it after a dot, spelling kept, so `.html` looks for `page..html`.
    */
-  const normalize = (name: unknown): string => String(name).replace(/^\./, '').toLowerCase();
+  const normalize = (name: unknown): string => String(name).toLowerCase();
 
   for (const name of new Set(extensions.map(normalize))) {
     const alias = name ? shellPath.slice(0, -(name.length + 1)) : '';
