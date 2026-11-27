@@ -141,6 +141,24 @@ describe('stripEntryAsync', () => {
     expect(stripEntryAsync(foreign, '/', 'client.ts')).toBe(foreign);
   });
 
+  it('should keep async when the base element names a scheme or a host', () => {
+    const scripts = '<script src="client.ts" async></script>';
+
+    for (const href of ['http://document.invalid/app/', '//document.invalid/app/']) {
+      const html = `<base href=" ${href}">${scripts}`;
+
+      expect(stripEntryAsync(html, '/app/', 'client.ts', '/app/page')).toBe(html);
+    }
+  });
+
+  it('should ignore a base element inside SVG, which sets no document base', () => {
+    const html = '<svg><base href="/icons/"></base></svg><script src="client.ts" async></script>';
+
+    expect(stripEntryAsync(html, '/app/', 'client.ts', '/app/page')).toBe(
+      '<svg><base href="/icons/"></base></svg><script src="client.ts"></script>',
+    );
+  });
+
   it('should resolve a parent-relative base element from the document URL', () => {
     const html = '<base href=" ../"><script src="client.ts" async></script>';
 

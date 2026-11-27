@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { parse } from 'parse5';
+import { html as htmlSpec, parse } from 'parse5';
 import type { DefaultTreeAdapterTypes } from 'parse5';
 
 type TNode = DefaultTreeAdapterTypes.ChildNode | DefaultTreeAdapterTypes.Document;
@@ -26,6 +26,12 @@ const parseUrl = (value: string, base?: URL | string): URL | undefined => {
 };
 
 /**
+ * Whether a URL names a scheme or a host of its own.
+ */
+const hasSchemeOrHost = (value: string): boolean =>
+  /^[a-z][a-z\d+.-]*:/i.test(value) || /^[\\/]{2}/.test(value);
+
+/**
  * Whether a src names a scheme or another host, contains a backslash or climbs with a dot
  * segment. Such a src is never the entry.
  */
@@ -33,8 +39,7 @@ const isForeignSrc = (src: string): boolean => {
   const [pathname] = src.split(/[?#]/, 1);
 
   return (
-    /^[a-z][a-z\d+.-]*:/i.test(pathname) ||
-    /^[\\/]{2}/.test(pathname) ||
+    hasSchemeOrHost(pathname) ||
     pathname.includes('\\') ||
     pathname.split('/').some((segment) => /^(\.|%2e){2}$/i.test(segment))
   );
@@ -52,10 +57,11 @@ const getSrcPath = (src: string, base: URL): string | undefined => {
 };
 
 /**
- * Find the first base element with an href, which the browser resolves every src against.
+ * Find the first HTML base element with an href, which the browser resolves every src against.
+ * A base inside SVG or MathML is foreign content and sets no document base.
  */
 const findBaseHref = (node: TNode): string | undefined => {
-  if ('tagName' in node && node.tagName === 'base') {
+  if ('tagName' in node && node.tagName === 'base' && node.namespaceURI === htmlSpec.NS.HTML) {
     const href = node.attrs.find(({ name }) => name === 'href');
 
     if (href) {
@@ -122,8 +128,11 @@ const stripEntryAsync = (
     baseValue === undefined ? documentBase : (parseUrl(baseValue, documentBase) ?? documentBase);
   const ranges: [number, number][] = [];
 
-  // A base element with a scheme or for another host sends every src there, so none is the entry.
-  if (baseUrl.origin !== documentBase.origin) {
+  // A base element with a scheme or a host sends every src there, so none is the entry.
+  if (
+    (baseValue !== undefined && hasSchemeOrHost(baseValue)) ||
+    baseUrl.origin !== documentBase.origin
+  ) {
     return html;
   }
 
