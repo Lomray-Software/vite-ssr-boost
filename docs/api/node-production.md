@@ -143,10 +143,12 @@ file, a directory redirect or another listed extension is served in send's order
 reaches the router, also with `fallthrough: false`. `prepareProduction` passes the
 `indexFile` from `ssr-boost.json`, so a renamed shell stays hidden too. The match is by path: a
 symlink or a copy of the shell under another name in the client directory is served as a file.
-On Windows, trailing dots and spaces in a segment are dropped before the match, as the file system
-drops them, from the request, the configured shell name and each listed extension alike, so
-`/index.html.` is hidden too. Short 8.3 names such as `INDEX~1.HTM` are not matched;
-disable them on the volume that holds the build if that matters.
+On Windows, an NTFS stream suffix such as `::$DATA` and then trailing dots and spaces in a
+segment are dropped before the match, as the file system drops them, from the request, the
+configured shell name and each listed extension alike, so `/index.html.` and `/index.html::$DATA`
+are hidden too. An extensionless URL is matched by the file name send would open after appending
+each listed extension. Short 8.3 names such as `INDEX~1.HTM` are not matched; disable them on the
+volume that holds the build if that matters.
 
 Files listed in `immutableFiles` get `Cache-Control: public, max-age=31536000, immutable`. Every
 other file keeps serve-static's revalidating default, so a stable name such as

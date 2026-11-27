@@ -310,6 +310,34 @@ describe('prepareProduction', () => {
     }
   });
 
+  it('accepts frozen and getter-only static options', async () => {
+    const getterOnly = Object.defineProperty({}, 'etag', { enumerable: true, get: () => false });
+
+    for (const options of [Object.freeze({ etag: false }), getterOnly]) {
+      const { staticMiddleware } = await prepareProduction({
+        buildDir,
+        loadEntry: entryModule(),
+        static: options as { etag: boolean },
+      });
+      const server = http.createServer((req, res) => {
+        staticMiddleware!(req, res, () => res.end('SSR'));
+      });
+
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+      try {
+        const { port } = server.address() as AddressInfo;
+        const file = await request(`http://127.0.0.1:${port}/robots.txt`);
+
+        expect(file.body.toString()).toBe('User-agent: *');
+        expect(file.headers.etag).toBeUndefined();
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
   it('leaves client files to the host when static serving is disabled', async () => {
     const { staticMiddleware } = await prepareProduction({
       buildDir,

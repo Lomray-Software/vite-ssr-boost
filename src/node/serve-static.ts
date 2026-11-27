@@ -15,16 +15,23 @@ type TStaticMiddleware = (req: TStaticRequest, res: ServerResponse, next: TNext)
 type TFileOptions = ServeStaticOptions<ServerResponse>;
 
 /**
+ * Shell key and the configured extensions, both canonicalized like a request key.
+ */
+interface IShellGuardKeys {
+  /** Lowercased request path of the shell. */
+  shellPath: string;
+  /** Lowercased extensions as send appends them, each listed once. */
+  extensions: string[];
+}
+
+/**
  * How one file server keeps the HTML shell hidden.
  */
 interface IShellGuard {
-  /** Lowercased request path of the shell. */
-  shellPath: string;
-  /**
-   * Lowercased extensionless paths the file server would resolve to the shell, each with a file
-   * server that never appends the extension leading there.
-   */
-  aliases: Map<string, TStaticMiddleware>;
+  keys: IShellGuardKeys;
+  isWindows: boolean;
+  /** File server that never appends the listed extensions, which lead this request to the shell. */
+  getAliasServer: (names: string[]) => TStaticMiddleware;
 }
 
 /**
@@ -57,6 +64,29 @@ interface IServeStaticOptions {
   hasAccessIndexHtml?: () => boolean;
 }
 
+const FILE_OPTION_KEYS = [
+  'acceptRanges',
+  'cacheControl',
+  'dotfiles',
+  'etag',
+  'extensions',
+  'fallthrough',
+  'immutable',
+  'index',
+  'lastModified',
+  'maxAge',
+  'redirect',
+  'setHeaders',
+] as const;
+const SERVER_OPTION_KEYS = [
+  'root',
+  'basename',
+  'isSPA',
+  'immutableFiles',
+  'shellFile',
+  'hasAccessIndexHtml',
+] as const;
+const DECLARED_KEYS: ReadonlySet<string> = new Set([...FILE_OPTION_KEYS, ...SERVER_OPTION_KEYS]);
 const WELL_KNOWN = '/.well-known/';
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 
@@ -73,10 +103,12 @@ const getPathname = (url: string): string | undefined => {
 };
 
 /**
- * Windows form of one path segment: a name loses its trailing dots and spaces. A segment of only
- * dots and spaces is kept, since Windows opens no file through it.
+ * Windows form of one path segment: an NTFS stream suffix such as `::$DATA` is cut off, then the
+ * name loses its trailing dots and spaces. A segment left empty is kept, since Windows opens no
+ * file through it.
  */
-const trimWindowsSegment = (segment: string): string => segment.replace(/[. ]+$/, '') || segment;
+const trimWindowsSegment = (segment: string): string =>
+  segment.replace(/:.*$/, '').replace(/[. ]+$/, '') || segment;
 
 /**
  * Extension as send appends it after a dot, lowercased for case-insensitive disks and, on
@@ -101,44 +133,77 @@ const getShellKey = (pathname: string, isWindows = process.platform === 'win32')
 };
 
 /**
- * Shell key and the extensionless alias keys a file server resolves to the shell, each with the
- * configured extension that leads there. Both are canonicalized like a request key, so on Windows
- * a shell named `index.html.` or an extension written `html.` match what the disk opens.
+ * Shell key and the configured extensions, canonicalized like a request key, so on Windows a
+ * shell named `index.html.` or an extension written `html.` match what the disk opens.
  */
 const getShellGuardKeys = (
   shellPath: string,
   extensions: unknown,
   isWindows = process.platform === 'win32',
-): { shellPath: string; aliases: Map<string, string> } => {
-  const shellKey = getShellKey(shellPath, isWindows);
-  const aliases = new Map<string, string>();
+): IShellGuardKeys => ({
+  shellPath: getShellKey(shellPath, isWindows),
+  extensions: Array.isArray(extensions)
+    ? [...new Set(extensions.map((ext) => normalizeExtension(ext, isWindows)))]
+    : [],
+});
 
-  if (!Array.isArray(extensions)) {
-    return { shellPath: shellKey, aliases };
+/**
+ * Configured extensions send would append to this pathname to open the shell. send appends only
+ * to a normalized path without an extension or a trailing separator, and the appended path is
+ * keyed like a request, so on Windows `/page ` reaches `page .html` while `/page` only reaches
+ * `page.html`.
+ */
+const getAliasExtensions = (
+  keys: IShellGuardKeys,
+  pathname: string,
+  isWindows = process.platform === 'win32',
+): string[] => {
+  const normalized = path.posix.normalize(isWindows ? pathname.replace(/\\/g, '/') : pathname);
+
+  if (!keys.extensions.length || normalized.endsWith('/') || path.posix.extname(normalized)) {
+    return [];
   }
 
-  for (const name of new Set(extensions.map((ext) => normalizeExtension(ext, isWindows)))) {
-    const alias = name ? shellKey.slice(0, -(name.length + 1)) : '';
+  return keys.extensions.filter(
+    (name) => getShellKey(`${normalized}.${name}`, isWindows) === keys.shellPath,
+  );
+};
 
-    // send appends an extension only to a missing path without one, such as `/page` for
-    // `page.en.html` under `en.html`.
-    if (
-      !name ||
-      !shellKey.endsWith(`.${name}`) ||
-      alias.endsWith('/') ||
-      path.posix.extname(alias) ||
-      aliases.has(alias)
-    ) {
+/**
+ * serve-static options read once each by name, so inherited options and getters count and frozen
+ * options are never written to. Unset ones stay out, so serve-static and send keep their own
+ * defaults; own keys this module does not declare still reach serve-static.
+ */
+const readServeStaticOptions = (
+  options: Partial<IServeStaticOptions>,
+): Partial<IServeStaticOptions> => {
+  const source = options as Record<string, unknown>;
+  const read: Record<string, unknown> = {};
+
+  for (const key of DECLARED_KEYS) {
+    const value = source[key];
+
+    if (value !== undefined) {
+      read[key] = value;
+    }
+  }
+
+  for (const key of Object.keys(source)) {
+    if (DECLARED_KEYS.has(key)) {
       continue;
     }
 
-    aliases.set(alias, name);
+    const value = source[key];
+
+    if (value !== undefined) {
+      read[key] = value;
+    }
   }
 
-  return { shellPath: shellKey, aliases };
+  return read;
 };
 
-export { getShellKey, getShellGuardKeys };
+export { getShellKey, getShellGuardKeys, getAliasExtensions, readServeStaticOptions };
 
 /**
  * Lowercased mount prefix without trailing slashes; the root mount is empty.
@@ -207,9 +272,9 @@ const createCachePolicy = (
 };
 
 /**
- * Guard for one file server: the shell's request path and, for every configured extension the
- * shell's name ends with, the extensionless alias with a server that resolves it without that
- * extension. Keyed like requests, since case-insensitive disks match any spelling.
+ * Guard for one file server: the shell's request path and, for a request an appended extension
+ * leads to the shell, a server that resolves it without that extension. Keyed like requests,
+ * since case-insensitive disks match any spelling.
  */
 const createShellGuard = (
   root: string,
@@ -231,26 +296,36 @@ const createShellGuard = (
 
   const { extensions } = options;
   const keys = getShellGuardKeys(`/${relative.split(path.sep).join('/')}`, extensions, isWindows);
-  const aliases = new Map<string, TStaticMiddleware>();
+  const servers = new Map<string, TStaticMiddleware>();
 
-  for (const [alias, name] of keys.aliases) {
+  /**
+   * One alias server per set of skipped extensions, made on first use.
+   */
+  const getAliasServer = (names: string[]): TStaticMiddleware => {
+    const id = JSON.stringify(names);
+    const known = servers.get(id);
+
+    if (known) {
+      return known;
+    }
+
     const otherExtensions = (extensions as unknown[]).filter(
-      (other) => normalizeExtension(other, isWindows) !== name,
+      (other) => !names.includes(normalizeExtension(other, isWindows)),
     ) as string[];
-
     // send still serves a literal file, redirects a directory and tries the other extensions.
     // A miss falls through to the router like the shell itself, also with `fallthrough: false`.
-    aliases.set(
-      alias,
-      createServeStatic(root, {
-        ...options,
-        extensions: otherExtensions.length ? otherExtensions : false,
-        fallthrough: true,
-      }) as TStaticMiddleware,
-    );
-  }
+    const server = createServeStatic(root, {
+      ...options,
+      extensions: otherExtensions.length ? otherExtensions : false,
+      fallthrough: true,
+    }) as TStaticMiddleware;
 
-  return { shellPath: keys.shellPath, aliases };
+    servers.set(id, server);
+
+    return server;
+  };
+
+  return { keys, isWindows, getAliasServer };
 };
 
 /**
@@ -305,42 +380,6 @@ const createSsrServe = (
 };
 
 /**
- * serve-static options read by name, so options inherited from a prototype count too. Unset ones
- * stay out, so serve-static and send keep their own defaults.
- */
-const readFileOptions = ({
-  acceptRanges,
-  cacheControl,
-  dotfiles,
-  etag,
-  extensions,
-  fallthrough,
-  immutable,
-  index,
-  lastModified,
-  maxAge,
-  redirect,
-  setHeaders,
-}: Partial<IServeStaticOptions>): TFileOptions => {
-  const named: TFileOptions = {
-    acceptRanges,
-    cacheControl,
-    dotfiles,
-    etag,
-    extensions,
-    fallthrough,
-    immutable,
-    index,
-    lastModified,
-    maxAge,
-    redirect,
-    setHeaders,
-  };
-
-  return Object.fromEntries(Object.entries(named).filter(([, value]) => value !== undefined));
-};
-
-/**
  * Serve the public directory as Connect middleware.
  * serve-static skips dotfiles unless told otherwise, but `/.well-known/` (app links,
  * security.txt, ACME challenges) must reach the client: without an explicit `dotfiles`
@@ -356,10 +395,8 @@ const serveStatic = (staticOptions: IServeStaticOptions): TStaticMiddleware => {
     immutableFiles,
     shellFile = 'index.html',
     hasAccessIndexHtml,
-    ...ownOptions
-  } = staticOptions;
-  // Own extra keys still reach serve-static as before; the declared ones are read by name.
-  const options: TFileOptions = { ...ownOptions, ...readFileOptions(staticOptions) };
+    ...options
+  } = readServeStaticOptions(staticOptions) as IServeStaticOptions;
   const mount = normalizeBasename(basename);
   // serve-static resolves its root once, so the shell is matched against that same directory.
   const resolvedRoot = path.resolve(root);
@@ -414,20 +451,25 @@ const serveStatic = (staticOptions: IServeStaticOptions): TStaticMiddleware => {
       path.posix.normalize(pathname).startsWith(WELL_KNOWN);
 
     const guard = isWellKnown ? wellKnownShellGuard : shellGuard;
-    const key = guard && pathname !== undefined ? getShellKey(pathname) : undefined;
-    const isShell = key !== undefined && key === guard?.shellPath;
-    const serveAlias = key === undefined ? undefined : guard?.aliases.get(key);
+    const isShell =
+      guard !== undefined &&
+      pathname !== undefined &&
+      getShellKey(pathname, guard.isWindows) === guard.keys.shellPath;
+    const aliasNames =
+      guard === undefined || pathname === undefined || isShell
+        ? []
+        : getAliasExtensions(guard.keys, pathname, guard.isWindows);
     let fileServer: TStaticMiddleware | undefined = isWellKnown ? serveWellKnown : serve;
 
     // The shell is matched by the file it resolves to, so no URL spelling reaches it.
-    if ((isShell || serveAlias) && !hasAccessIndexHtml?.()) {
+    if ((isShell || aliasNames.length) && !hasAccessIndexHtml?.()) {
       if (isShell) {
         next();
 
         return;
       }
 
-      fileServer = serveAlias;
+      fileServer = guard?.getAliasServer(aliasNames);
     }
 
     // serve-static builds directory redirects from originalUrl, so a client host never leaks in,

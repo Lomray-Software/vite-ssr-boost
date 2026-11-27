@@ -7,7 +7,12 @@ import path from 'node:path';
 import express from 'express';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import staticFiles from '@adapters/express/static-files';
-import serveStatic, { getShellGuardKeys, getShellKey } from '@node/serve-static';
+import serveStatic, {
+  getAliasExtensions,
+  getShellGuardKeys,
+  getShellKey,
+  readServeStaticOptions,
+} from '@node/serve-static';
 import type { IServeStaticOptions } from '@node/serve-static';
 
 type TOptions = Omit<IServeStaticOptions, 'root' | 'basename' | 'isSPA'>;
@@ -574,16 +579,72 @@ describe('node serveStatic', () => {
     expect(getShellKey('/index.html.', false)).toBe('/index.html.');
   });
 
-  it('keys the configured shell and its aliases like a request on Windows', () => {
+  it('drops an NTFS stream suffix from each segment only on Windows', () => {
+    expect(getShellKey('/index.html::$DATA', true)).toBe('/index.html');
+    expect(getShellKey('/Index.HTML:stream:$DATA', true)).toBe('/index.html');
+    expect(getShellKey('/index.html::$DATA', false)).toBe('/index.html::$data');
+  });
+
+  it('keys the configured shell and its extensions like a request on Windows', () => {
     expect(getShellGuardKeys('/index.html.', [], true).shellPath).toBe('/index.html');
     expect(getShellGuardKeys('/index.html.', [], false).shellPath).toBe('/index.html.');
-    expect([...getShellGuardKeys('/index.html', ['html.'], true).aliases]).toEqual([
-      ['/index', 'html'],
-    ]);
-    expect([...getShellGuardKeys('/index.html', ['html.'], false).aliases]).toEqual([]);
-    expect([...getShellGuardKeys('/Index.HTML', ['HTML. '], true).aliases]).toEqual([
-      ['/index', 'html'],
-    ]);
+    expect(getShellGuardKeys('/index.html', ['html.', 'HTML'], true).extensions).toEqual(['html']);
+    expect(getShellGuardKeys('/index.html', ['html.'], false).extensions).toEqual(['html.']);
+
+    const windows = getShellGuardKeys('/Index.HTML', ['HTML. '], true);
+
+    expect(getAliasExtensions(windows, '/index', true)).toEqual(['html']);
+    expect(getAliasExtensions(getShellGuardKeys('/index.html', ['html.'], false), '/index', false))
+      .toEqual([]);
+  });
+
+  it('matches an alias by the file send opens, not by a stored name, on Windows', () => {
+    // Windows opens `page .html` for `/page ` + `.html`, while `/page` opens a real `page.html`.
+    const keys = getShellGuardKeys('/page .html', ['html'], true);
+
+    expect(getAliasExtensions(keys, '/page ', true)).toEqual(['html']);
+    expect(getAliasExtensions(keys, '/Page.', true)).toEqual([]);
+    expect(getAliasExtensions(keys, '/page', true)).toEqual([]);
+    expect(getAliasExtensions(keys, '/page/', true)).toEqual([]);
+    // Only the end of a segment is trimmed, so `/page ` + `.html` never opens `page.html`.
+    expect(getAliasExtensions(getShellGuardKeys('/page.html', ['html'], true), '/page ', true))
+      .toEqual([]);
+    expect(getAliasExtensions(getShellGuardKeys('/page.html', ['html'], true), '/page', true))
+      .toEqual(['html']);
+  });
+
+  it('serves a real page next to a shell whose name ends with a space', async () => {
+    await writeFile(path.join(root, 'page .html'), 'spaced-shell');
+    await writeFile(path.join(root, 'page.html'), 'plain-page');
+    const node = await startNode({ extensions: ['html'] }, false, { shellFile: 'page .html' });
+
+    expect(await (await fetch(`${node}/page%20`)).text()).toBe('SSR');
+    expect(await (await fetch(`${node}/page%20.html`)).text()).toBe('SSR');
+    expect(await (await fetch(`${node}/page`)).text()).toBe('plain-page');
+  });
+
+  it('reads each serve-static option once and passes no unset one on', () => {
+    let reads = 0;
+    const options = Object.defineProperty({ root, extra: 1, other: undefined }, 'etag', {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+
+        return false;
+      },
+    }) as unknown as IServeStaticOptions;
+
+    serveStatic(options);
+
+    expect(reads).toBe(1);
+
+    const read = readServeStaticOptions({
+      root,
+      maxAge: undefined,
+      ...{ extra: 1, other: undefined },
+    } as IServeStaticOptions);
+
+    expect(Object.keys(read).sort()).toEqual(['extra', 'root']);
   });
 
   it('reads serve-static options inherited from a prototype', async () => {

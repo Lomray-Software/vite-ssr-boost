@@ -13,7 +13,7 @@ import type { TSsrHandler } from '@core/types';
 import createLifecycle, { resolveHealthPaths } from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions, TLifecycleServer } from '@node/lifecycle';
 import renderToStream from '@node/render-to-stream';
-import serveStatic from '@node/serve-static';
+import serveStatic, { readServeStaticOptions } from '@node/serve-static';
 import type { IServeStaticOptions, TStaticMiddleware } from '@node/serve-static';
 import { createRequestListener, toEntry } from '@node/server-kit';
 import type { IErrorLogger } from '@node/server-kit';
@@ -212,24 +212,24 @@ const prepareProduction = async ({
     });
   }
 
-  return {
-    handler,
-    paths,
-    staticMiddleware:
-      staticOptions === false
-        ? undefined
-        : // Own options are copied and inherited ones stay reachable, so serveStatic reads both.
-          serveStatic(
-            Object.assign(Object.create(staticOptions) as IServeStaticOptions, staticOptions, {
-              immutableFiles: staticOptions.immutableFiles ?? loadFingerprintedFiles(paths.root),
-              root: paths.publicDir,
-              basename: new URL(paths.base, 'http://localhost').pathname,
-              isSPA,
-              shellFile: paths.indexFile,
-              hasAccessIndexHtml,
-            }),
-          ),
-  };
+  let staticMiddleware: TStaticMiddleware | undefined;
+
+  if (staticOptions !== false) {
+    // Read once into a plain object, so getters, frozen and inherited options all work.
+    const options = readServeStaticOptions(staticOptions);
+
+    staticMiddleware = serveStatic({
+      ...options,
+      immutableFiles: options.immutableFiles ?? loadFingerprintedFiles(paths.root),
+      root: paths.publicDir,
+      basename: new URL(paths.base, 'http://localhost').pathname,
+      isSPA,
+      shellFile: paths.indexFile,
+      hasAccessIndexHtml,
+    });
+  }
+
+  return { handler, paths, staticMiddleware };
 };
 
 /**
