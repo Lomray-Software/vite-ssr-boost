@@ -202,10 +202,8 @@ async function createServer(
         : http.createServer(listener);
 
       const { onClose } = lifecycleOptions;
-
-      if (!config.isProd) {
-        viteUsers += 1;
-      }
+      // Set once listen() returned: a run whose listen threw never held the shared Vite.
+      let isCounted = false;
 
       const runLifecycle = createLifecycle(server, {
         ...lifecycleOptions,
@@ -213,16 +211,15 @@ async function createServer(
         onClose: config.isProd
           ? onClose
           : async () => {
-              viteUsers -= 1;
+              // Decided before any await, so two drains at once never both close the Vite.
+              const isLast = isCounted && (viteUsers -= 1) === 0;
 
               await settleAll(
-                () => (viteUsers === 0 ? mountedVite?.close() : undefined),
+                () => (isLast ? mountedVite?.close() : undefined),
                 () => onClose?.(),
               );
             },
       });
-
-      lifecycle = runLifecycle;
 
       /**
        * The listen() callback, as in 8.6: it runs before listeners added after run(),
@@ -247,6 +244,14 @@ async function createServer(
       // Node binds and reports errors itself: a bad port throws here, a bind error goes to the
       // server's error listeners or crashes the process when it has none.
       server.listen(port, host, onListening);
+
+      // Only a server that reached listen() counts and is exposed, so a bad port keeps the last.
+      if (!config.isProd) {
+        isCounted = true;
+        viteUsers += 1;
+      }
+
+      lifecycle = runLifecycle;
       // A close() right after run() still waits for the port.
       trackNativeBind(runLifecycle);
 
