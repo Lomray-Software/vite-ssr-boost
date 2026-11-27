@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import ownSignals, {
-  ownSignalsUnlessHandled,
-  snapshotSignalListeners,
-} from '@cli/helpers/own-signals';
+import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
 import cliContext from '@constants/cli-context';
 
 const { processStopMock } = vi.hoisted(() => ({ processStopMock: vi.fn() }));
@@ -91,34 +88,17 @@ describe('ownSignalsUnlessHandled', () => {
     ownSignals();
   });
 
-  it('ignores listeners that were there before the server loaded', async () => {
-    addSigterm();
-
-    const before = snapshotSignalListeners();
+  it('takes signals when no listener is present once the server listens', async () => {
     const server = new EventEmitter();
     const { lifecycle } = createLifecycle();
 
-    ownSignalsUnlessHandled(server as never, lifecycle as never, before);
+    ownSignalsUnlessHandled(server as never, lifecycle as never);
     await listen(server);
 
     expect(lifecycle.handleSignals).toHaveBeenCalledOnce();
   });
 
-  it('leaves signals to an application that subscribed after the snapshot', async () => {
-    const before = snapshotSignalListeners();
-
-    addSigterm();
-
-    const server = new EventEmitter();
-    const { lifecycle } = createLifecycle();
-
-    ownSignalsUnlessHandled(server as never, lifecycle as never, before);
-    await listen(server);
-
-    expect(lifecycle.handleSignals).not.toHaveBeenCalled();
-  });
-
-  it('counts every listener when no snapshot is given', async () => {
+  it('leaves signals to a listener present before the server loaded (a preload)', async () => {
     addSigterm();
 
     const server = new EventEmitter();
@@ -126,6 +106,56 @@ describe('ownSignalsUnlessHandled', () => {
 
     ownSignalsUnlessHandled(server as never, lifecycle as never);
     await listen(server);
+
+    expect(lifecycle.handleSignals).not.toHaveBeenCalled();
+  });
+
+  it('leaves signals to an application that subscribed while the server started', async () => {
+    const server = new EventEmitter();
+    const { lifecycle } = createLifecycle();
+
+    ownSignalsUnlessHandled(server as never, lifecycle as never);
+    addSigterm();
+    await listen(server);
+
+    expect(lifecycle.handleSignals).not.toHaveBeenCalled();
+  });
+
+  it('does not count its own previous subscription after a restart', async () => {
+    const first = new EventEmitter();
+    const second = new EventEmitter();
+    const sigterm = vi.fn();
+    const { lifecycle: firstLifecycle } = createLifecycle();
+    // A real subscription, so the restart must remove it before it counts listeners.
+    const lifecycle = {
+      handleSignals: vi.fn(() => {
+        process.on('SIGTERM', sigterm);
+
+        return () => process.off('SIGTERM', sigterm);
+      }),
+    };
+
+    ownSignalsUnlessHandled(first as never, lifecycle as never);
+    await listen(first);
+    expect(process.listeners('SIGTERM')).toContain(sigterm);
+
+    ownSignalsUnlessHandled(second as never, firstLifecycle as never);
+    await listen(second);
+
+    expect(firstLifecycle.handleSignals).toHaveBeenCalledOnce();
+  });
+
+  it('still yields after a restart to an application listener the restart kept', async () => {
+    addSigterm();
+
+    const first = new EventEmitter();
+    const second = new EventEmitter();
+    const { lifecycle } = createLifecycle();
+
+    ownSignalsUnlessHandled(first as never, lifecycle as never);
+    await listen(first);
+    ownSignalsUnlessHandled(second as never, lifecycle as never);
+    await listen(second);
 
     expect(lifecycle.handleSignals).not.toHaveBeenCalled();
   });

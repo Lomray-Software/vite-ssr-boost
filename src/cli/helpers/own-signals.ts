@@ -23,23 +23,12 @@ const ownSignals = (lifecycle?: ILifecycle): void => {
 const SIGNALS = ['SIGTERM', 'SIGINT'] as const;
 
 /**
- * Record the signal listeners present before the application loads, so they are not taken as
- * its own.
+ * Express servers before 8.7 left signals to the application, so one with any SIGTERM or SIGINT
+ * listener keeps them: a preloaded module, its entry or onServerStarted. The CLI drops its own
+ * subscription first, and the check runs once the server listens and the synchronous part of
+ * onServerStarted has run.
  */
-const snapshotSignalListeners = (): ReadonlySet<unknown> =>
-  new Set(SIGNALS.flatMap((signal) => process.listeners(signal)));
-
-/**
- * Express servers before 8.7 left signals to the application, so one that already subscribed in its
- * entry or in onServerStarted keeps them. The check runs once the server listens and the
- * synchronous part of onServerStarted has run; listeners in `before` were there earlier and do
- * not count.
- */
-const ownSignalsUnlessHandled = (
-  server: Server,
-  lifecycle?: ILifecycle,
-  before: ReadonlySet<unknown> = new Set(),
-): void => {
+const ownSignalsUnlessHandled = (server: Server, lifecycle?: ILifecycle): void => {
   release?.();
   release = undefined;
 
@@ -49,9 +38,7 @@ const ownSignalsUnlessHandled = (
 
   server.once('listening', () => {
     setImmediate(() => {
-      const isHandled = SIGNALS.some((signal) =>
-        process.listeners(signal).some((listener) => !before.has(listener)),
-      );
+      const isHandled = SIGNALS.some((signal) => process.listenerCount(signal) > 0);
 
       if (isHandled) {
         return;
@@ -62,6 +49,6 @@ const ownSignalsUnlessHandled = (
   });
 };
 
-export { ownSignalsUnlessHandled, snapshotSignalListeners };
+export { ownSignalsUnlessHandled };
 
 export default ownSignals;

@@ -1,10 +1,7 @@
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
 import type { Plugin, PluginOption } from 'vite';
-import ownSignals, {
-  ownSignalsUnlessHandled,
-  snapshotSignalListeners,
-} from '@cli/helpers/own-signals';
+import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
 import PLUGIN_NAME from '@constants/plugin-name';
 import type { IPluginConfig } from '@helpers/plugin-config';
 import printServerInfo from '@helpers/print-server-info';
@@ -118,14 +115,13 @@ async function runDev(params: IRunDevParams): Promise<IRunDevOut> {
     return out;
   }
 
-  const signalListeners = snapshotSignalListeners();
   const { default: createServer } = await import('@adapters/express/server');
   const config = ServerConfig.init({ isHost, mode, entrypointName }, { port });
   const { run, getLifecycle } = await createServer(config);
   const server = run({ version, isPrintInfo });
   const lifecycle = getLifecycle();
 
-  ownSignalsUnlessHandled(server, lifecycle, signalListeners);
+  ownSignalsUnlessHandled(server, lifecycle);
 
   return { server, config, lifecycle };
 }
