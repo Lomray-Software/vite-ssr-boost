@@ -701,6 +701,76 @@ describe('node server', () => {
     expect(vite.close).toHaveBeenCalledOnce();
   });
 
+  it('should hold a drain after a native close until the shared Vite closed', async () => {
+    let release: (() => void) | undefined;
+    let isSettled = false;
+    const close = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const result = await createServer(createClosingDevConfig(close) as never);
+    const server = result.run({ isPrintInfo: false });
+
+    await flush();
+    server.emit('close');
+
+    expect(close).toHaveBeenCalledOnce();
+
+    const closed = result
+      .getLifecycle()!
+      .close()
+      .then(() => {
+        isSettled = true;
+      });
+
+    await flush();
+    await flush();
+
+    expect(isSettled).toBe(false);
+
+    release!();
+    await closed;
+
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('should run the onClose hook and reject when the shared Vite close throws at once', async () => {
+    const failure = new Error('vite close failed');
+    const onClose = vi.fn();
+    const close = vi.fn((): Promise<void> => {
+      throw failure;
+    });
+    const result = await createServer(createClosingDevConfig(close) as never, { onClose });
+
+    result.run({ isPrintInfo: false });
+    await flush();
+
+    await expect(result.getLifecycle()!.close()).rejects.toBe(failure);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('should log a shared Vite close that throws at once after a native close', async () => {
+    const failure = new Error('vite close failed');
+    const error = vi.fn();
+    const close = vi.fn((): Promise<void> => {
+      throw failure;
+    });
+    const config = { ...createClosingDevConfig(close), getLogger: () => ({ error }) };
+    const server = (await createServer(config as never)).run({ isPrintInfo: false });
+
+    await flush();
+
+    expect(() => server.emit('close')).not.toThrow();
+
+    await flush();
+
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('vite close failed'), {
+      error: failure,
+    });
+  });
+
   it('should mount a supplied dev Vite without creating another', async () => {
     const supplied = createViteDouble('supplied-middleware');
     const config = createStatefulDevConfig();
