@@ -1,4 +1,5 @@
 // @vitest-environment node
+import type { RequestListener } from 'node:http';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import createServer from '@adapters/express/server';
 
@@ -90,7 +91,7 @@ vi.mock('node:https', async () => {
 
   return {
     default: {
-      createServer: vi.fn((_options: unknown, app: http.RequestListener) => http.createServer(app)),
+      createServer: vi.fn((_options: unknown, app: RequestListener) => http.createServer(app)),
     },
   };
 });
