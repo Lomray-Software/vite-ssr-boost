@@ -70,17 +70,26 @@ const hmrOption = (version: string, server: TLifecycleServer): InlineConfig['ser
 };
 
 /**
- * Put HMR on the parent server unless the project turned it off: the hook reads the config file
- * and inline config merged, so `server.hmr: false` or `server.ws: false` keeps HMR off.
+ * Whether the project set this HMR key itself: off, or on a server of its own.
+ */
+const isOwnHmr = (option: unknown): boolean =>
+  option === false ||
+  (typeof option === 'object' && option !== null && 'server' in option && Boolean(option.server));
+
+/**
+ * Put HMR on the parent server unless the project turned it off or gave it a server of its own:
+ * the hook reads the config file and inline config merged, under both `server.hmr` and `server.ws`.
  */
 const parentHmrPlugin = (version: string, server: TLifecycleServer): Plugin => ({
   name: 'vite-ssr-boost:parent-hmr',
   enforce: 'post',
-  config: (userConfig) =>
-    userConfig.server?.hmr === false ||
-    (userConfig.server as Record<string, unknown> | undefined)?.ws === false
+  config: (userConfig) => {
+    const options = userConfig.server as Record<string, unknown> | undefined;
+
+    return isOwnHmr(options?.hmr) || isOwnHmr(options?.ws)
       ? undefined
-      : { server: hmrOption(version, server) },
+      : { server: hmrOption(version, server) };
+  },
 });
 
 /**

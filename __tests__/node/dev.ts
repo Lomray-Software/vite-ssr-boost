@@ -415,6 +415,22 @@ export default defineEntry(App, routes, {
     }
   });
 
+  it('keeps HMR on a server the project gave it', async () => {
+    writeProject();
+
+    for (const key of ['hmr', 'ws']) {
+      const own = http.createServer();
+      const { app, url } = await start({
+        vite: viteConfig({ server: { [key]: { server: own } } as InlineConfig['server'] }),
+      });
+      const resolved = app.vite.config.server as unknown as Record<string, unknown>;
+
+      expect(app.server.listenerCount('upgrade')).toBe(0);
+      expect(resolved[key]).toMatchObject({ server: own });
+      expect((await request(`${url}/`)).body).toContain('Home v1');
+    }
+  });
+
   it('closes with a connected HMR client and closes Vite', async () => {
     writeProject();
 
