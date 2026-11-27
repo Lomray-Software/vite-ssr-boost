@@ -650,6 +650,43 @@ describe('createLifecycle', () => {
     expect(Date.now() - startedAt).toBeLessThan(2_000);
   });
 
+  it('rejects a managed listen that a native close cancelled', async () => {
+    const server = http.createServer();
+    const lifecycle = createLifecycle(server, { drainTimeoutMs: 60_000 });
+
+    servers.push(server);
+
+    const counts = (): number[] =>
+      ['listening', 'error', 'close'].map((event) => server.listenerCount(event));
+    const before = counts();
+    // A close() during the host lookup cancels the bind with only a `close` event.
+    const bound = lifecycle.listen(0, 'localhost');
+
+    server.close();
+    await expect(bound).rejects.toThrow('cancelled by close()');
+    expect(counts()).toEqual(before);
+
+    const startedAt = Date.now();
+
+    await expect(lifecycle.close()).resolves.toBeUndefined();
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+  });
+
+  it('lets a new managed listen start once a cancelled one ended', async () => {
+    const server = http.createServer();
+    const lifecycle = createLifecycle(server);
+
+    servers.push(server);
+
+    const bound = lifecycle.listen(0, 'localhost');
+
+    server.close();
+    await expect(bound).rejects.toThrow('cancelled by close()');
+    await expect(lifecycle.listen(0, '127.0.0.1')).resolves.toMatchObject({
+      port: expect.any(Number),
+    });
+  });
+
   it('lets force end a pending native bind at once', async () => {
     const server = http.createServer();
     const lifecycle = createLifecycle(server);

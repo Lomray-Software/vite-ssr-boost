@@ -355,21 +355,44 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
 
     const bound = new Promise<AddressInfo | string | null>((resolve, reject) => {
       /**
-       * Settle once and drop the error listener, whichever way the bind ended.
+       * Drop every bind observer, whichever way the bind ended.
        */
-      const fail = (error: unknown): void => {
+      const detach = (): void => {
+        server.off('listening', onListening);
         server.off('error', fail);
-        reject(error);
+        server.off('close', onCancel);
       };
 
+      /**
+       * Resolve with the bound address.
+       */
+      function onListening(): void {
+        detach();
+        hasListened = true;
+        resolve(server.address());
+      }
+
+      /**
+       * Reject with the bind error.
+       */
+      function fail(error: unknown): void {
+        detach();
+        reject(error);
+      }
+
+      /**
+       * A native close() during the host lookup cancels the bind with only a `close` event.
+       */
+      function onCancel(): void {
+        fail(new Error('[ssr-boost] the bind was cancelled by close().'));
+      }
+
+      server.once('listening', onListening);
       server.once('error', fail);
+      server.once('close', onCancel);
 
       try {
-        server.listen(port, host, () => {
-          hasListened = true;
-          server.off('error', fail);
-          resolve(server.address());
-        });
+        server.listen(port, host);
       } catch (error) {
         fail(error);
       }
