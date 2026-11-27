@@ -83,6 +83,28 @@ describe('stripEntryAsync', () => {
     );
   });
 
+  it('should keep async on a src for another host, scheme or parent directory', () => {
+    const entry = '<script src="/app/client.ts" async></script>';
+    const others = [
+      '<script src="//app/client.ts" async></script>',
+      '<script src="\\\\app/client.ts" async></script>',
+      '<script src="https://cdn.test/app/client.ts" async></script>',
+      '<script src="/app/../app/client.ts" async></script>',
+    ].join('');
+
+    expect(stripEntryAsync(others + entry, '/app/', 'client.ts')).toBe(
+      `${others}<script src="/app/client.ts"></script>`,
+    );
+  });
+
+  it('should keep a no-break space that ends the attribute value before async', () => {
+    const html = '<script data-label=x\u00a0 async src="/client.ts"></script>';
+
+    expect(stripEntryAsync(html, '/', 'client.ts')).toBe(
+      '<script data-label=x\u00a0 src="/client.ts"></script>',
+    );
+  });
+
   it('should remove a repeated async attribute', () => {
     const html = '<script async src="/client.ts" async></script>';
 

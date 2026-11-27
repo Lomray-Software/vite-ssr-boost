@@ -6,9 +6,22 @@ type TNode = DefaultTreeAdapterTypes.ChildNode | DefaultTreeAdapterTypes.Documen
 
 /**
  * Pathname of a script src without query and fragment, normalized with one leading slash.
+ * A src naming another host or scheme, or climbing with `..`, is never the entry.
  */
-const getSrcPath = (src: string): string =>
-  path.posix.normalize(`/${src.split(/[?#]/, 1)[0].replace(/^\/+/, '')}`);
+const getSrcPath = (src: string): string | undefined => {
+  const [pathname] = src.split(/[?#]/, 1);
+
+  if (
+    /^[a-z][a-z\d+.-]*:/i.test(pathname) ||
+    /^[\\/]{2}/.test(pathname) ||
+    pathname.includes('\\') ||
+    pathname.split('/').includes('..')
+  ) {
+    return undefined;
+  }
+
+  return path.posix.normalize(`/${pathname.replace(/^\//, '')}`);
+};
 
 /**
  * Collect the source ranges of async attributes on scripts whose src is the entry.
@@ -33,7 +46,7 @@ const collectAsyncRanges = (node: TNode, entryPath: string, ranges: [number, num
  * The entry is found by the exact pathname of its src, as the HTML parser reads the document.
  */
 const stripEntryAsync = (html: string, base: string | undefined, clientFile: string): string => {
-  const entryPath = getSrcPath(path.posix.normalize(`${base ?? '/'}/${clientFile}`));
+  const entryPath = path.posix.normalize(`/${base ?? '/'}/${clientFile}`);
   const ranges: [number, number][] = [];
 
   collectAsyncRanges(parse(html, { sourceCodeLocationInfo: true }), entryPath, ranges);
@@ -45,7 +58,11 @@ const stripEntryAsync = (html: string, base: string | undefined, clientFile: str
   // Cut by position from the end, together with the whitespace before each attribute.
   const result = ranges
     .sort(([left], [right]) => right - left)
-    .reduce((text, [start, end]) => text.slice(0, start).trimEnd() + text.slice(end), html);
+    .reduce(
+      // Only HTML whitespace separates attributes; a no-break space belongs to the value before.
+      (text, [start, end]) => text.slice(0, start).replace(/[\t\n\f\r ]+$/, '') + text.slice(end),
+      html,
+    );
 
   // The parser reports only the first of repeated attributes, so a repeated async needs a pass.
   return stripEntryAsync(result, base, clientFile);
