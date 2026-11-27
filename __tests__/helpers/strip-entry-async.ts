@@ -105,6 +105,41 @@ describe('stripEntryAsync', () => {
     );
   });
 
+  it('should resolve a relative src from the document URL on a nested route', () => {
+    const rooted = '<script src="/app/client.ts" async></script>';
+    const relative = '<script src="client.ts" async></script>';
+
+    expect(stripEntryAsync(rooted, '/app/', 'client.ts', '/app/blog/post?x=1')).toBe(
+      '<script src="/app/client.ts"></script>',
+    );
+    expect(stripEntryAsync(relative, '/app/', 'client.ts', '/app/blog/post')).toBe(relative);
+    expect(stripEntryAsync(relative, '/app/', 'client.ts', '/app/about')).toBe(
+      '<script src="client.ts"></script>',
+    );
+    expect(stripEntryAsync(relative, '/', 'client.ts', '/blog/post')).toBe(relative);
+  });
+
+  it('should resolve a relative src from the base element', () => {
+    const scripts = '<script src="client.ts" async></script>';
+
+    expect(
+      stripEntryAsync(`<base href="/app/">${scripts}`, '/app/', 'client.ts', '/app/blog/post'),
+    ).toBe('<base href="/app/"><script src="client.ts"></script>');
+    expect(stripEntryAsync(`<base href="/docs/">${scripts}`, '/', 'client.ts')).toBe(
+      `<base href="/docs/">${scripts}`,
+    );
+
+    const foreign = '<base href="https://cdn.test/"><script src="/client.ts" async></script>';
+
+    expect(stripEntryAsync(foreign, '/', 'client.ts')).toBe(foreign);
+  });
+
+  it('should drop the whitespace the browser trims around a src', () => {
+    expect(stripEntryAsync('<script src=" /client.ts\n" async></script>', '/', 'client.ts')).toBe(
+      '<script src=" /client.ts\n"></script>',
+    );
+  });
+
   it('should remove a repeated async attribute', () => {
     const html = '<script async src="/client.ts" async></script>';
 

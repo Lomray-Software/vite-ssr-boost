@@ -127,6 +127,7 @@ const loadDevHtml = async (
     await vite.transformIndexHtml(url, html, indexFile),
     vite.config.base,
     clientFile,
+    url,
   );
 
   return splitHtmlShell(transformed, file);

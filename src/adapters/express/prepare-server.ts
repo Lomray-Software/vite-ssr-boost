@@ -213,6 +213,7 @@ class PrepareServer {
         await this.config.getVite()!.transformIndexHtml(req.originalUrl, this.html, indexFile),
         this.config.getVite()?.config.base,
         clientFile,
+        req.originalUrl,
       );
     }
 
