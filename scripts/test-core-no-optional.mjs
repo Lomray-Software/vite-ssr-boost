@@ -334,7 +334,20 @@ try {
 
     assert.match(body, /node-server-ok/);
     cli.kill('SIGTERM');
-    assert.deepEqual(await exited, { code: 0, signal: null });
+
+    let exitTimer;
+    const exitDeadline = new Promise((_, reject) => {
+      exitTimer = setTimeout(
+        () => reject(new Error('ssr-boost start did not exit after SIGTERM.')),
+        15000,
+      );
+    });
+
+    try {
+      assert.deepEqual(await Promise.race([exited, exitDeadline]), { code: 0, signal: null });
+    } finally {
+      clearTimeout(exitTimer);
+    }
   } finally {
     cli.kill('SIGKILL');
   }
@@ -456,7 +469,9 @@ try {
   assert.ok(nodeDeclarations.includes('node/serve-static.d.ts'), 'Static types are packed.');
 
   for (const file of nodeDeclarations) {
-    if (/from ['"]serve-static['"]/.test(await readFile(join(packageRoot, file), 'utf8'))) {
+    const declaration = await readFile(join(packageRoot, file), 'utf8');
+
+    if (/(?:from\s*|import\(\s*)['"]serve-static['"]/.test(declaration)) {
       throw new Error(`Declaration ${file} imports serve-static types.`);
     }
   }
