@@ -99,21 +99,23 @@ planned for **9.0**.
 ## Process signals and shutdown
 
 The CLI now drains the managed server on `SIGTERM` and `SIGINT`: readiness turns off, new
-connections are refused, open requests finish within `drainTimeoutMs` per phase, and a second
-signal forces the close. With the Express server, an application that subscribes to `SIGTERM` or
-`SIGINT` itself keeps that handling: once the server is listening, the CLI leaves signals alone when
-any listener for them is present, whether a preloaded module (`node --require`), a library in your
-entry or `onServerStarted` added it. Remove your own listener to use the managed drain. Subscribe
-in the synchronous part of `onServerStarted`: a listener added later (after an `await` or a timer)
-is not seen by that check, so both your handler and the managed drain run on the same signal.
+connections are refused, open requests finish within `drainTimeoutMs` per phase, and a second signal
+forces the close. With the Express server, an application that subscribes to `SIGTERM` or `SIGINT`
+itself keeps that handling: once the server is listening, the CLI leaves signals alone when any
+listener for them is present, whether a preloaded module (`node --require`), a library in your entry
+or `onServerStarted` added it. Remove your own listener to use the managed drain. A listener added
+in the synchronous part of `onServerStarted` is always seen by that check. One added later (after an
+`await` or a timer) is seen only when it is registered before the check runs; otherwise both your
+handler and the managed drain run on the same signal, so subscribe synchronously.
 
-Configuration load errors in `ssr-boost dev` now stop the command with the original error instead
-of falling back to the Express server. Without `--server`, `ssr-boost dev` starts the Express dev
-Vite server and reads the managed server from its plugin options. The Express server keeps that
-Vite server, so the config file is evaluated once per start, as in 8.6, with or without the flag.
-A project that picks the node server closes it first, so its config file is evaluated three times
-(the server pick, HTTPS and the Vite server), or twice with `--server node`. Keep side effects in
-it (logging, writing files) safe to repeat.
+Configuration load errors in `ssr-boost dev` now stop the command with the original error instead of
+falling back to the Express server. Without `--server`, `ssr-boost dev` starts the Express dev Vite
+server and reads the managed server from its plugin options. The Express server keeps that Vite
+server, so an ordinary start evaluates the config file once, as in 8.6, with or without the flag. A
+project that picks the node server closes it first, so its config file is evaluated three times (the
+server pick, HTTPS and the Vite server), or twice with `--server node`. `--reset-cache` resolves the
+config once more before the start, whichever server runs. Keep side effects in it (logging, writing
+files) safe to repeat.
 
 ## Check the upgraded application
 
