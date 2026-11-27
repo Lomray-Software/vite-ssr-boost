@@ -803,6 +803,68 @@ describe('node server', () => {
     expect(vite.close).toHaveBeenCalledOnce();
   });
 
+  it('should keep the shared Vite open while a server bound again after a failed bind serves', async () => {
+    const vite = createViteDouble('shared-middleware');
+    const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
+    const servers = await mockPendingServers();
+
+    createViteServer.mockResolvedValueOnce(vite);
+
+    const started = await createServer(createStatefulDevConfig() as never);
+    const retried = started.run({ isPrintInfo: false });
+
+    retried.once('error', vi.fn());
+    servers[0].emit('error', failure);
+
+    const first = started.getLifecycle()!;
+
+    started.run({ isPrintInfo: false });
+    await flush();
+
+    const second = started.getLifecycle()!;
+
+    // The caller retries the bind on the same server, as Node suggests for EADDRINUSE.
+    Object.assign(servers[0], { listening: true, close: vi.fn((cb?: () => void) => cb?.()) });
+    servers[0].emit('listening');
+
+    await second.close();
+
+    expect(vite.close).not.toHaveBeenCalled();
+
+    await first.close();
+
+    expect(vite.close).toHaveBeenCalledOnce();
+  });
+
+  it('should refuse a run started from the shared Vite close code', async () => {
+    const vite = createViteDouble('shared-middleware');
+    let attempt: unknown;
+
+    createViteServer.mockResolvedValueOnce(vite);
+
+    const started = await createServer(createStatefulDevConfig() as never);
+
+    started.run({ isPrintInfo: false });
+    await flush();
+
+    const created = vi.mocked(http.createServer).mock.calls.length;
+
+    vite.close.mockImplementation(() => {
+      try {
+        started.run({ isPrintInfo: false });
+      } catch (error) {
+        attempt = error;
+      }
+
+      return Promise.resolve();
+    });
+
+    await started.getLifecycle()!.close();
+
+    expect(attempt).toBeInstanceOf(Error);
+    expect(vi.mocked(http.createServer).mock.calls.length).toBe(created);
+  });
+
   it('should refuse a run after a drain closed the shared Vite', async () => {
     const vite = createViteDouble('shared-middleware');
 

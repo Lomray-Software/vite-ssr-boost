@@ -242,10 +242,9 @@ async function createServer(
           return undefined;
         }
 
-        // A synchronous throw rejects the promise, so the onClose hook still runs.
-        viteClosing ??= new Promise<void>((resolve) => {
-          resolve(vite.close());
-        });
+        // Assigned before vite.close() runs, so a run() from its close code is refused. A
+        // synchronous throw rejects the promise, so the onClose hook still runs.
+        viteClosing ??= Promise.resolve().then(() => vite.close());
 
         return viteClosing;
       };
@@ -296,7 +295,7 @@ async function createServer(
 
         // A native close() releases the hold but leaves the Vite open; during a drain the
         // lifecycle releases it after its hooks, so the Vite still closes last.
-        server.once('close', () => {
+        server.on('close', () => {
           if (!runLifecycle.isDraining()) {
             releaseHold();
           }
@@ -316,7 +315,17 @@ async function createServer(
         const emitter: EventEmitter = server;
 
         emitter.on(errorMonitor, onBindError);
-        server.once('listening', () => emitter.off(errorMonitor, onBindError));
+
+        // A server bound again after a failed bind or a native close serves on the Vite once
+        // more, so it takes the hold back unless a drain started or the Vite is closing.
+        server.on('listening', () => {
+          if (isCounted || viteClosing || runLifecycle.isDraining()) {
+            return;
+          }
+
+          isCounted = true;
+          viteUsers += 1;
+        });
       }
 
       lifecycle = runLifecycle;
