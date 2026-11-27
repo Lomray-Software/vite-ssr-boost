@@ -124,6 +124,10 @@ interface IServeStaticOptions extends ServeStaticOptions {
 function serveStatic(options: IServeStaticOptions): TStaticMiddleware;
 ```
 
+`IServeStaticOptions` extends the options type of `serve-static`, as `middlewares.expressStatic`
+does on the Express entry, so a TypeScript project that type-checks the package declarations
+installs the optional peer `@types/serve-static`.
+
 Connect middleware on [serve-static](https://github.com/expressjs/serve-static) with the managed
 Express server's behaviour: validators, ranges, HEAD and directory redirects stay with
 serve-static; in SSR builds, URLs outside the client directory's top-level names go straight to
