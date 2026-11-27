@@ -11,8 +11,6 @@ type TLifecycleServer = HttpServer | HttpsServer;
 
 type TSignal = NodeJS.Signals;
 
-type TTunnelEvent = 'upgrade' | 'connect';
-
 interface IHealthOptions {
   /** Liveness probe: answers 200 while the process can serve at all. */
   livePath?: string;
@@ -98,8 +96,6 @@ interface IDeadline {
 }
 
 const DEFAULT_HEALTH: Required<IHealthOptions> = { livePath: '/healthz', readyPath: '/readyz' };
-
-const TUNNEL_EVENTS = new Set<string | symbol>(['upgrade', 'connect']);
 
 const DEFAULT_SIGNALS: TSignal[] = ['SIGTERM', 'SIGINT'];
 
@@ -305,11 +301,6 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     sockets.clear();
   };
 
-  /**
-   * Whether an event hands its socket to the application.
-   */
-  const isTunnelEvent = (event: string | symbol): event is TTunnelEvent => TUNNEL_EVENTS.has(event);
-
   server.on('listening', () => {
     hasListened = true;
     isClosed = false;
@@ -329,37 +320,13 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     socket.once('close', () => sockets.delete(socket));
   });
 
-  /*
-   * Node answers an upgrade or CONNECT request itself while no listener for it exists,
-   * so the tracker rides along only while the application (Vite HMR, a WebSocket server, a proxy) owns one.
-   */
-  (['upgrade', 'connect'] as TTunnelEvent[]).forEach((event) => {
-    if (server.listenerCount(event) > 0) {
-      server.prependListener(event, trackTunnel);
-    }
-  });
-
-  server.on('newListener', (event: string | symbol, listener: unknown) => {
-    if (isTunnelEvent(event) && listener !== trackTunnel && server.listenerCount(event) === 0) {
-      server.prependListener(event, trackTunnel);
-    }
-  });
-
-  server.on('removeListener', (event: string | symbol, listener: unknown) => {
-    if (
-      isTunnelEvent(event) &&
-      listener !== trackTunnel &&
-      server.listeners(event).every((current) => current === trackTunnel)
-    ) {
-      server.off(event, trackTunnel);
-    }
-  });
-
   /**
-   * Close keep-alive sockets as their responses finish so the drain can complete.
+   * Count a response until it closes and close its keep-alive socket once the drain started.
    * Prepended so the header is set before an application listener writes the response.
+   * A response handed on from an expectation listener to `request` is counted and released
+   * twice, which keeps the count balanced.
    */
-  server.prependListener('request', (_req: IncomingMessage, res: ServerResponse) => {
+  const trackResponse = (_req: IncomingMessage, res: ServerResponse): void => {
     activeResponses += 1;
 
     // A request listener prepended after the lifecycle may have answered already.
@@ -380,6 +347,50 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
         destroyUpgraded();
       }
     });
+  };
+
+  server.prependListener('request', trackResponse);
+
+  // http.Server typings take only named events, so the generic listeners use the base type.
+  const serverEvents: EventEmitter = server;
+
+  /*
+   * Node answers these events itself while no listener for them exists, so a tracker rides along
+   * only while the application owns one: upgrade and CONNECT hand over a socket (Vite HMR, a
+   * WebSocket server, a proxy), checkContinue and checkExpectation a response that never emits
+   * `request`.
+   */
+  const trackers = new Map<string | symbol, typeof trackTunnel | typeof trackResponse>([
+    ['upgrade', trackTunnel],
+    ['connect', trackTunnel],
+    ['checkContinue', trackResponse],
+    ['checkExpectation', trackResponse],
+  ]);
+
+  trackers.forEach((tracker, event) => {
+    if (serverEvents.listenerCount(event) > 0) {
+      serverEvents.prependListener(event, tracker);
+    }
+  });
+
+  server.on('newListener', (event: string | symbol, listener: unknown) => {
+    const tracker = trackers.get(event);
+
+    if (tracker && listener !== tracker && serverEvents.listenerCount(event) === 0) {
+      serverEvents.prependListener(event, tracker);
+    }
+  });
+
+  server.on('removeListener', (event: string | symbol, listener: unknown) => {
+    const tracker = trackers.get(event);
+
+    if (
+      tracker &&
+      listener !== tracker &&
+      serverEvents.listeners(event).every((current) => current === tracker)
+    ) {
+      serverEvents.off(event, tracker);
+    }
   });
 
   /**

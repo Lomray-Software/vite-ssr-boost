@@ -586,6 +586,96 @@ describe('createLifecycle', () => {
     await vi.waitFor(() => expect(client.destroyed).toBe(true));
   });
 
+  it.each([
+    ['checkContinue', '100-continue'],
+    ['checkExpectation', 'x-test'],
+  ] as const)('keeps upgraded sockets while a %s response streams', async (event, expect100) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let lifecycle!: ILifecycle;
+    const { server, url } = await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance);
+
+        return lifecycle;
+      },
+    );
+
+    server.on(event, (_req: http.IncomingMessage, res: http.ServerResponse) => {
+      if (event === 'checkContinue') {
+        res.writeContinue();
+      }
+
+      res.write('first;');
+      void held.then(() => res.end('last'));
+    });
+    server.on('upgrade', (_req, socket: Socket) => {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const client = await upgrade(server);
+    const streamed = new Promise<string>((resolve, reject) => {
+      const req = http.request(
+        url,
+        { method: 'POST', headers: { Expect: expect100, 'Content-Length': 0 } },
+        (res) => {
+          let body = '';
+
+          res.setEncoding('utf8');
+          res.on('data', (chunk: string) => {
+            body += chunk;
+          });
+          res.on('end', () => resolve(body));
+          res.on('error', reject);
+        },
+      );
+
+      req.on('error', reject);
+      req.end();
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const closed = lifecycle.close();
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.destroyed).toBe(false);
+    release();
+    expect(await streamed).toBe('first;last');
+    await closed;
+    await vi.waitFor(() => expect(client.destroyed).toBe(true));
+  });
+
+  it('attaches the expectation trackers only while the application listens for them', () => {
+    const server = http.createServer();
+
+    createLifecycle(server);
+    expect(server.listenerCount('checkContinue')).toBe(0);
+    expect(server.listenerCount('checkExpectation')).toBe(0);
+
+    /**
+     * Application expectation handler.
+     */
+    const onExpect = (): void => undefined;
+
+    server.on('checkContinue', onExpect);
+    expect(server.listenerCount('checkContinue')).toBe(2);
+    expect(server.listeners('checkContinue')[1]).toBe(onExpect);
+    server.off('checkContinue', onExpect);
+    expect(server.listenerCount('checkContinue')).toBe(0);
+
+    const prepared = http.createServer();
+
+    prepared.on('checkExpectation', onExpect);
+    createLifecycle(prepared);
+    expect(prepared.listenerCount('checkExpectation')).toBe(2);
+  });
+
   it('destroys upgraded sockets at the drain timeout together with stuck streams', async () => {
     let lifecycle!: ILifecycle;
     const { server, url } = await listen(

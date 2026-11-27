@@ -222,8 +222,9 @@ Health probes are opt-in. The live path answers 200 while the process runs; the 
 `close()` is idempotent: every caller shares one drain. It stops accepting connections, closes idle
 keep-alive sockets, sends `Connection: close` on responses still in flight and resolves once every
 socket is gone. Upgraded and tunnelled sockets (WebSocket, HMR, `CONNECT`) are tracked too and
-destroyed once no HTTP response is active. `onDrain` runs after the readiness grace, beside the
-socket drain, and `onClose` after it.
+destroyed once no HTTP response is active. A response the application answers from its own
+`checkContinue` or `checkExpectation` listener counts as active too. `onDrain` runs after the
+readiness grace, beside the socket drain, and `onClose` after it.
 
 `drainTimeoutMs` bounds each phase on its own: the socket drain with `onDrain`, then `onClose`.
 When a phase runs out, its remaining sockets are destroyed and a hook still running makes `close()`
