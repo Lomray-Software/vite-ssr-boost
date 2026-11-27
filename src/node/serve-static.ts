@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
@@ -12,6 +12,18 @@ type TStaticRequest = IncomingMessage & { originalUrl?: string };
 type TStaticMiddleware = (req: TStaticRequest, res: ServerResponse, next: TNext) => void;
 
 type TFileOptions = ServeStaticOptions<ServerResponse>;
+
+/**
+ * How one file server keeps the HTML shell hidden.
+ */
+interface IShellGuard {
+  /** Lowercased request path of the shell. */
+  shellPath: string;
+  /** Lowercased extensionless path the file server would resolve to the shell. */
+  alias?: string;
+  /** File server for the alias that never appends the shell's extension. */
+  serveAlias?: TStaticMiddleware;
+}
 
 /**
  * Options of serve-static, declared here so the package declarations need no serve-static types.
@@ -152,14 +164,15 @@ const createCachePolicy = (
 };
 
 /**
- * Request paths that resolve to the shell: its own path and, when send may append its
- * extension, the extensionless form. Lowercased, since case-insensitive disks match any spelling.
+ * Guard for one file server: the shell's request path and, when the server may append the
+ * shell's extension, the extensionless alias with a server that resolves it without that
+ * extension. Lowercased, since case-insensitive disks match any spelling.
  */
-const getShellPaths = (
+const createShellGuard = (
   root: string,
   shellFile: string,
-  extensions: TFileOptions['extensions'],
-): Set<string> => {
+  options: TFileOptions,
+): IShellGuard | undefined => {
   const relative = path.relative(root, path.resolve(root, shellFile));
 
   // A name such as `..shell.html` sits inside the root, so only a whole `..` segment leaves it.
@@ -169,40 +182,34 @@ const getShellPaths = (
     relative.startsWith(`..${path.sep}`) ||
     path.isAbsolute(relative)
   ) {
-    return new Set();
+    return undefined;
   }
 
   const shellPath = `/${relative.split(path.sep).join('/')}`.toLowerCase();
   const extension = path.posix.extname(shellPath);
-  const paths = new Set([shellPath]);
+  const { extensions } = options;
 
-  if (
-    extension &&
-    Array.isArray(extensions) &&
-    extensions.some((name) => `.${String(name).replace(/^\./, '').toLowerCase()}` === extension)
-  ) {
-    paths.add(shellPath.slice(0, -extension.length));
+  if (!extension || !Array.isArray(extensions)) {
+    return { shellPath };
   }
 
-  return paths;
-};
+  const otherExtensions = extensions.filter(
+    (name) => `.${String(name).replace(/^\./, '').toLowerCase()}` !== extension,
+  );
 
-/**
- * Whether a request path names a real file other than the shell. send serves such a file
- * before it tries an extension, so an extensionless alias of the shell is not the shell then.
- */
-const isOtherFile = (root: string, shellFile: string, pathname: string): boolean => {
-  const file = path.join(root, path.posix.normalize(pathname.replace(/\\/g, '/')));
-
-  if (file.toLowerCase() === path.resolve(root, shellFile).toLowerCase()) {
-    return false;
+  if (otherExtensions.length === extensions.length) {
+    return { shellPath };
   }
 
-  try {
-    return statSync(file).isFile();
-  } catch {
-    return false;
-  }
+  // send still serves a literal file, redirects a directory and tries the other extensions.
+  return {
+    shellPath,
+    alias: shellPath.slice(0, -extension.length),
+    serveAlias: createServeStatic(root, {
+      ...options,
+      extensions: otherExtensions.length ? otherExtensions : false,
+    }) as TStaticMiddleware,
+  };
 };
 
 /**
@@ -274,27 +281,34 @@ const serveStatic = ({
   ...options
 }: IServeStaticOptions): TStaticMiddleware => {
   const mount = normalizeBasename(basename);
-  const wellKnownExtensions = options.extensions ?? ['json'];
-  // Each file server resolves extensions its own way, so each gets the aliases it would serve.
-  const shellPaths = isSPA ? new Set<string>() : getShellPaths(root, shellFile, options.extensions);
-  const wellKnownShellPaths = isSPA
-    ? new Set<string>()
-    : getShellPaths(root, shellFile, wellKnownExtensions);
+  // serve-static resolves its root once, so the shell is matched against that same directory.
+  const resolvedRoot = path.resolve(root);
   const fileOptions: TFileOptions = {
     ...options,
     index: isSPA ? options.index : false,
-    setHeaders: createCachePolicy(root, immutableFiles, options, isSPA ? shellFile : undefined),
+    setHeaders: createCachePolicy(
+      resolvedRoot,
+      immutableFiles,
+      options,
+      isSPA ? shellFile : undefined,
+    ),
   };
-  const plain = createServeStatic(root, fileOptions) as TStaticMiddleware;
-  const serve = isSPA ? plain : createSsrServe(root, plain, fileOptions);
+  const wellKnownOptions: TFileOptions = {
+    ...fileOptions,
+    dotfiles: 'allow',
+    extensions: options.extensions ?? ['json'],
+  };
+  const plain = createServeStatic(resolvedRoot, fileOptions) as TStaticMiddleware;
+  const serve = isSPA ? plain : createSsrServe(resolvedRoot, plain, fileOptions);
   const serveWellKnown =
     options.dotfiles === undefined
-      ? (createServeStatic(root, {
-          ...fileOptions,
-          dotfiles: 'allow',
-          extensions: wellKnownExtensions,
-        }) as TStaticMiddleware)
+      ? (createServeStatic(resolvedRoot, wellKnownOptions) as TStaticMiddleware)
       : undefined;
+  // Each file server resolves extensions its own way, so each gets its own guard.
+  const shellGuard = isSPA ? undefined : createShellGuard(resolvedRoot, shellFile, fileOptions);
+  const wellKnownShellGuard = isSPA
+    ? undefined
+    : createShellGuard(resolvedRoot, shellFile, wellKnownOptions);
 
   /**
    * Strip the mount, pick the file server and restore the request before falling through.
@@ -319,16 +333,21 @@ const serveStatic = ({
       !pathname.includes('\\') &&
       path.posix.normalize(pathname).startsWith(WELL_KNOWN);
 
-    // The shell is matched by the file it resolves to, so no URL spelling reaches it.
-    if (
-      pathname !== undefined &&
-      (isWellKnown ? wellKnownShellPaths : shellPaths).has(getShellKey(pathname)) &&
-      !hasAccessIndexHtml?.() &&
-      !isOtherFile(root, shellFile, pathname)
-    ) {
-      next();
+    const guard = isWellKnown ? wellKnownShellGuard : shellGuard;
+    const key = guard && pathname !== undefined ? getShellKey(pathname) : undefined;
+    const isShell = key !== undefined && key === guard?.shellPath;
+    const isAlias = key !== undefined && key === guard?.alias;
+    let fileServer: TStaticMiddleware | undefined = isWellKnown ? serveWellKnown : serve;
 
-      return;
+    // The shell is matched by the file it resolves to, so no URL spelling reaches it.
+    if ((isShell || isAlias) && !hasAccessIndexHtml?.()) {
+      if (isShell) {
+        next();
+
+        return;
+      }
+
+      fileServer = guard?.serveAlias;
     }
 
     // serve-static builds directory redirects from originalUrl, so a client host never leaks in,
@@ -345,7 +364,7 @@ const serveStatic = ({
       next(error);
     };
 
-    (isWellKnown ? serveWellKnown : serve)(req, res, restore);
+    (fileServer ?? serve)(req, res, restore);
   };
 };
 

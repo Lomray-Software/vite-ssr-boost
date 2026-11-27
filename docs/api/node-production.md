@@ -137,8 +137,9 @@ serve-static; in SSR builds, URLs outside the client directory's top-level names
 SSR builds hide the raw HTML shell unless `hasAccessIndexHtml()` returns true, so that URL reaches
 the router. The shell is matched by the file it resolves to: any letter case, dot segments and,
 when the file server for that path appends its extension (`extensions`, or `json` under
-`/.well-known/`), the extensionless URL, unless a real file has that extensionless name, which
-is then served as send would. `prepareProduction` passes the
+`/.well-known/`), the extensionless URL. That URL is still resolved by send, only without the
+shell's extension: a literal file, a directory redirect or another listed extension is served in
+send's order, and a miss reaches the router. `prepareProduction` passes the
 `indexFile` from `ssr-boost.json`, so a renamed shell stays hidden too. The match is by path: a
 symlink or a copy of the shell under another name in the client directory is served as a file.
 

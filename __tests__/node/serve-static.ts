@@ -361,6 +361,45 @@ describe('node serveStatic', () => {
     expect(await (await fetch(`${wellKnown}/.well-known/shell.json`)).text()).toBe('SSR');
   });
 
+  it('hides the shell under a relative root', async () => {
+    const node = await startNode({ extensions: ['html'] }, false, {
+      root: path.relative(process.cwd(), root),
+    });
+
+    expect(await (await fetch(`${node}/index.html`)).text()).toBe('SSR');
+    expect(await (await fetch(`${node}/INDEX.HTML`)).text()).toBe('SSR');
+    expect(await (await fetch(`${node}/assets/../index.html`)).text()).toBe('SSR');
+    expect(await (await fetch(`${node}/index`)).text()).toBe('SSR');
+    expect(await (await fetch(`${node}/about`)).text()).toBe('extension-fallback');
+
+    await writeFile(path.join(root, 'index'), 'extensionless-index');
+
+    expect(await (await fetch(`${node}/index`)).text()).toBe('extensionless-index');
+  });
+
+  it('resolves the shell alias in send order without the shell extension', async () => {
+    await writeFile(path.join(root, 'index.txt'), 'text-index');
+    const node = await startNode({ extensions: ['txt', 'html'] }, false);
+
+    expect(await (await fetch(`${node}/index`)).text()).toBe('text-index');
+    expect(await (await fetch(`${node}/index.html`)).text()).toBe('SSR');
+
+    await rm(path.join(root, 'index.txt'));
+
+    expect(await (await fetch(`${node}/index`)).text()).toBe('SSR');
+  });
+
+  it('redirects a directory that shares the extensionless name of the shell', async () => {
+    await mkdir(path.join(root, 'index'));
+    await writeFile(path.join(root, 'index', 'page.txt'), 'nested');
+    const node = await startNode({ extensions: ['html'] }, false);
+    const response = await fetch(`${node}/index`, { redirect: 'manual' });
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('location')).toBe('/base/index/');
+    expect(await (await fetch(`${node}/index.html`)).text()).toBe('SSR');
+  });
+
   it('hides the shell for raw paths with a fragment or a backslash', async () => {
     await mkdir(path.join(root, 'nested'));
     await writeFile(path.join(root, 'nested', 'shell.html'), 'nested-shell');
