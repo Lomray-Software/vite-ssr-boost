@@ -399,6 +399,22 @@ export default defineEntry(App, routes, {
     expect(warnings.filter((message) => /hmr/i.test(message))).toEqual([]);
   });
 
+  it('keeps HMR off the parent port when the project turned it off', async () => {
+    writeProject();
+
+    for (const server of [{ hmr: false }, { ws: false }]) {
+      const { app, url } = await start({
+        vite: viteConfig({ server: server as InlineConfig['server'] }),
+      });
+      const resolved = app.vite.config.server as Record<string, unknown>;
+
+      expect(app.server.listenerCount('upgrade')).toBe(0);
+      expect(resolved.hmr).not.toMatchObject({ server: app.server });
+      expect(resolved.ws).not.toMatchObject({ server: app.server });
+      expect((await request(`${url}/`)).body).toContain('Home v1');
+    }
+  });
+
   it('closes with a connected HMR client and closes Vite', async () => {
     writeProject();
 

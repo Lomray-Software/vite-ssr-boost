@@ -3,7 +3,7 @@ import http from 'node:http';
 import https from 'node:https';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import type { Connect, InlineConfig, ViteDevServer } from 'vite';
+import type { Connect, InlineConfig, Plugin, ViteDevServer } from 'vite';
 import type { TCompression } from '@adapters/compression';
 import getRouteAssets from '@adapters/express/route-assets';
 import adapterNode from '@adapters/node';
@@ -68,6 +68,20 @@ const hmrOption = (version: string, server: TLifecycleServer): InlineConfig['ser
 
   return option;
 };
+
+/**
+ * Put HMR on the parent server unless the project turned it off: the hook reads the config file
+ * and inline config merged, so `server.hmr: false` or `server.ws: false` keeps HMR off.
+ */
+const parentHmrPlugin = (version: string, server: TLifecycleServer): Plugin => ({
+  name: 'vite-ssr-boost:parent-hmr',
+  enforce: 'post',
+  config: (userConfig) =>
+    userConfig.server?.hmr === false ||
+    (userConfig.server as Record<string, unknown> | undefined)?.ws === false
+      ? undefined
+      : { server: hmrOption(version, server) },
+});
 
 /**
  * Vite's own SSR loader with mapped stack traces.
@@ -142,8 +156,8 @@ const prepareDev = async ({
       server: {
         middlewareMode: true,
         watch: { usePolling: true, interval: 100 },
-        ...hmrOption(version, server),
       },
+      plugins: [parentHmrPlugin(version, server)],
     }),
   );
 
