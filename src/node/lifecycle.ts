@@ -105,6 +105,11 @@ const DEFAULT_SIGNALS: TSignal[] = ['SIGTERM', 'SIGINT'];
 const bindTrackers = new WeakMap<ILifecycle, () => void>();
 
 /**
+ * Signal listeners of every lifecycle, so two lifecycles never keep moving each other forward.
+ */
+const signalListeners = new WeakSet<object>();
+
+/**
  * Apply only the timeouts the caller set, keeping Node defaults otherwise.
  */
 const applyTimeouts = (
@@ -620,16 +625,19 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     const keepFirst = (event: string | symbol, added: unknown): void => {
       const listener = listeners.get(event);
 
-      if (!listener || added === listener) {
+      if (!listener || added === listener || signalListeners.has(added as object)) {
         return;
       }
 
       // Node adds the listener after this event, so the move waits for it; a signal is delivered
-      // on a later turn of the event loop.
+      // on a later turn of the event loop. A listener the application removed stays removed.
       queueMicrotask(() => {
+        const current = process.listeners(event as TSignal);
+
         if (
           listeners.get(event) !== listener ||
-          process.listeners(event as TSignal)[0] === listener
+          !current.includes(listener) ||
+          current[0] === listener
         ) {
           return;
         }
@@ -641,7 +649,10 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
 
     // Ahead of earlier listeners, so shouldHandle still sees a process.once handler that Node
     // removes before calling it; it stays first when a later listener is prepended as well.
-    listeners.forEach((listener, signal) => process.prependListener(signal as TSignal, listener));
+    listeners.forEach((listener, signal) => {
+      signalListeners.add(listener);
+      process.prependListener(signal as TSignal, listener);
+    });
 
     if (shouldHandle) {
       process.on('newListener', keepFirst);
@@ -649,7 +660,10 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
 
     return () => {
       process.off('newListener', keepFirst);
-      listeners.forEach((listener, signal) => process.off(signal, listener));
+      listeners.forEach((listener, signal) => {
+        signalListeners.delete(listener);
+        process.off(signal, listener);
+      });
       listeners.clear();
     };
   };

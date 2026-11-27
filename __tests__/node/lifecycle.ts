@@ -411,6 +411,76 @@ describe('createLifecycle', () => {
     }
   });
 
+  it('lets two lifecycles subscribe at once without moving each other forever', async () => {
+    const create = async (): Promise<ILifecycle> => {
+      let lifecycle!: ILifecycle;
+
+      await listen(
+        (_req, res) => res.end('app'),
+        (instance) => {
+          lifecycle = createLifecycle(instance);
+
+          return lifecycle;
+        },
+      );
+
+      return lifecycle;
+    };
+    const first = await create();
+    const second = await create();
+    const events = ['SIGTERM', 'SIGINT', 'newListener'];
+    const counts = events.map((event) => process.listenerCount(event));
+    const unsubscribers: (() => void)[] = [];
+
+    try {
+      unsubscribers.push(first.handleSignals({ shouldHandle: () => false }));
+      unsubscribers.push(second.handleSignals({ shouldHandle: () => false }));
+
+      const isTimerFired = await new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(true), 10);
+      });
+
+      expect(isTimerFired).toBe(true);
+      expect(process.listenerCount('SIGTERM')).toBe(counts[0] + 2);
+    } finally {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    }
+
+    expect(events.map((event) => process.listenerCount(event))).toEqual(counts);
+  });
+
+  it('never adds back a signal listener the application removed', async () => {
+    let lifecycle!: ILifecycle;
+
+    await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance);
+
+        return lifecycle;
+      },
+    );
+
+    const before = process.listeners('SIGTERM');
+    const own = vi.fn();
+    const unsubscribe = lifecycle.handleSignals({ shouldHandle: () => false });
+
+    try {
+      const [ours] = process.listeners('SIGTERM');
+
+      process.removeAllListeners('SIGTERM');
+      process.on('SIGTERM', own);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(process.listeners('SIGTERM')).toEqual([own]);
+      expect(process.listeners('SIGTERM')).not.toContain(ours);
+    } finally {
+      unsubscribe();
+      process.off('SIGTERM', own);
+      before.forEach((listener) => process.on('SIGTERM', listener as () => void));
+    }
+  });
+
   it('destroys upgraded sockets so close resolves while a WebSocket client is connected', async () => {
     let lifecycle!: ILifecycle;
     const { server } = await listen(
