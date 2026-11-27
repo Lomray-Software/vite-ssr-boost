@@ -112,7 +112,9 @@ sends the same policy when `/` or `/index.html` resolves to that document. Mount
 ## `serveStatic`
 
 ```ts
-interface IServeStaticOptions extends ServeStaticOptions {
+interface IServeStaticOptions {
+  // serve-static options: acceptRanges, cacheControl, dotfiles, etag, extensions, fallthrough,
+  // immutable, index, lastModified, maxAge, redirect, setHeaders
   root: string;
   basename?: string;
   isSPA?: boolean;
@@ -124,9 +126,8 @@ interface IServeStaticOptions extends ServeStaticOptions {
 function serveStatic(options: IServeStaticOptions): TStaticMiddleware;
 ```
 
-`IServeStaticOptions` extends the options type of `serve-static`, as `middlewares.expressStatic`
-does on the Express entry, so a TypeScript project that type-checks the package declarations
-installs the optional peer `@types/serve-static`.
+`IServeStaticOptions` declares the `serve-static` options itself, so `node/production` needs no
+`@types/serve-static`; only the Express entry's `middlewares.expressStatic` uses that optional peer.
 
 Connect middleware on [serve-static](https://github.com/expressjs/serve-static) with the managed
 Express server's behaviour: validators, ranges, HEAD and directory redirects stay with

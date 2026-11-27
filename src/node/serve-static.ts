@@ -1,4 +1,5 @@
 import { readdirSync } from 'node:fs';
+import type { Stats } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import createServeStatic from 'serve-static';
@@ -10,7 +11,24 @@ type TStaticRequest = IncomingMessage & { originalUrl?: string };
 
 type TStaticMiddleware = (req: TStaticRequest, res: ServerResponse, next: TNext) => void;
 
-interface IServeStaticOptions extends ServeStaticOptions<ServerResponse> {
+type TFileOptions = ServeStaticOptions<ServerResponse>;
+
+/**
+ * Options of serve-static, declared here so the package declarations need no serve-static types.
+ */
+interface IServeStaticOptions {
+  acceptRanges?: boolean;
+  cacheControl?: boolean;
+  dotfiles?: string;
+  etag?: boolean;
+  extensions?: string[] | false;
+  fallthrough?: boolean;
+  immutable?: boolean;
+  index?: boolean | string | string[];
+  lastModified?: boolean;
+  maxAge?: number | string;
+  redirect?: boolean;
+  setHeaders?: (res: ServerResponse, path: string, stat: Stats) => void;
   /** Directory with the built client files. */
   root: string;
   /** Public URL prefix the directory is mounted at; matched case-insensitively like Express. */
@@ -101,9 +119,9 @@ const getMountedUrl = (url: string, mount: string): string | undefined => {
 const createCachePolicy = (
   root: string,
   immutableFiles: Iterable<string> | undefined,
-  { cacheControl, immutable, maxAge, setHeaders }: ServeStaticOptions<ServerResponse>,
+  { cacheControl, immutable, maxAge, setHeaders }: TFileOptions,
   spaShellFile?: string,
-): ServeStaticOptions<ServerResponse>['setHeaders'] => {
+): TFileOptions['setHeaders'] => {
   const fingerprinted = new Set(
     [...(immutableFiles ?? [])].map((file) => path.posix.normalize(file).replace(/^\/+/, '')),
   );
@@ -140,7 +158,7 @@ const createCachePolicy = (
 const getShellPaths = (
   root: string,
   shellFile: string,
-  extensions: ServeStaticOptions<ServerResponse>['extensions'],
+  extensions: TFileOptions['extensions'],
 ): Set<string> => {
   const relative = path.relative(root, path.resolve(root, shellFile));
 
@@ -175,7 +193,7 @@ const getShellPaths = (
 const createSsrServe = (
   root: string,
   serve: TStaticMiddleware,
-  options: ServeStaticOptions<ServerResponse>,
+  options: TFileOptions,
 ): TStaticMiddleware => {
   if (options.fallthrough === false || options.extensions) {
     return serve;
@@ -244,7 +262,7 @@ const serveStatic = ({
   const wellKnownShellPaths = isSPA
     ? new Set<string>()
     : getShellPaths(root, shellFile, wellKnownExtensions);
-  const fileOptions: ServeStaticOptions<ServerResponse> = {
+  const fileOptions: TFileOptions = {
     ...options,
     index: isSPA ? options.index : false,
     setHeaders: createCachePolicy(root, immutableFiles, options, isSPA ? shellFile : undefined),

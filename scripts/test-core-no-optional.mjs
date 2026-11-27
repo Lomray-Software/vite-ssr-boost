@@ -448,6 +448,19 @@ try {
     }
   }
 
+  // The node entries type-check without the optional @types/serve-static peer.
+  const nodeDeclarations = files.filter(
+    (name) => name.startsWith('node/') && name.endsWith('.d.ts'),
+  );
+
+  assert.ok(nodeDeclarations.includes('node/serve-static.d.ts'), 'Static types are packed.');
+
+  for (const file of nodeDeclarations) {
+    if (/from ['"]serve-static['"]/.test(await readFile(join(packageRoot, file), 'utf8'))) {
+      throw new Error(`Declaration ${file} imports serve-static types.`);
+    }
+  }
+
   process.stdout.write('Packed exports (including http, testing, core/entry, node/production and node/dev), the node managed server without Express or Vite, NodeNext/Bundler declarations, optional-free core/testing and edge testing bundle passed.\n');
 } finally {
   await rm(directory, { force: true, recursive: true });
