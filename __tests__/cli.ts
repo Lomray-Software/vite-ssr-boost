@@ -102,7 +102,7 @@ const createLifecycleMock = () => {
 };
 
 /**
- * Express server double: the CLI waits for its listening event before taking signals.
+ * Express server double returned by the adapter's run().
  */
 const expressServer = Object.assign(new EventEmitter(), { id: 'server' });
 
@@ -310,32 +310,35 @@ describe('cli integration', () => {
 
   it('should leave signals to an Express app that subscribed to them', async () => {
     const { lifecycle } = createLifecycleMock();
-    const server = new EventEmitter();
+    const ownListener = () => undefined;
     const appListener = () => undefined;
 
     loadProductionConfigMock.mockReturnValue({});
-    createServerMock.mockResolvedValue({
-      run: vi.fn(() => server),
+    createServerMock.mockResolvedValueOnce({
+      run: vi.fn(() => expressServer),
       app: 'app',
       getLifecycle: vi.fn(() => lifecycle),
     });
 
     await runProd({ version: '1', isPrintInfo: false });
-    process.on('SIGTERM', appListener);
-    server.emit('listening');
-    await flush();
-
-    expect(lifecycle.handleSignals).not.toHaveBeenCalled();
-
-    process.off('SIGTERM', appListener);
-    await runProd({ version: '1', isPrintInfo: false });
-    server.emit('listening');
-    await flush();
 
     expect(lifecycle.handleSignals).toHaveBeenCalledTimes(1);
     expect(lifecycle.handleSignals).toHaveBeenCalledWith(
       expect.objectContaining({ onExit: processStopMock }),
     );
+
+    const [[{ shouldHandle }]] = lifecycle.handleSignals.mock.calls as unknown as [
+      [{ shouldHandle: (signal: NodeJS.Signals) => boolean }],
+    ];
+
+    // Stands in for the listener a real lifecycle subscribes.
+    process.on('SIGTERM', ownListener);
+    expect(shouldHandle('SIGTERM')).toBe(true);
+    process.on('SIGTERM', appListener);
+    expect(shouldHandle('SIGTERM')).toBe(false);
+    process.off('SIGTERM', appListener);
+    expect(shouldHandle('SIGTERM')).toBe(true);
+    process.off('SIGTERM', ownListener);
   });
 
   it('should keep Express when the plugin leaves managedServer unset', async () => {

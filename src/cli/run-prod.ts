@@ -97,7 +97,7 @@ async function runProd(params: IRunProdParams): Promise<IRunProdOut> {
   const server = run({ version, isPrintInfo });
   const lifecycle = getLifecycle();
 
-  ownSignalsUnlessHandled(server, lifecycle);
+  ownSignalsUnlessHandled(lifecycle);
 
   return { server, config, lifecycle };
 }

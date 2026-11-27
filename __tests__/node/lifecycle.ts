@@ -326,6 +326,51 @@ describe('createLifecycle', () => {
     expect(listeners.size).toBe(0);
   });
 
+  it('leaves a signal that shouldHandle declines when it arrives', async () => {
+    const listeners = new Map<string, () => void>();
+
+    vi.spyOn(process, 'on').mockImplementation(((signal: string, listener: () => void) => {
+      listeners.set(signal, listener);
+
+      return process;
+    }) as typeof process.on);
+    vi.spyOn(process, 'off').mockImplementation(((signal: string) => {
+      listeners.delete(signal);
+
+      return process;
+    }) as typeof process.off);
+
+    let lifecycle!: ILifecycle;
+
+    await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance);
+
+        return lifecycle;
+      },
+    );
+
+    let isHandled = false;
+    const onExit = vi.fn();
+    const onSignal = vi.fn();
+    const shouldHandle = vi.fn(() => isHandled);
+    const unsubscribe = lifecycle.handleSignals({ onExit, onSignal, shouldHandle });
+
+    listeners.get('SIGTERM')!();
+    listeners.get('SIGTERM')!();
+    expect(shouldHandle).toHaveBeenCalledWith('SIGTERM');
+    expect(onSignal).not.toHaveBeenCalled();
+    expect(lifecycle.isDraining()).toBe(false);
+
+    isHandled = true;
+    listeners.get('SIGINT')!();
+    expect(onSignal).toHaveBeenCalledWith('SIGINT');
+    expect(lifecycle.isDraining()).toBe(true);
+    await vi.waitFor(() => expect(onExit).toHaveBeenCalledWith(0));
+    unsubscribe();
+  });
+
   it('destroys upgraded sockets so close resolves while a WebSocket client is connected', async () => {
     let lifecycle!: ILifecycle;
     const { server } = await listen(

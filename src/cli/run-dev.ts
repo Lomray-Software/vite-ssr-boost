@@ -130,7 +130,7 @@ async function runDev(params: IRunDevParams): Promise<IRunDevOut> {
     throw error;
   }
 
-  ownSignalsUnlessHandled(server, lifecycle);
+  ownSignalsUnlessHandled(lifecycle);
 
   return { server, config, lifecycle };
 }

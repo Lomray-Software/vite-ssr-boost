@@ -54,6 +54,8 @@ interface ISignalOptions {
   onSignal?: (signal: TSignal) => void;
   /** Called after the drain with the exit code; the CLI exits the process here. */
   onExit?: (code: number) => void;
+  /** Checked when a signal arrives; false leaves that signal to other listeners. */
+  shouldHandle?: (signal: TSignal) => boolean;
 }
 
 interface ILifecycle {
@@ -565,12 +567,14 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   };
 
   /**
-   * Drain on the first signal, joining a drain already under way, and force it on the next.
+   * Drain on the first signal, joining a drain already under way, and force it on the next,
+   * unless shouldHandle declines the signal when it arrives.
    */
   const handleSignals: ILifecycle['handleSignals'] = ({
     signals = DEFAULT_SIGNALS,
     onSignal,
     onExit,
+    shouldHandle,
   } = {}) => {
     let isSignalled = false;
 
@@ -578,6 +582,10 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
      * Shared reaction to every subscribed signal.
      */
     const react = (signal: TSignal): void => {
+      if (shouldHandle && !shouldHandle(signal)) {
+        return;
+      }
+
       onSignal?.(signal);
 
       if (isSignalled) {

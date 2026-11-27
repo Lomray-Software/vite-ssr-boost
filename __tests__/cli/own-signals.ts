@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EventEmitter } from 'node:events';
 import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
 import cliContext from '@constants/cli-context';
 
@@ -66,165 +65,162 @@ describe('ownSignalsUnlessHandled', () => {
   const added: (() => void)[] = [];
 
   /**
-   * Subscribe a listener to SIGTERM for the duration of one test.
+   * Subscribe a listener to a signal for the rest of one test.
    */
-  const addSigterm = (): void => {
+  const addListener = (signal: NodeJS.Signals = 'SIGTERM'): (() => void) => {
     const listener = vi.fn();
+    const remove = () => process.off(signal, listener);
 
-    process.on('SIGTERM', listener);
-    added.push(() => process.off('SIGTERM', listener));
+    process.on(signal, listener);
+    added.push(remove);
+
+    return remove;
   };
 
   /**
-   * Emit listening on a server double and wait for the deferred check.
+   * Lifecycle double whose subscription adds real listeners that honour shouldHandle.
    */
-  const listen = async (server: EventEmitter): Promise<void> => {
-    server.emit('listening');
-    await new Promise((resolve) => setImmediate(resolve));
+  const createSubscribingLifecycle = () => {
+    const drained = vi.fn();
+    const lifecycle = {
+      handleSignals: vi.fn(
+        ({
+          onSignal,
+          onExit,
+          shouldHandle,
+        }: {
+          onSignal: (signal: NodeJS.Signals) => void;
+          onExit: (code: number) => void;
+          shouldHandle?: (signal: NodeJS.Signals) => boolean;
+        }) => {
+          const listeners = (['SIGTERM', 'SIGINT'] as const).map((signal) => {
+            const listener = () => {
+              if (shouldHandle && !shouldHandle(signal)) {
+                return;
+              }
+
+              onSignal(signal);
+              drained(signal);
+              onExit(0);
+            };
+
+            process.on(signal, listener);
+
+            return [signal, listener] as const;
+          });
+          const release = (): void => {
+            listeners.forEach(([signal, listener]) => process.off(signal, listener));
+          };
+
+          added.push(release);
+
+          return release;
+        },
+      ),
+    };
+
+    return { lifecycle, drained };
   };
 
   afterEach(() => {
-    added.splice(0).forEach((remove) => remove());
     ownSignals();
+    added.splice(0).forEach((remove) => remove());
+    processStopMock.mockClear();
+    cliContext.isExiting = undefined;
   });
 
-  it('takes signals when no listener is present once the server listens', async () => {
-    const server = new EventEmitter();
-    const { lifecycle } = createLifecycle();
+  it('drains and exits on a signal when nothing else listens', () => {
+    const { lifecycle, drained } = createSubscribingLifecycle();
 
-    ownSignalsUnlessHandled(server as never, lifecycle as never);
-    await listen(server);
+    ownSignalsUnlessHandled(lifecycle as never);
+    process.emit('SIGTERM');
 
-    expect(lifecycle.handleSignals).toHaveBeenCalledOnce();
+    expect(drained).toHaveBeenCalledWith('SIGTERM');
+    expect(processStopMock).toHaveBeenCalledWith(0);
+    expect(cliContext.isExiting).toBe(true);
   });
 
-  it('leaves signals to a listener present before the server loaded (a preload)', async () => {
-    addSigterm();
+  it('leaves a signal to a listener present before the server loaded (a preload)', () => {
+    addListener();
 
-    const server = new EventEmitter();
-    const { lifecycle } = createLifecycle();
+    const { lifecycle, drained } = createSubscribingLifecycle();
 
-    ownSignalsUnlessHandled(server as never, lifecycle as never);
-    await listen(server);
+    ownSignalsUnlessHandled(lifecycle as never);
+    process.emit('SIGTERM');
 
-    expect(lifecycle.handleSignals).not.toHaveBeenCalled();
+    expect(drained).not.toHaveBeenCalled();
+    expect(processStopMock).not.toHaveBeenCalled();
+    expect(cliContext.isExiting).toBeUndefined();
   });
 
-  it('leaves signals to an application that subscribed while the server started', async () => {
-    const server = new EventEmitter();
-    const { lifecycle } = createLifecycle();
+  it('leaves a signal to an application that subscribed after an await', async () => {
+    const { lifecycle, drained } = createSubscribingLifecycle();
 
-    ownSignalsUnlessHandled(server as never, lifecycle as never);
-    addSigterm();
-    await listen(server);
+    ownSignalsUnlessHandled(lifecycle as never);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    addListener();
+    process.emit('SIGTERM');
 
-    expect(lifecycle.handleSignals).not.toHaveBeenCalled();
+    expect(drained).not.toHaveBeenCalled();
+    expect(processStopMock).not.toHaveBeenCalled();
+    expect(cliContext.isExiting).toBeUndefined();
   });
 
-  it('does not count its own previous subscription after a restart', async () => {
-    const first = new EventEmitter();
-    const second = new EventEmitter();
-    const sigterm = vi.fn();
-    const { lifecycle: firstLifecycle } = createLifecycle();
-    // A real subscription, so the restart must remove it before it counts listeners.
-    const lifecycle = {
-      handleSignals: vi.fn(() => {
-        process.on('SIGTERM', sigterm);
+  it('decides each signal on its own when it arrives', () => {
+    const removeSigint = addListener('SIGINT');
+    const { lifecycle, drained } = createSubscribingLifecycle();
 
-        return () => process.off('SIGTERM', sigterm);
-      }),
-    };
+    ownSignalsUnlessHandled(lifecycle as never);
+    process.emit('SIGINT');
+    expect(drained).not.toHaveBeenCalled();
 
-    ownSignalsUnlessHandled(first as never, lifecycle as never);
-    await listen(first);
-    expect(process.listeners('SIGTERM')).toContain(sigterm);
+    process.emit('SIGTERM');
+    expect(drained).toHaveBeenCalledWith('SIGTERM');
 
-    ownSignalsUnlessHandled(second as never, firstLifecycle as never);
-    await listen(second);
-
-    expect(firstLifecycle.handleSignals).toHaveBeenCalledOnce();
+    removeSigint();
+    process.emit('SIGINT');
+    expect(drained).toHaveBeenCalledWith('SIGINT');
   });
 
-  /**
-   * Lifecycle double whose subscription adds a real SIGTERM listener.
-   */
-  const createSubscribingLifecycle = () => {
-    const sigterm = vi.fn();
-    const lifecycle = {
-      handleSignals: vi.fn(() => {
-        process.on('SIGTERM', sigterm);
-
-        return () => process.off('SIGTERM', sigterm);
-      }),
-    };
-
-    added.push(() => process.off('SIGTERM', sigterm));
-
-    return { lifecycle, sigterm };
-  };
-
-  it('drops a pending check of a start a newer one replaced', async () => {
-    const first = new EventEmitter();
-    const second = new EventEmitter();
+  it('releases and does not count its previous subscription after a restart', () => {
     const older = createSubscribingLifecycle();
     const newer = createSubscribingLifecycle();
 
-    ownSignalsUnlessHandled(first as never, older.lifecycle as never);
-    // The older check is queued but has not run when the newer start is selected.
-    first.emit('listening');
-    ownSignalsUnlessHandled(second as never, newer.lifecycle as never);
-    await listen(second);
-    await new Promise((resolve) => setImmediate(resolve));
+    ownSignalsUnlessHandled(older.lifecycle as never);
+    ownSignalsUnlessHandled(newer.lifecycle as never);
 
-    expect(older.lifecycle.handleSignals).not.toHaveBeenCalled();
-    expect(newer.lifecycle.handleSignals).toHaveBeenCalledOnce();
-    expect(process.listeners('SIGTERM')).toEqual([newer.sigterm]);
+    expect(process.listenerCount('SIGTERM')).toBe(1);
+
+    process.emit('SIGTERM');
+
+    expect(older.drained).not.toHaveBeenCalled();
+    expect(newer.drained).toHaveBeenCalledOnce();
   });
 
-  it('removes the listening listener of a start replaced before it listened', async () => {
-    const first = new EventEmitter();
-    const second = new EventEmitter();
+  it('still yields after a restart to an application listener the restart kept', () => {
+    addListener();
+
     const older = createSubscribingLifecycle();
     const newer = createSubscribingLifecycle();
 
-    ownSignalsUnlessHandled(first as never, older.lifecycle as never);
-    ownSignalsUnlessHandled(second as never, newer.lifecycle as never);
+    ownSignalsUnlessHandled(older.lifecycle as never);
+    ownSignalsUnlessHandled(newer.lifecycle as never);
+    process.emit('SIGTERM');
 
-    expect(first.listenerCount('listening')).toBe(0);
-
-    await listen(second);
-    await listen(first);
-
-    expect(older.lifecycle.handleSignals).not.toHaveBeenCalled();
-    expect(newer.lifecycle.handleSignals).toHaveBeenCalledOnce();
+    expect(older.drained).not.toHaveBeenCalled();
+    expect(newer.drained).not.toHaveBeenCalled();
   });
 
-  it('drops a pending check when the node server takes signals directly', async () => {
-    const server = new EventEmitter();
+  it('releases an Express subscription when the node server takes signals directly', () => {
     const older = createSubscribingLifecycle();
     const { lifecycle } = createLifecycle();
 
-    ownSignalsUnlessHandled(server as never, older.lifecycle as never);
-    server.emit('listening');
+    ownSignalsUnlessHandled(older.lifecycle as never);
     ownSignals(lifecycle as never);
-    await new Promise((resolve) => setImmediate(resolve));
 
-    expect(older.lifecycle.handleSignals).not.toHaveBeenCalled();
-    expect(lifecycle.handleSignals).toHaveBeenCalledOnce();
-  });
-
-  it('still yields after a restart to an application listener the restart kept', async () => {
-    addSigterm();
-
-    const first = new EventEmitter();
-    const second = new EventEmitter();
-    const { lifecycle } = createLifecycle();
-
-    ownSignalsUnlessHandled(first as never, lifecycle as never);
-    await listen(first);
-    ownSignalsUnlessHandled(second as never, lifecycle as never);
-    await listen(second);
-
-    expect(lifecycle.handleSignals).not.toHaveBeenCalled();
+    expect(process.listenerCount('SIGTERM')).toBe(0);
+    expect(lifecycle.handleSignals).toHaveBeenCalledWith(
+      expect.not.objectContaining({ shouldHandle: expect.anything() }),
+    );
   });
 });
