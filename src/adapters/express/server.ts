@@ -25,7 +25,7 @@ export interface ICreateServerOut {
 
 /**
  * Create SSR server. devVite is internal to the CLI: the dev Vite it started to pick the server,
- * mounted for this one start; any other start creates its own.
+ * mounted for this one start; any other start creates its own. A prod config ignores it.
  */
 async function createServer(
   config: ServerConfig,
@@ -54,10 +54,14 @@ async function createServer(
 
   // A Vite this call created is closed here if the setup fails; a supplied one stays its caller's.
   let ownVite: ViteDevServer | undefined;
+  // The Vite this start mounted: its drain closes this one, never a later start's.
+  let mountedVite: ViteDevServer | undefined;
 
   try {
     if (!config.isProd) {
       const vite = devVite ?? (ownVite = await createDevVite(config.mode));
+
+      mountedVite = vite;
 
       /**
        * Use vite's connect instance as middleware
@@ -173,17 +177,17 @@ async function createServer(
      */
     run: ({ version, isPrintInfo = true } = {}): Server => {
       const { port, host } = config.getParams();
-      const isHTTPS = Boolean(config.getVite()?.config?.server?.https);
+      const isHTTPS = Boolean(mountedVite?.config?.server?.https);
 
       /**
        * update resolved host for print network link
        */
-      if (config.isHost && !config.isProd) {
-        config.getVite()!.config.server.host = host;
+      if (config.isHost && mountedVite) {
+        mountedVite.config.server.host = host;
       }
 
       const server = isHTTPS
-        ? https.createServer(config.getVite()!.config.server.https!, app)
+        ? https.createServer(mountedVite!.config.server.https!, app)
         : http.createServer(app);
 
       const { onClose } = lifecycleOptions;
@@ -194,7 +198,7 @@ async function createServer(
         onClose: config.isProd
           ? onClose
           : async () => {
-              await Promise.all([config.getVite()?.close(), onClose?.()]);
+              await Promise.all([mountedVite?.close(), onClose?.()]);
             },
       });
 

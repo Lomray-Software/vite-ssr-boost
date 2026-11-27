@@ -429,6 +429,25 @@ export default defineEntry(App, routes, {
     started = [];
   });
 
+  it('closes only the Vite its own start created when two starts share a config', async () => {
+    writeProject();
+
+    const config = ServerConfig.init({ mode: 'development' });
+    const first = await start({ config });
+    const second = await start({ config });
+    const firstClose = vi.spyOn(first.app.vite, 'close');
+    const secondClose = vi.spyOn(second.app.vite, 'close');
+
+    expect(config.getVite()).toBe(second.app.vite);
+
+    await first.app.close();
+
+    expect(firstClose).toHaveBeenCalledOnce();
+    expect(secondClose).not.toHaveBeenCalled();
+    expect((await request(`${second.url}/`)).body).toContain('Home v1');
+    started = [second.app];
+  });
+
   it('answers readiness 503 and keeps accepting during the readiness grace', async () => {
     writeProject();
 

@@ -187,10 +187,7 @@ const prepareDev = async ({
     const { root, serverFile } = config.getParams();
     const file = path.resolve(`${root}/${serverFile}`);
 
-    return mount(toEntry(file, await loadEntry(config.getVite()!, file)))(
-      request,
-      executionContext,
-    );
+    return mount(toEntry(file, await loadEntry(vite, file)))(request, executionContext);
   };
 
   /**
@@ -210,9 +207,9 @@ const prepareDev = async ({
     server,
 
     /**
-     * Close whichever Vite instance a restart left on the config.
+     * Close the Vite this call started; a restart keeps the instance, a later call has its own.
      */
-    close: () => config.getVite()!.close(),
+    close: () => vite.close(),
   };
 };
 

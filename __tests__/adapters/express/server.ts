@@ -124,6 +124,15 @@ const createViteDouble = (middlewares: string) => ({
 });
 
 /**
+ * Dev config whose start mounts a Vite double with the given close.
+ */
+const createClosingDevConfig = (close: () => Promise<void>) => {
+  createViteServer.mockResolvedValueOnce({ ...createViteDouble('vite-middleware'), close });
+
+  return createDevConfig({ close });
+};
+
+/**
  * Wait for the queued listen callback.
  */
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -158,7 +167,7 @@ describe('node server', () => {
 
   it('should wait for the bind when close follows run at once', async () => {
     const close = vi.fn().mockResolvedValue(undefined);
-    const result = await createServer(createDevConfig({ close }) as never);
+    const result = await createServer(createClosingDevConfig(close) as never);
     const server = result.run({ isPrintInfo: false });
 
     await result.getLifecycle()!.close();
@@ -296,7 +305,7 @@ describe('node server', () => {
     const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
     const servers = await mockPendingServers();
     const close = vi.fn().mockResolvedValue(undefined);
-    const result = await createServer(createDevConfig({ close }) as never);
+    const result = await createServer(createClosingDevConfig(close) as never);
 
     result.run({ isPrintInfo: false }).once('error', vi.fn());
 
@@ -310,7 +319,7 @@ describe('node server', () => {
   it('should start nothing when the bind lands after the drain moved past it', async () => {
     const servers = await mockPendingServers();
     const close = vi.fn().mockResolvedValue(undefined);
-    const result = await createServer(createDevConfig({ close }) as never, {
+    const result = await createServer(createClosingDevConfig(close) as never, {
       drainTimeoutMs: 10,
     });
 
@@ -332,7 +341,7 @@ describe('node server', () => {
 
   it('should close vite when the dev server drains', async () => {
     const close = vi.fn().mockResolvedValue(undefined);
-    const result = await createServer(createDevConfig({ close }) as never);
+    const result = await createServer(createClosingDevConfig(close) as never);
 
     result.run({ isPrintInfo: false });
     await flush();
@@ -346,7 +355,7 @@ describe('node server', () => {
     const close = vi.fn().mockResolvedValue(undefined);
     const onDrain = vi.fn().mockResolvedValue(undefined);
     const onClose = vi.fn().mockResolvedValue(undefined);
-    const result = await createServer(createDevConfig({ close }) as never, { onDrain, onClose });
+    const result = await createServer(createClosingDevConfig(close) as never, { onDrain, onClose });
 
     const server = result.run({ isPrintInfo: false });
     let release: (() => void) | undefined;
@@ -433,6 +442,25 @@ describe('node server', () => {
     expect(createViteServer).toHaveBeenCalledTimes(2);
     expect(config.setVite).toHaveBeenLastCalledWith(second);
     expect(config.getVite()).toBe(second);
+    expect(second.close).not.toHaveBeenCalled();
+  });
+
+  it('should close only the Vite its own start mounted', async () => {
+    const first = createViteDouble('first-middleware');
+    const second = createViteDouble('second-middleware');
+    const config = createStatefulDevConfig();
+
+    createViteServer.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+
+    const started = await createServer(config as never);
+
+    await createServer(config as never);
+    started.run({ isPrintInfo: false });
+    await flush();
+    await started.getLifecycle()!.close();
+
+    expect(config.getVite()).toBe(second);
+    expect(first.close).toHaveBeenCalledOnce();
     expect(second.close).not.toHaveBeenCalled();
   });
 
