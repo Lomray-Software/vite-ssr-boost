@@ -109,7 +109,10 @@ const observe = (
 /**
  * Send one GET with a raw request target, such as the absolute form a proxy uses.
  */
-const observeTarget = (url: string, target: string): Promise<{ status: number; body: string }> => {
+const observeTarget = (
+  url: string,
+  target: string,
+): Promise<{ status: number; body: string; location?: string }> => {
   const { hostname, port } = new URL(url);
 
   return new Promise((resolve, reject) => {
@@ -121,7 +124,11 @@ const observeTarget = (url: string, target: string): Promise<{ status: number; b
         response.on('data', (chunk: Buffer) => chunks.push(chunk));
         response.on('error', reject);
         response.on('end', () =>
-          resolve({ status: response.statusCode!, body: Buffer.concat(chunks).toString('utf8') }),
+          resolve({
+            status: response.statusCode!,
+            body: Buffer.concat(chunks).toString('utf8'),
+            location: response.headers.location,
+          }),
         );
       },
     );
@@ -373,6 +380,14 @@ describe('node serveStatic', () => {
       );
       expect((await observeTarget(node, `${origin}/elsewhere/index.html`)).body).toBe('SSR');
     }
+  });
+
+  it('redirects an absolute-form directory target to its path, not the client host', async () => {
+    const node = await startNode({}, false);
+    const { status, location } = await observeTarget(node, 'http://other.example/base/assets');
+
+    expect(status).toBe(301);
+    expect(location).toBe('/base/assets/');
 
     // At the root mount a raw target missed the shell key while serve-static found the file.
     for (const options of [{ extensions: ['html'] }, { fallthrough: false }]) {

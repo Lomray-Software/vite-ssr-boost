@@ -312,7 +312,8 @@ const serveStatic = ({
       return;
     }
 
-    req.originalUrl = originalUrl ?? url;
+    // serve-static builds directory redirects from originalUrl, so a client host never leaks in.
+    req.originalUrl = originalUrl ?? target;
     req.url = mountedUrl;
 
     /**
