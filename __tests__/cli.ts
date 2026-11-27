@@ -20,7 +20,7 @@ const {
   BuildMock,
   createServerMock,
   resolveConfigMock,
-  loadConfigFromFileMock,
+  createDevViteMock,
   getPluginConfigMock,
   setCurrentEntrypointNameMock,
   printServerInfoMock,
@@ -37,7 +37,7 @@ const {
   BuildMock: vi.fn(),
   createServerMock: vi.fn(),
   resolveConfigMock: vi.fn(),
-  loadConfigFromFileMock: vi.fn(),
+  createDevViteMock: vi.fn(),
   getPluginConfigMock: vi.fn(),
   setCurrentEntrypointNameMock: vi.fn(),
   printServerInfoMock: vi.fn(),
@@ -49,6 +49,7 @@ vi.mock('@services/build', () => ({
 }));
 vi.mock('@adapters/express/server', () => ({
   default: createServerMock,
+  createDevVite: createDevViteMock,
 }));
 vi.mock('vite', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vite')>();
@@ -56,7 +57,6 @@ vi.mock('vite', async (importOriginal) => {
   return {
     ...actual,
     resolveConfig: resolveConfigMock,
-    loadConfigFromFile: loadConfigFromFileMock,
   };
 });
 vi.mock('@helpers/plugin-config', () => ({
@@ -109,6 +109,18 @@ const expressServer = Object.assign(new EventEmitter(), { id: 'server' });
  */
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
+/**
+ * A started dev Vite whose resolved plugins carry the given boost options.
+ */
+const devVite = (pluginOptions?: Record<string, unknown>) => ({
+  config: {
+    plugins: pluginOptions ? [{ name: PLUGIN_NAME, pluginOptions }] : [{ name: 'other' }],
+    server: {},
+    env: {},
+  },
+  close: vi.fn().mockResolvedValue(undefined),
+});
+
 describe('cli integration', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -139,7 +151,7 @@ describe('cli integration', () => {
   });
 
   it('should run dev/prod/serverless wrappers', async () => {
-    loadConfigFromFileMock.mockResolvedValue({ config: { plugins: [] } });
+    createDevViteMock.mockResolvedValue(devVite());
     createServerMock.mockResolvedValue({
       run: vi.fn(() => expressServer),
       app: 'app',
@@ -261,19 +273,9 @@ describe('cli integration', () => {
   it('should read the dev server selection from the plugin options', async () => {
     const { lifecycle } = createLifecycleMock();
 
-    loadConfigFromFileMock.mockResolvedValue({
-      config: {
-        plugins: [
-          false,
-          [
-            Promise.resolve([
-              { name: 'other' },
-              { name: PLUGIN_NAME, pluginOptions: { managedServer: 'node' } },
-            ]),
-          ],
-        ],
-      },
-    });
+    const pick = devVite({ managedServer: 'node' });
+
+    createDevViteMock.mockResolvedValue(pick);
     createDevServerMock.mockResolvedValue({
       config: { getParams: () => ({ host: 'h', port: 1 }) },
       vite: { config: { server: {} } },
@@ -284,6 +286,8 @@ describe('cli integration', () => {
 
     expect((await runDev({ version: '1', isPrintInfo: false })).server).toBe('dev-server');
     expect(printServerInfoMock).not.toHaveBeenCalled();
+    expect(pick.close).toHaveBeenCalledTimes(1);
+    expect(createServerMock).not.toHaveBeenCalled();
   });
 
   it('should force a drain already under way on ctrl+c and exit once', async () => {
@@ -333,9 +337,9 @@ describe('cli integration', () => {
   });
 
   it('should keep Express when the plugin leaves managedServer unset', async () => {
-    loadConfigFromFileMock.mockResolvedValue({
-      config: { plugins: [{ name: PLUGIN_NAME, pluginOptions: {} }] },
-    });
+    const pick = devVite({});
+
+    createDevViteMock.mockResolvedValue(pick);
     createServerMock.mockResolvedValue({
       run: vi.fn(() => expressServer),
       app: 'app',
@@ -344,27 +348,55 @@ describe('cli integration', () => {
 
     expect((await runDev({ version: '1', isPrintInfo: false })).server).toBe(expressServer);
     expect(createDevServerMock).not.toHaveBeenCalled();
+    expect(pick.close).not.toHaveBeenCalled();
+    expect(createServerMock.mock.calls[0][0].getVite()).toBe(pick);
   });
 
-  it('should pick the server without resolving the Vite config', async () => {
+  it('should start the Express dev server on the Vite that picked it', async () => {
     resolveConfigMock.mockClear();
-    loadConfigFromFileMock.mockResolvedValue(null);
+    createDevViteMock.mockResolvedValue(devVite());
     createServerMock.mockResolvedValue({
       run: vi.fn(() => expressServer),
       app: 'app',
       getLifecycle: vi.fn(() => undefined),
     });
 
-    expect((await runDev({ version: '1', isPrintInfo: false })).server).toBe(expressServer);
-    expect(loadConfigFromFileMock).toHaveBeenLastCalledWith({
-      command: 'serve',
-      mode: 'development',
-    });
+    const { server } = await runDev({ version: '1', isPrintInfo: false, mode: 'development' });
+
+    expect(server).toBe(expressServer);
+    expect(createDevViteMock).toHaveBeenCalledTimes(1);
+    expect(createDevViteMock).toHaveBeenLastCalledWith('development');
     expect(resolveConfigMock).not.toHaveBeenCalled();
   });
 
+  it('should not start a picking Vite when the flag names the server', async () => {
+    createServerMock.mockResolvedValue({
+      run: vi.fn(() => expressServer),
+      app: 'app',
+      getLifecycle: vi.fn(() => undefined),
+    });
+
+    await runDev({ version: '1', isPrintInfo: false, server: 'express' });
+
+    expect(createDevViteMock).not.toHaveBeenCalled();
+    expect(createServerMock.mock.calls[0][0].getVite()).toBeUndefined();
+  });
+
+  it('should close the picking Vite when the config has no boost plugin', async () => {
+    const pick = devVite();
+
+    getPluginConfigMock.mockImplementationOnce(() => {
+      throw new Error('no plugin');
+    });
+    createDevViteMock.mockResolvedValue(pick);
+
+    await expect(runDev({ version: '1' })).rejects.toThrow('no plugin');
+    expect(pick.close).toHaveBeenCalledTimes(1);
+    expect(createServerMock).not.toHaveBeenCalled();
+  });
+
   it('should surface a Vite config that fails to load instead of falling back to Express', async () => {
-    loadConfigFromFileMock.mockRejectedValue(new Error('broken config'));
+    createDevViteMock.mockRejectedValue(new Error('broken config'));
 
     await expect(runDev({ version: '1' })).rejects.toThrow('broken config');
     expect(createServerMock).not.toHaveBeenCalled();

@@ -5,6 +5,7 @@ import path from 'node:path';
 import compression from 'compression';
 import type { Express } from 'express';
 import express from 'express';
+import type { ViteDevServer } from 'vite';
 import PrepareServer from '@adapters/express/prepare-server';
 import type { TRender } from '@adapters/express/render';
 import staticFiles from '@adapters/express/static-files';
@@ -20,6 +21,27 @@ export interface ICreateServerOut {
   /** Drain, timeouts and health of the server the last run() started. */
   getLifecycle: () => ILifecycle | undefined;
 }
+
+/**
+ * Create the Express dev Vite server: middleware mode, app type 'custom', polling watch.
+ * Shared with the CLI, which picks the managed server from it; not a public API.
+ */
+const createDevVite = async (mode: string): Promise<ViteDevServer> =>
+  (await import('vite')).createServer({
+    server: {
+      middlewareMode: true,
+      watch: {
+        /**
+         * During tests, we edit the files too fast and sometimes chokidar
+         * misses change events, so enforce polling for consistency
+         */
+        usePolling: true,
+        interval: 100,
+      },
+    },
+    appType: 'custom',
+    mode,
+  });
 
 /**
  * Create SSR server
@@ -49,28 +71,9 @@ async function createServer(
   const prepareServer = PrepareServer.init(config, serverApi);
 
   if (!config.isProd) {
-    /**
-     * Create Vite server in middleware mode and configure the app type as
-     * 'custom', disabling Vite's own HTML serving logic so parent server
-     * can take control
-     */
-    const vite = await (
-      await import('vite')
-    ).createServer({
-      server: {
-        middlewareMode: true,
-        watch: {
-          /**
-           * During tests, we edit the files too fast and sometimes chokidar
-           * misses change events, so enforce polling for consistency
-           */
-          usePolling: true,
-          interval: 100,
-        },
-      },
-      appType: 'custom',
-      mode: config.mode,
-    });
+    // The CLI may have created this Vite to read the plugin options; reusing it keeps the config
+    // evaluated once per start, as in 8.6.
+    const vite = config.getVite() ?? (await createDevVite(config.mode));
 
     /**
      * Use vite's connect instance as middleware
@@ -244,5 +247,7 @@ async function createServer(
     getLifecycle: () => lifecycle,
   };
 }
+
+export { createDevVite };
 
 export default createServer;

@@ -1,6 +1,6 @@
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
-import type { Plugin, PluginOption } from 'vite';
+import type { ViteDevServer } from 'vite';
 import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
 import PLUGIN_NAME from '@constants/plugin-name';
 import type { IPluginConfig } from '@helpers/plugin-config';
@@ -28,32 +28,10 @@ interface IRunDevOut {
 }
 
 /**
- * Flatten a Vite plugin option (nested arrays, promises, falsy entries) into plugin objects.
+ * Read managedServer from a started Vite server; projects without the plugin keep Express.
  */
-const flattenPlugins = async (option: PluginOption): Promise<Plugin[]> => {
-  const value = await option;
-
-  if (!value) {
-    return [];
-  }
-
-  if (Array.isArray(value)) {
-    return (await Promise.all(value.map(flattenPlugins))).flat();
-  }
-
-  return [value as Plugin];
-};
-
-/**
- * Read managedServer from the project's Vite config; projects without the plugin keep Express.
- * The config file is only loaded, never resolved, so no plugin hook runs before the chosen server
- * resolves it. A config that fails to load surfaces here instead of silently selecting Express.
- */
-const resolveManagedServer = async (mode = 'development'): Promise<TManagedServer> => {
-  const { loadConfigFromFile } = await import('vite');
-  const loaded = await loadConfigFromFile({ command: 'serve', mode });
-  const plugins = await flattenPlugins(loaded?.config.plugins);
-  const plugin = plugins.find(({ name }) => name === PLUGIN_NAME) as
+const readManagedServer = (vite: ViteDevServer): TManagedServer => {
+  const plugin = vite.config.plugins.find(({ name }) => name === PLUGIN_NAME) as
     { pluginOptions?: Partial<IPluginConfig> } | undefined;
 
   return plugin?.pluginOptions?.managedServer ?? 'express';
@@ -96,6 +74,17 @@ const runNodeServer = async ({
 };
 
 /**
+ * Start the node dev server and route signals through its drain.
+ */
+const startNodeServer = async (params: IRunDevParams): Promise<IRunDevOut> => {
+  const out = await runNodeServer(params);
+
+  ownSignals(out.lifecycle);
+
+  return out;
+};
+
+/**
  * Run development server
  */
 async function runDev(params: IRunDevParams): Promise<IRunDevOut> {
@@ -107,16 +96,33 @@ async function runDev(params: IRunDevParams): Promise<IRunDevOut> {
     setCurrentEntrypointName(entrypointName);
   }
 
-  if ((params.server ?? (await resolveManagedServer(mode))) === 'node') {
-    const out = await runNodeServer(params);
-
-    ownSignals(out.lifecycle);
-
-    return out;
+  if (params.server === 'node') {
+    return startNodeServer(params);
   }
 
-  const { default: createServer } = await import('@adapters/express/server');
+  const { default: createServer, createDevVite } = await import('@adapters/express/server');
   const config = ServerConfig.init({ isHost, mode, entrypointName }, { port });
+
+  if (!params.server) {
+    // Without the flag the plugin options decide; the Express server reuses this Vite, so the
+    // default start evaluates the config once.
+    const vite = await createDevVite(config.mode);
+
+    if (readManagedServer(vite) === 'node') {
+      await vite.close();
+
+      return startNodeServer(params);
+    }
+
+    try {
+      config.setVite(vite);
+    } catch (error) {
+      await vite.close();
+
+      throw error;
+    }
+  }
+
   const { run, getLifecycle } = await createServer(config);
   const server = run({ version, isPrintInfo });
   const lifecycle = getLifecycle();

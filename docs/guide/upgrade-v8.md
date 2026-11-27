@@ -108,11 +108,12 @@ in the synchronous part of `onServerStarted`: a listener added later (after an `
 is not seen by that check, so both your handler and the managed drain run on the same signal.
 
 Configuration load errors in `ssr-boost dev` now stop the command with the original error instead
-of falling back to the Express server. To pick the managed server, `ssr-boost dev` reads the Vite
-config file first unless `--server` names it. Without the flag the config file is evaluated twice
-per start with the Express server and three times with the node server (the server pick, HTTPS
-and the Vite server); with it, once and twice. Keep side effects in it (logging, writing files)
-safe to repeat.
+of falling back to the Express server. Without `--server`, `ssr-boost dev` starts the Express dev
+Vite server and reads the managed server from its plugin options. The Express server keeps that
+Vite server, so the config file is evaluated once per start, as in 8.6, with or without the flag.
+A project that picks the node server closes it first, so its config file is evaluated three times
+(the server pick, HTTPS and the Vite server), or twice with `--server node`. Keep side effects in
+it (logging, writing files) safe to repeat.
 
 ## Check the upgraded application
 
