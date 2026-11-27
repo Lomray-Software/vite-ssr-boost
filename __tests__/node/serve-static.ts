@@ -5,7 +5,7 @@ import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import express from 'express';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import staticFiles from '@adapters/express/static-files';
 import serveStatic, { getShellKey } from '@node/serve-static';
 import type { IServeStaticOptions } from '@node/serve-static';
@@ -494,6 +494,12 @@ describe('node serveStatic', () => {
   });
 
   it('answers a raw dot-segment target the same in the absolute and the origin form', async () => {
+    // A file beside the root, which no target may reach.
+    const outside = `${root}-outside.txt`;
+
+    await writeFile(outside, 'outside-root');
+    onTestFinished(() => rm(outside, { force: true }));
+
     for (const options of [{}, { extensions: ['html'] }, { fallthrough: false }]) {
       const node = await startNode(options, false);
       const { origin } = new URL(node);
@@ -501,7 +507,10 @@ describe('node serveStatic', () => {
         '/base/assets/../index.html',
         '/base/assets/../index',
         '/base/x/../assets/app.js',
-        '/base/../../etc/passwd',
+        `/base/../${path.basename(outside)}`,
+        `/base/assets/../../${path.basename(outside)}`,
+        '/base/.well-known/../.env',
+        '/base/.well-known/../index.html',
       ];
 
       for (const target of targets) {
@@ -511,7 +520,7 @@ describe('node serveStatic', () => {
         ]);
 
         expect(absolute, `${JSON.stringify(options)} ${target}`).toEqual(plain);
-        expect(absolute.body, target).not.toBe('document');
+        expect(absolute.body ?? '', target).not.toMatch(/document|outside-root|secret/);
       }
     }
   });

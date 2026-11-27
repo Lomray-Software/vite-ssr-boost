@@ -487,6 +487,22 @@ describe('node server', () => {
     expect(reads).toBe(1);
   });
 
+  it('should run lifecycle hooks the options object inherits, once each', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    const onDrain = vi.fn();
+    const onClose = vi.fn();
+    const options = Object.create({ onDrain, onClose }) as Record<string, unknown>;
+    const result = await createServer(createClosingDevConfig(close) as never, options);
+
+    result.run({ isPrintInfo: false });
+    await flush();
+    await result.getLifecycle()!.close();
+
+    expect(onDrain).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it('should answer health probes before application middleware once running', async () => {
     const result = await createServer(createDevConfig() as never, { health: true });
 

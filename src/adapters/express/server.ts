@@ -40,9 +40,19 @@ async function createServer(
   lifecycleOptions: ILifecycleOptions = {},
   devVite?: ViteDevServer,
 ): Promise<ICreateServerResult> {
-  // Checked and copied before the dev Vite starts: run() would otherwise throw with that Vite left
-  // open, or read options the caller changed since.
-  const { health: healthOption, ...restOptions } = lifecycleOptions;
+  // Read once by name and checked before the dev Vite starts: run() would otherwise throw with
+  // that Vite left open, or read options the caller changed since. Reading by name also keeps
+  // options an object inherits, as the node factories do.
+  const {
+    health: healthOption,
+    drainTimeoutMs,
+    readinessGraceMs,
+    keepAliveTimeoutMs,
+    headersTimeoutMs,
+    requestTimeoutMs,
+    onDrain,
+    onClose,
+  } = lifecycleOptions;
   const health = resolveHealthPaths(healthOption);
 
   const app = express().disable('x-powered-by');
@@ -217,7 +227,6 @@ async function createServer(
         ? https.createServer(transportVite!.config.server.https!, listener)
         : http.createServer(listener);
 
-      const { onClose } = restOptions;
       // Set once listen() returned: a run whose listen threw never held the shared Vite.
       let isCounted = false;
 
@@ -255,8 +264,13 @@ async function createServer(
       };
 
       const runLifecycle = createLifecycle(server, {
-        ...restOptions,
         health,
+        drainTimeoutMs,
+        readinessGraceMs,
+        keepAliveTimeoutMs,
+        headersTimeoutMs,
+        requestTimeoutMs,
+        onDrain,
         // Vite closes after the socket drain, as in 8.6, so a response still rendering completes.
         onClose: config.isProd
           ? onClose
