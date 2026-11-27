@@ -506,6 +506,47 @@ describe('createLifecycle', () => {
     expect(server.listening).toBe(false);
   });
 
+  it('drops a tunnel whose upgrade request completes after the server stopped', async () => {
+    let lifecycle!: ILifecycle;
+    const { server } = await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance, { drainTimeoutMs: 5000 });
+
+        return lifecycle;
+      },
+    );
+    const handled = vi.fn();
+
+    server.on('upgrade', (_req, socket: Socket) => {
+      handled();
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const client = net.connect((server.address() as AddressInfo).port, '127.0.0.1');
+
+    // A paused client never reads the end of the stream, so it would never see the close.
+    client.resume();
+    await new Promise((resolve) => client.once('connect', resolve));
+    client.write('GET /hmr HTTP/1.1\r\nHost: test\r\n');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const clientClosed = new Promise((resolve) => client.once('close', resolve));
+    const startedAt = Date.now();
+    const closed = lifecycle.close();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    client.write('Connection: Upgrade\r\nUpgrade: test\r\n\r\n');
+    await closed;
+    await clientClosed;
+
+    expect(handled).toHaveBeenCalledTimes(1);
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+    expect(server.listening).toBe(false);
+  });
+
   it('keeps upgraded sockets while a response streams and drops them when it ends', async () => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => {

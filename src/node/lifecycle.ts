@@ -230,6 +230,15 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   const trackTunnel = (_req: IncomingMessage, socket: Duplex): void => {
     upgradedSockets.add(socket);
     socket.once('close', () => upgradedSockets.delete(socket));
+
+    // A tunnel whose request finished arriving after the stop has nothing left to wait for:
+    // the application handler still runs, then the socket goes so the drain can end.
+    if (isStopped && activeResponses === 0) {
+      process.nextTick(() => {
+        upgradedSockets.delete(socket);
+        socket.destroy();
+      });
+    }
   };
 
   /**
