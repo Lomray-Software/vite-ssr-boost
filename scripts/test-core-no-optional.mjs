@@ -323,6 +323,8 @@ try {
 
       body = await fetch(new URL('/', `http://${'127.0.0.1'}:${port}`), {
         headers: { 'user-agent': 'Googlebot/2.1' },
+        // Also bounds the body read, so a stalled response cannot outlast the deadline.
+        signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())),
       })
         .then((response) => (response.ok ? response.text() : undefined))
         .catch(() => undefined);
