@@ -304,14 +304,14 @@ describe('SsrManifest', () => {
     );
   });
 
-  it('keeps a non-js record whose name only looks like a hash out of the immutable files', () => {
+  it('keeps an entry from a pattern without a hash out of the immutable files', () => {
     const writeFileSync = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
     const manifest = SsrManifest.get(createConfig(), {
       buildDir: 'dist',
       buildOutput: {
         rollupOptions: {
           output: {
-            entryFileNames: 'assets/[name]-facebook.bundle',
+            entryFileNames: 'assets/[name]-facebook.js',
             assetFileNames: 'assets/[name]-[hash][extname]',
           },
         },
@@ -324,7 +324,7 @@ describe('SsrManifest', () => {
     vi.spyOn(manifest, 'loadClientManifest').mockReturnValue({
       // An eight-letter suffix from a fixed pattern is no content hash.
       'src/app.ts': {
-        file: 'assets/app-facebook.bundle',
+        file: 'assets/app-facebook.js',
         src: 'src/app.ts',
         isEntry: true,
         name: 'app',
