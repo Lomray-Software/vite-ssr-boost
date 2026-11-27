@@ -3,7 +3,7 @@ import http from 'node:http';
 import https from 'node:https';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import type { Connect, InlineConfig, ViteDevServer, WsOptions } from 'vite';
+import type { Connect, InlineConfig, ViteDevServer } from 'vite';
 import type { TCompression } from '@adapters/compression';
 import getRouteAssets from '@adapters/express/route-assets';
 import adapterNode from '@adapters/node';
@@ -61,9 +61,11 @@ interface IDevServer extends IDevApp {
  */
 const hmrOption = (version: string, server: TLifecycleServer): InlineConfig['server'] => {
   const [major, minor] = version.split('.').map(Number);
-  const ws = { server } as WsOptions;
+  // Vite 6 and 7 types know neither server.ws nor WsOptions, so the key is chosen untyped.
+  const key = major > 8 || (major === 8 && minor >= 1) ? 'ws' : 'hmr';
+  const option: Record<string, unknown> = { [key]: { server } };
 
-  return major > 8 || (major === 8 && minor >= 1) ? { ws } : { hmr: ws };
+  return option;
 };
 
 /**
