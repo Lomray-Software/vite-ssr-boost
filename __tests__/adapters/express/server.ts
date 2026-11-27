@@ -651,6 +651,56 @@ describe('node server', () => {
     expect(vite.close).toHaveBeenCalledOnce();
   });
 
+  it('should close the shared Vite after a native close and a drain of its two servers', async () => {
+    const vite = createViteDouble('shared-middleware');
+
+    createViteServer.mockResolvedValueOnce(vite);
+
+    const started = await createServer(createStatefulDevConfig() as never);
+    const first = started.run({ isPrintInfo: false });
+
+    await flush();
+    started.run({ isPrintInfo: false });
+    await flush();
+
+    const second = started.getLifecycle()!;
+
+    first.emit('close');
+
+    expect(vite.close).not.toHaveBeenCalled();
+
+    await second.close();
+
+    expect(vite.close).toHaveBeenCalledOnce();
+  });
+
+  it('should release a server once when its drain emits the native close', async () => {
+    const vite = createViteDouble('shared-middleware');
+
+    createViteServer.mockResolvedValueOnce(vite);
+
+    const started = await createServer(createStatefulDevConfig() as never);
+    const server = started.run({ isPrintInfo: false });
+
+    await flush();
+
+    const first = started.getLifecycle()!;
+
+    vi.mocked(server.close).mockImplementation(((cb?: () => void) => {
+      server.emit('close');
+      cb?.();
+    }) as never);
+    started.run({ isPrintInfo: false });
+    await flush();
+    await first.close();
+
+    expect(vite.close).not.toHaveBeenCalled();
+
+    await started.getLifecycle()!.close();
+
+    expect(vite.close).toHaveBeenCalledOnce();
+  });
+
   it('should mount a supplied dev Vite without creating another', async () => {
     const supplied = createViteDouble('supplied-middleware');
     const config = createStatefulDevConfig();

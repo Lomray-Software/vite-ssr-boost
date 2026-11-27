@@ -205,17 +205,31 @@ async function createServer(
       // Set once listen() returned: a run whose listen threw never held the shared Vite.
       let isCounted = false;
 
+      /**
+       * Give up this run's hold on the shared dev Vite once; the last holder closes it.
+       * Decided before any await, so two closes at once never both close the Vite.
+       */
+      const releaseVite = (): Promise<void> | undefined => {
+        if (!isCounted) {
+          return undefined;
+        }
+
+        isCounted = false;
+        viteUsers -= 1;
+
+        return viteUsers === 0 ? mountedVite?.close() : undefined;
+      };
+
       const runLifecycle = createLifecycle(server, {
         ...lifecycleOptions,
         // Vite closes after the socket drain, as in 8.6, so a response still rendering completes.
         onClose: config.isProd
           ? onClose
           : async () => {
-              // Decided before any await, so two drains at once never both close the Vite.
-              const isLast = isCounted && (viteUsers -= 1) === 0;
+              const viteClosing = releaseVite();
 
               await settleAll(
-                () => (isLast ? mountedVite?.close() : undefined),
+                () => viteClosing,
                 () => onClose?.(),
               );
             },
@@ -249,6 +263,22 @@ async function createServer(
       if (!config.isProd) {
         isCounted = true;
         viteUsers += 1;
+
+        // A native close() releases the hold too; during a drain the lifecycle releases it after
+        // its hooks, so the Vite still closes last.
+        server.once('close', () => {
+          if (runLifecycle.isDraining()) {
+            return;
+          }
+
+          releaseVite()?.catch((error: unknown) => {
+            config
+              .getLogger()
+              .error(`Failed to close the dev server: ${(error as Error)?.message}`, {
+                error: error as Error,
+              });
+          });
+        });
       }
 
       lifecycle = runLifecycle;
