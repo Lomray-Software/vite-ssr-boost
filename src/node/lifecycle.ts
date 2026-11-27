@@ -196,6 +196,48 @@ const bounded = (
   ]);
 
 /**
+ * How long the server may take to finish closing once the deadline destroyed its sockets.
+ */
+const CLOSE_SETTLE_MS = 250;
+
+/**
+ * Stop the server and reject when it is still open a short settle window after the deadline,
+ * which destroys every tracked socket and so lets a tracked server close on its own.
+ */
+const boundedStop = (
+  stop: () => Promise<void>,
+  deadline: Promise<void>,
+  message: string,
+): Promise<void> =>
+  new Promise<void>((resolve, reject) => {
+    let isSettled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    /**
+     * Settle once and drop the settle timer so it never holds the process.
+     */
+    const finish = (outcome: () => void): void => {
+      if (isSettled) {
+        return;
+      }
+
+      isSettled = true;
+      clearTimeout(timer);
+      outcome();
+    };
+
+    stop().then(
+      () => finish(resolve),
+      (error: unknown) => finish(() => reject(error)),
+    );
+    void deadline.then(() => {
+      if (!isSettled) {
+        timer = setTimeout(() => finish(() => reject(new Error(message))), CLOSE_SETTLE_MS);
+      }
+    });
+  });
+
+/**
  * Own readiness, health probes, timeouts, binding and a bounded drain for one Node server.
  */
 const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = {}): ILifecycle => {
@@ -544,7 +586,14 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
           deadline,
           `[ssr-boost] onDrain did not settle within ${drainTimeoutMs} ms.`,
         ),
-        stopServer(),
+        // A socket upgraded before the lifecycle existed is not tracked, so it can outlive
+        // the deadline and keep the server open.
+        boundedStop(
+          stopServer,
+          deadline,
+          `[ssr-boost] the server did not close within ${drainTimeoutMs} ms: ` +
+            'connections opened before the lifecycle remain.',
+        ),
       ]),
     );
 

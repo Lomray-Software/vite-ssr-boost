@@ -725,6 +725,34 @@ describe('createLifecycle', () => {
     expect(server.listening).toBe(false);
   });
 
+  it('rejects close when a socket from before the lifecycle outlives the deadline', async () => {
+    const { server } = await listen(
+      () => undefined,
+      () => createLifecycle(http.createServer()),
+    );
+
+    let accepted: Socket | undefined;
+
+    server.on('upgrade', (_req, socket: Socket) => {
+      accepted = socket;
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const client = await upgrade(server);
+    const lifecycle = createLifecycle(server, { drainTimeoutMs: 50 });
+    const startedAt = Date.now();
+
+    await expect(lifecycle.close()).rejects.toThrow(
+      '[ssr-boost] the server did not close within 50 ms: ' +
+        'connections opened before the lifecycle remain.',
+    );
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+    accepted?.destroy();
+    client.destroy();
+  });
+
   it('ends a stalled drain at once on force', async () => {
     let lifecycle!: ILifecycle;
 

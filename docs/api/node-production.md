@@ -219,6 +219,8 @@ socket drain, and `onClose` after it.
 `drainTimeoutMs` bounds each phase on its own: the socket drain with `onDrain`, then `onClose`.
 When a phase runs out, its remaining sockets are destroyed and a hook still running makes `close()`
 reject with a message naming the hook, so a stuck dependency cannot hold the process forever.
+Sockets accepted before the lifecycle was created are not tracked; when they still keep the server
+open shortly after the deadline, `close()` rejects instead of waiting for them.
 `force()` ends the drain at once: it destroys every socket, stops waiting for the hooks and starts
 the drain when none is under way.
 
