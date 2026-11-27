@@ -262,6 +262,48 @@ describe('SsrManifest', () => {
     );
   });
 
+  it('keeps a non-js record with a chunk name out of the immutable files', () => {
+    const writeFileSync = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+    const manifest = SsrManifest.get(createConfig(), {
+      buildDir: 'dist',
+      buildOutput: {
+        rollupOptions: {
+          output: {
+            entryFileNames: 'assets/[name]-[hash].bundle',
+            assetFileNames: 'assets/[name]-[hash][extname]',
+          },
+        },
+      },
+    }) as unknown as TSsrManifestPrivate;
+    manifest.pathNormalize.getImportPostfix = vi.fn(() => ['', '.ts']);
+    manifest.pathNormalize.getAppPath = vi.fn((val: string) => val);
+    parseMock.mockReturnValue([]);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(manifest, 'loadClientManifest').mockReturnValue({
+      // A chunk from a pattern without `.js` cannot be told apart from an asset.
+      'src/app.ts': {
+        file: 'assets/app-DauyBWxg.bundle',
+        src: 'src/app.ts',
+        isEntry: true,
+        name: 'app',
+      },
+      'src/logo.svg': {
+        file: 'assets/logo-B2xQ9kLm.svg',
+        src: 'src/logo.svg',
+        name: 'logo',
+        names: ['logo.svg'],
+      },
+    });
+
+    manifest.buildRoutesManifest();
+
+    expect(writeFileSync).toHaveBeenCalledWith(
+      '/root/dist/server/fingerprinted-files.json',
+      `${JSON.stringify(['assets/logo-B2xQ9kLm.svg'], null, 2)}\n`,
+      { encoding: 'utf-8' },
+    );
+  });
+
   it('fails the build when a lazy route is neither in the client manifest nor on disk', () => {
     vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
     const manifest = SsrManifest.get(createConfig(), {

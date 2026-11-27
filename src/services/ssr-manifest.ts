@@ -35,15 +35,21 @@ interface IManifest {
 }
 
 /**
- * Name which output pattern produced a manifest record's own file.
- * Vite writes `name` without `names` only for chunks, so a `.js` asset record
- * (an `?url` import) is matched against assetFileNames.
+ * Name which output pattern produced a manifest record's own file, or undefined when
+ * the record does not tell. Vite writes `name` without `names` only for chunks, so a `.js`
+ * asset record (an `?url` import) is matched against assetFileNames. A record with `name`
+ * and without `names` whose file is not `.js` may be a chunk from a pattern without that
+ * extension, so it is left unnamed and never marked immutable.
  */
-const getOutputKind = (record: IManifest[string]): TOutputKind => {
+const getOutputKind = (record: IManifest[string]): TOutputKind | undefined => {
   const { file, isEntry, name, names } = record;
 
-  if (!/\.[cm]?js$/.test(file) || name === undefined || names !== undefined) {
+  if (name === undefined || names !== undefined) {
     return 'asset';
+  }
+
+  if (!/\.[cm]?js$/.test(file)) {
+    return undefined;
   }
 
   return isEntry ? 'entry' : 'chunk';
@@ -399,10 +405,11 @@ class SsrManifest extends RouteAssets {
     const isFingerprinted = createFingerprintMatcher(this.buildOutput);
     const files = Object.values(manifest).flatMap((record) => {
       const { file, css = [], assets = [] } = record;
+      const kind = getOutputKind(record);
 
       return [
         // A manifest record for a stylesheet or an imported asset names a file from assetFileNames.
-        ...(file && isFingerprinted(file, getOutputKind(record)) ? [file] : []),
+        ...(file && kind && isFingerprinted(file, kind) ? [file] : []),
         ...[...css, ...assets].filter((asset) => isFingerprinted(asset, 'asset')),
       ];
     });
