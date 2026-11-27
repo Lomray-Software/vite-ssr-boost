@@ -11,7 +11,7 @@ const { createServerMock, createDevServerMock, picks, gate } = vi.hoisted(() => 
   createServerMock: vi.fn(),
   createDevServerMock: vi.fn(),
   picks: [] as { close: () => Promise<void> }[],
-  gate: { closing: Promise.resolve() },
+  gate: { closing: Promise.resolve(), closed: false },
 }));
 
 // The real adapter mounts the picking Vite; the spy only records how it was called.
@@ -43,6 +43,7 @@ vi.mock('@cli/helpers/create-dev-vite', async (importOriginal) => {
       vite.close = vi.fn(async () => {
         await gate.closing;
         await close();
+        gate.closed = true;
       });
       picks.push(vite);
 
@@ -86,6 +87,7 @@ beforeEach(() => {
   root = mkdtempSync(path.resolve('.ssr-boost-dev-test-'));
   picks.length = 0;
   gate.closing = Promise.resolve();
+  gate.closed = false;
   process.chdir(root);
 });
 
@@ -125,16 +127,23 @@ describe('ssr-boost dev config evaluation', { timeout: 30000 }, () => {
 
   it('should start the node server only after the picking Vite closed', async () => {
     let release = (): void => undefined;
+    let closedAtStart: boolean | undefined;
 
     writeProject({ managedServer: 'node' });
     gate.closing = new Promise((resolve) => {
       release = resolve;
     });
-    createDevServerMock.mockRejectedValue(new Error('node server started'));
+    createDevServerMock.mockImplementation(() => {
+      closedAtStart = gate.closed;
 
-    const started = runDev({ version: '1', isPrintInfo: false, mode: 'development' });
-    // Attach the rejection handler at once so a failure while the gate is held is not unhandled.
-    const outcome = expect(started).rejects.toThrow('node server started');
+      return Promise.reject(new Error('node server started'));
+    });
+
+    // Settle into a tagged result at once so a failure while the gate is held is not unhandled.
+    const outcome = runDev({ version: '1', isPrintInfo: false, mode: 'development' }).then(
+      () => ({ error: undefined }),
+      (error: unknown) => ({ error }),
+    );
 
     try {
       await vi.waitFor(() => expect(picks[0]?.close).toHaveBeenCalledOnce(), { timeout: 20000 });
@@ -145,9 +154,10 @@ describe('ssr-boost dev config evaluation', { timeout: 30000 }, () => {
       release();
     }
 
-    await outcome;
+    expect((await outcome).error).toEqual(new Error('node server started'));
     expect(createServerMock).not.toHaveBeenCalled();
     expect(createDevServerMock).toHaveBeenCalledOnce();
+    expect(closedAtStart).toBe(true);
     expect(evaluations()).toBe(1);
   });
 });

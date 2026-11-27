@@ -308,7 +308,7 @@ describe('cli integration', () => {
     expect(cliContext.isExiting).toBe(true);
   });
 
-  it('should leave signals to an Express app that subscribed to them', async () => {
+  it('should pass a signal check that yields only while an Express app listens', async () => {
     const { lifecycle } = createLifecycleMock();
     const ownListener = () => undefined;
     const appListener = () => undefined;
@@ -331,14 +331,18 @@ describe('cli integration', () => {
       [{ shouldHandle: (signal: NodeJS.Signals) => boolean }],
     ];
 
-    // Stands in for the listener a real lifecycle subscribes.
-    process.on('SIGTERM', ownListener);
-    expect(shouldHandle('SIGTERM')).toBe(true);
-    process.on('SIGTERM', appListener);
-    expect(shouldHandle('SIGTERM')).toBe(false);
-    process.off('SIGTERM', appListener);
-    expect(shouldHandle('SIGTERM')).toBe(true);
-    process.off('SIGTERM', ownListener);
+    try {
+      // Stands in for the listener a real lifecycle subscribes.
+      process.on('SIGTERM', ownListener);
+      expect(shouldHandle('SIGTERM')).toBe(true);
+      process.on('SIGTERM', appListener);
+      expect(shouldHandle('SIGTERM')).toBe(false);
+      process.off('SIGTERM', appListener);
+      expect(shouldHandle('SIGTERM')).toBe(true);
+    } finally {
+      process.off('SIGTERM', appListener);
+      process.off('SIGTERM', ownListener);
+    }
   });
 
   it('should keep Express when the plugin leaves managedServer unset', async () => {
