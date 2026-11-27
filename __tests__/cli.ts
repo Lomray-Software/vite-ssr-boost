@@ -49,7 +49,9 @@ vi.mock('@services/build', () => ({
 }));
 vi.mock('@adapters/express/server', () => ({
   default: createServerMock,
-  createDevVite: createDevViteMock,
+}));
+vi.mock('@cli/helpers/create-dev-vite', () => ({
+  default: createDevViteMock,
 }));
 vi.mock('vite', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vite')>();
@@ -349,7 +351,7 @@ describe('cli integration', () => {
     expect((await runDev({ version: '1', isPrintInfo: false })).server).toBe(expressServer);
     expect(createDevServerMock).not.toHaveBeenCalled();
     expect(pick.close).not.toHaveBeenCalled();
-    expect(createServerMock.mock.calls[0][0].getVite()).toBe(pick);
+    expect(createServerMock).toHaveBeenCalledWith(expect.anything(), {}, pick);
   });
 
   it('should start the Express dev server on the Vite that picked it', async () => {
@@ -379,7 +381,64 @@ describe('cli integration', () => {
     await runDev({ version: '1', isPrintInfo: false, server: 'express' });
 
     expect(createDevViteMock).not.toHaveBeenCalled();
-    expect(createServerMock.mock.calls[0][0].getVite()).toBeUndefined();
+    expect(createServerMock).toHaveBeenCalledWith(expect.anything(), {}, undefined);
+  });
+
+  it('should close the picking Vite once when the Express server fails to start', async () => {
+    const pick = devVite();
+    const failure = new Error('onAppCreated failed');
+
+    createDevViteMock.mockResolvedValue(pick);
+    createServerMock.mockRejectedValue(failure);
+
+    await expect(runDev({ version: '1', isPrintInfo: false })).rejects.toBe(failure);
+    expect(pick.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('should close the mounted Vite once when run throws', async () => {
+    const pick = devVite();
+    const failure = new RangeError('bad port');
+
+    createDevViteMock.mockResolvedValue(pick);
+    createServerMock.mockImplementation(
+      (config: { setVite: (vite: unknown) => void }, _options: unknown, vite: unknown) => {
+        config.setVite(vite);
+
+        return Promise.resolve({
+          run: () => {
+            throw failure;
+          },
+          app: 'app',
+          getLifecycle: () => undefined,
+        });
+      },
+    );
+
+    await expect(runDev({ version: '1', isPrintInfo: false })).rejects.toBe(failure);
+    expect(pick.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('should close the Vite the Express server created when run throws under --server', async () => {
+    const own = devVite();
+    const failure = new RangeError('bad port');
+
+    createServerMock.mockImplementation((config: { setVite: (vite: unknown) => void }) => {
+      config.setVite(own);
+
+      return Promise.resolve({
+        run: () => {
+          throw failure;
+        },
+        app: 'app',
+        getLifecycle: () => undefined,
+      });
+    });
+
+    await expect(runDev({ version: '1', isPrintInfo: false, server: 'express' })).rejects.toBe(
+      failure,
+    );
+    expect(createDevViteMock).not.toHaveBeenCalled();
+    expect(own.close).toHaveBeenCalledTimes(1);
   });
 
   it('should close the picking Vite when the config has no boost plugin', async () => {
@@ -389,10 +448,16 @@ describe('cli integration', () => {
       throw new Error('no plugin');
     });
     createDevViteMock.mockResolvedValue(pick);
+    createServerMock.mockImplementation(
+      (config: { setVite: (vite: unknown) => void }, _options: unknown, vite: unknown) => {
+        config.setVite(vite);
+
+        return Promise.resolve({ run: vi.fn(), app: 'app', getLifecycle: vi.fn() });
+      },
+    );
 
     await expect(runDev({ version: '1' })).rejects.toThrow('no plugin');
     expect(pick.close).toHaveBeenCalledTimes(1);
-    expect(createServerMock).not.toHaveBeenCalled();
   });
 
   it('should surface a Vite config that fails to load instead of falling back to Express', async () => {

@@ -1,6 +1,7 @@
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
 import type { ViteDevServer } from 'vite';
+import createDevVite from '@cli/helpers/create-dev-vite';
 import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
 import PLUGIN_NAME from '@constants/plugin-name';
 import type { IPluginConfig } from '@helpers/plugin-config';
@@ -100,32 +101,34 @@ async function runDev(params: IRunDevParams): Promise<IRunDevOut> {
     return startNodeServer(params);
   }
 
-  const { default: createServer, createDevVite } = await import('@adapters/express/server');
   const config = ServerConfig.init({ isHost, mode, entrypointName }, { port });
+  // Without the flag the plugin options decide. The Express server mounts this Vite, so the
+  // default start evaluates the config once; Express loads only once it is picked.
+  const pick = params.server ? undefined : await createDevVite(config.mode);
 
-  if (!params.server) {
-    // Without the flag the plugin options decide; the Express server reuses this Vite, so the
-    // default start evaluates the config once.
-    const vite = await createDevVite(config.mode);
+  if (pick && readManagedServer(pick) === 'node') {
+    await pick.close();
 
-    if (readManagedServer(vite) === 'node') {
-      await vite.close();
-
-      return startNodeServer(params);
-    }
-
-    try {
-      config.setVite(vite);
-    } catch (error) {
-      await vite.close();
-
-      throw error;
-    }
+    return startNodeServer(params);
   }
 
-  const { run, getLifecycle } = await createServer(config);
-  const server = run({ version, isPrintInfo });
-  const lifecycle = getLifecycle();
+  // The Vite that serves the start: closed here once if anything fails before the server runs.
+  let vite = pick;
+  let server: Server;
+  let lifecycle: ILifecycle | undefined;
+
+  try {
+    const { default: createServer } = await import('@adapters/express/server');
+    const created = await createServer(config, {}, pick);
+
+    vite = config.getVite();
+    server = created.run({ version, isPrintInfo });
+    lifecycle = created.getLifecycle();
+  } catch (error) {
+    await vite?.close();
+
+    throw error;
+  }
 
   ownSignalsUnlessHandled(server, lifecycle);
 

@@ -9,6 +9,7 @@ import type { ViteDevServer } from 'vite';
 import PrepareServer from '@adapters/express/prepare-server';
 import type { TRender } from '@adapters/express/render';
 import staticFiles from '@adapters/express/static-files';
+import createDevVite from '@cli/helpers/create-dev-vite';
 import printServerInfo from '@helpers/print-server-info';
 import createLifecycle, { trackNativeBind } from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions } from '@node/lifecycle';
@@ -23,32 +24,13 @@ export interface ICreateServerOut {
 }
 
 /**
- * Create the Express dev Vite server: middleware mode, app type 'custom', polling watch.
- * Shared with the CLI, which picks the managed server from it; not a public API.
- */
-const createDevVite = async (mode: string): Promise<ViteDevServer> =>
-  (await import('vite')).createServer({
-    server: {
-      middlewareMode: true,
-      watch: {
-        /**
-         * During tests, we edit the files too fast and sometimes chokidar
-         * misses change events, so enforce polling for consistency
-         */
-        usePolling: true,
-        interval: 100,
-      },
-    },
-    appType: 'custom',
-    mode,
-  });
-
-/**
- * Create SSR server
+ * Create SSR server. devVite is internal to the CLI: the dev Vite it started to pick the server,
+ * mounted for this one start; any other start creates its own.
  */
 async function createServer(
   config: ServerConfig,
   lifecycleOptions: ILifecycleOptions = {},
+  devVite?: ViteDevServer,
 ): Promise<ICreateServerOut> {
   const app = express().disable('x-powered-by');
   let lifecycle: ILifecycle | undefined;
@@ -70,24 +52,31 @@ async function createServer(
 
   const prepareServer = PrepareServer.init(config, serverApi);
 
-  if (!config.isProd) {
-    // The CLI may have created this Vite to read the plugin options; reusing it keeps the config
-    // evaluated once per start, as in 8.6.
-    const vite = config.getVite() ?? (await createDevVite(config.mode));
+  // A Vite this call created is closed here if the setup fails; a supplied one stays its caller's.
+  let ownVite: ViteDevServer | undefined;
 
-    /**
-     * Use vite's connect instance as middleware
-     */
-    app.use(vite.middlewares);
+  try {
+    if (!config.isProd) {
+      const vite = devVite ?? (ownVite = await createDevVite(config.mode));
 
-    config.setVite(vite);
+      /**
+       * Use vite's connect instance as middleware
+       */
+      app.use(vite.middlewares);
+
+      config.setVite(vite);
+    }
+
+    if (!config.getParams().isSPA) {
+      await prepareServer.onAppCreated();
+    }
+  } catch (error) {
+    await ownVite?.close();
+
+    throw error;
   }
 
   const { isSPA } = config.getParams();
-
-  if (!isSPA) {
-    await prepareServer.onAppCreated();
-  }
 
   if (config.isProd) {
     const { root, publicDir } = config.getParams();
@@ -247,7 +236,5 @@ async function createServer(
     getLifecycle: () => lifecycle,
   };
 }
-
-export { createDevVite };
 
 export default createServer;

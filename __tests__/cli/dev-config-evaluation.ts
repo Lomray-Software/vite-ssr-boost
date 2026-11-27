@@ -67,8 +67,8 @@ describe('ssr-boost dev config evaluation', { timeout: 30000 }, () => {
     const server = Object.assign(new EventEmitter(), { id: 'express' });
 
     writeProject({});
-    createServerMock.mockImplementation((config: { getVite: () => ViteDevServer }) => {
-      started.push(config.getVite());
+    createServerMock.mockImplementation((_config: unknown, _options: unknown, vite: ViteDevServer) => {
+      started.push(vite);
 
       return Promise.resolve({ run: () => server, getLifecycle: () => undefined });
     });
