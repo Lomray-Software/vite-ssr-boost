@@ -104,7 +104,8 @@ describe('ownSignalsUnlessHandled', () => {
               onExit(0);
             };
 
-            process.on(signal, listener);
+            // As the lifecycle does: ahead of listeners already present.
+            process.prependListener(signal, listener);
 
             return [signal, listener] as const;
           });
@@ -164,6 +165,39 @@ describe('ownSignalsUnlessHandled', () => {
     expect(drained).not.toHaveBeenCalled();
     expect(processStopMock).not.toHaveBeenCalled();
     expect(cliContext.isExiting).toBeUndefined();
+  });
+
+  it('leaves a signal to an application that subscribed with process.once', () => {
+    const appListener = vi.fn();
+
+    process.once('SIGTERM', appListener);
+    added.push(() => process.off('SIGTERM', appListener));
+
+    const { lifecycle, drained } = createSubscribingLifecycle();
+
+    ownSignalsUnlessHandled(lifecycle as never);
+    process.emit('SIGTERM');
+
+    expect(appListener).toHaveBeenCalledOnce();
+    expect(drained).not.toHaveBeenCalled();
+    expect(processStopMock).not.toHaveBeenCalled();
+  });
+
+  it('drains a later signal once the application process.once listener is gone', () => {
+    const appListener = vi.fn();
+
+    process.once('SIGTERM', appListener);
+    added.push(() => process.off('SIGTERM', appListener));
+
+    const { lifecycle, drained } = createSubscribingLifecycle();
+
+    ownSignalsUnlessHandled(lifecycle as never);
+    process.emit('SIGTERM');
+    process.emit('SIGTERM');
+
+    expect(appListener).toHaveBeenCalledOnce();
+    expect(drained).toHaveBeenCalledOnce();
+    expect(processStopMock).toHaveBeenCalledWith(0);
   });
 
   it('decides each signal on its own when it arrives', () => {

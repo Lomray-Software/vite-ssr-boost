@@ -102,8 +102,9 @@ The CLI now drains the managed server on `SIGTERM` and `SIGINT`: readiness turns
 connections are refused, open requests finish within `drainTimeoutMs` per phase, and a second signal
 forces the close. With the Express server, an application that subscribes to `SIGTERM` or `SIGINT`
 itself keeps that handling: when a signal arrives, the CLI leaves it alone if any other listener
-for that signal is present, however late it was added, whether a preloaded module
-(`node --require`), a library in your entry or `onServerStarted` added it. The check is made per
+for that signal is present, however late it was added and whether it uses `process.on` or
+`process.once`, whether a preloaded module (`node --require`), a library in your entry or
+`onServerStarted` added it. The check is made per
 signal, so an application that handles only `SIGTERM` still gets the managed drain on `SIGINT`.
 Remove your own listener to use the managed drain.
 

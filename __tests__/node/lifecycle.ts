@@ -285,11 +285,14 @@ describe('createLifecycle', () => {
   it('drains on SIGTERM, forces on a second signal and unsubscribes', async () => {
     const listeners = new Map<string, () => void>();
 
-    vi.spyOn(process, 'on').mockImplementation(((signal: string, listener: () => void) => {
+    vi.spyOn(process, 'prependListener').mockImplementation(((
+      signal: string,
+      listener: () => void,
+    ) => {
       listeners.set(signal, listener);
 
       return process;
-    }) as typeof process.on);
+    }) as typeof process.prependListener);
     vi.spyOn(process, 'off').mockImplementation(((signal: string) => {
       listeners.delete(signal);
 
@@ -329,11 +332,14 @@ describe('createLifecycle', () => {
   it('leaves a signal that shouldHandle declines when it arrives', async () => {
     const listeners = new Map<string, () => void>();
 
-    vi.spyOn(process, 'on').mockImplementation(((signal: string, listener: () => void) => {
+    vi.spyOn(process, 'prependListener').mockImplementation(((
+      signal: string,
+      listener: () => void,
+    ) => {
       listeners.set(signal, listener);
 
       return process;
-    }) as typeof process.on);
+    }) as typeof process.prependListener);
     vi.spyOn(process, 'off').mockImplementation(((signal: string) => {
       listeners.delete(signal);
 
@@ -369,6 +375,35 @@ describe('createLifecycle', () => {
     expect(lifecycle.isDraining()).toBe(true);
     await vi.waitFor(() => expect(onExit).toHaveBeenCalledWith(0));
     unsubscribe();
+  });
+
+  it('subscribes ahead of signal listeners already on the process', async () => {
+    const earlier = vi.fn();
+    let lifecycle!: ILifecycle;
+
+    process.on('SIGTERM', earlier);
+
+    try {
+      await listen(
+        (_req, res) => res.end('app'),
+        (instance) => {
+          lifecycle = createLifecycle(instance);
+
+          return lifecycle;
+        },
+      );
+
+      const before = process.listeners('SIGTERM');
+      const unsubscribe = lifecycle.handleSignals({ shouldHandle: () => false });
+      const [first, ...rest] = process.listeners('SIGTERM');
+
+      expect(before).not.toContain(first);
+      expect(rest).toEqual(before);
+      unsubscribe();
+      expect(process.listeners('SIGTERM')).toEqual(before);
+    } finally {
+      process.off('SIGTERM', earlier);
+    }
   });
 
   it('destroys upgraded sockets so close resolves while a WebSocket client is connected', async () => {
@@ -811,11 +846,14 @@ lifecycle.close().then(() => process.exit(0), () => process.exit(1));
   it('joins a drain already under way on the first signal and exits once', async () => {
     const listeners = new Map<string, () => void>();
 
-    vi.spyOn(process, 'on').mockImplementation(((signal: string, listener: () => void) => {
+    vi.spyOn(process, 'prependListener').mockImplementation(((
+      signal: string,
+      listener: () => void,
+    ) => {
       listeners.set(signal, listener);
 
       return process;
-    }) as typeof process.on);
+    }) as typeof process.prependListener);
     vi.spyOn(process, 'off').mockImplementation(((signal: string) => {
       listeners.delete(signal);
 

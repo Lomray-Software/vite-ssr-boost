@@ -217,8 +217,10 @@ Set it a little above the probe's `periodSeconds * failureThreshold`, and keep
 `handleSignals({ signals, onSignal, onExit, shouldHandle })` routes `SIGTERM` and `SIGINT` (by
 default) through `close()` and returns an unsubscribe function. A signal that arrives while a drain
 is already under way joins it; the next signal calls `force()`. `onExit` receives 0 after a clean
-drain and 1 when it failed. `shouldHandle` is checked when a signal arrives; when it returns
-`false`, that signal is left to other listeners and the drain does not start. The CLI uses it:
+drain and 1 when it failed. The lifecycle subscribes ahead of listeners already present, so
+`shouldHandle` is checked when a signal arrives and before they run, a `process.once` handler
+included; when it returns `false`, that signal is left to other listeners and the drain does not
+start. The CLI uses it:
 `ctrl+c` in the terminal forces the drain on the second press, and a restart requested while the
 process is exiting is skipped. With the Express server the CLI checks, when a signal arrives,
 whether the application subscribed its own handler for it and leaves that signal alone if so.

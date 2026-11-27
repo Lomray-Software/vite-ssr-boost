@@ -54,7 +54,10 @@ interface ISignalOptions {
   onSignal?: (signal: TSignal) => void;
   /** Called after the drain with the exit code; the CLI exits the process here. */
   onExit?: (code: number) => void;
-  /** Checked when a signal arrives; false leaves that signal to other listeners. */
+  /**
+   * Checked when a signal arrives, before listeners subscribed earlier run; false leaves that
+   * signal to other listeners.
+   */
   shouldHandle?: (signal: TSignal) => boolean;
 }
 
@@ -602,7 +605,9 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     };
     const listeners = signals.map((signal) => [signal, () => react(signal)] as const);
 
-    listeners.forEach(([signal, listener]) => process.on(signal, listener));
+    // Ahead of earlier listeners, so shouldHandle still sees a process.once handler that Node
+    // removes before calling it.
+    listeners.forEach(([signal, listener]) => process.prependListener(signal, listener));
 
     return () => listeners.forEach(([signal, listener]) => process.off(signal, listener));
   };
