@@ -58,7 +58,7 @@ dev.lifecycle.handleSignals({ onExit: (code) => process.exit(code) });
 ```ts
 interface IPrepareDevOptions {
   server: Server; // Parent HTTP(S) server; HMR attaches to it
-  mode?: string; // Default: 'development'
+  mode?: string; // Default: vite.mode, then 'development'
   entrypointName?: string;
   isHost?: boolean;
   port?: number;

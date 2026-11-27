@@ -23,6 +23,7 @@ import ServerConfig from '@services/server-config';
 interface IPrepareDevOptions {
   /** Parent HTTP(S) server; Vite attaches HMR to it instead of opening its own port. */
   server: TLifecycleServer;
+  /** Vite mode; wins over `vite.mode`, which wins over `development`. */
   mode?: string;
   entrypointName?: string;
   isHost?: boolean;
@@ -143,11 +144,17 @@ const createDevPreparer =
   };
 
 /**
+ * The mode one dev start runs in: the explicit option, then the inline Vite config.
+ */
+const getDevMode = (mode?: string, inlineConfig?: InlineConfig): string =>
+  mode ?? inlineConfig?.mode ?? 'development';
+
+/**
  * Run Vite in middleware mode on a parent server and render through a defineEntry() entry.
  */
 const prepareDev = async ({
   server,
-  mode = 'development',
+  mode: givenMode,
   entrypointName,
   isHost = false,
   port,
@@ -155,6 +162,7 @@ const prepareDev = async ({
   config: givenConfig,
   loadEntry = viteLoadEntry,
 }: IPrepareDevOptions): Promise<IDevApp> => {
+  const mode = getDevMode(givenMode, inlineConfig);
   // The config exists before Vite starts, so only setVite can leave a server to close.
   const config = givenConfig ?? ServerConfig.init({ isHost, mode, entrypointName }, { port });
   const { createServer, mergeConfig, version } = await import('vite');
@@ -259,14 +267,12 @@ const createDevServer = async ({
   ...prepareOptions
 }: ICreateDevServerOptions = {}): Promise<IDevServer> => {
   const { resolveConfig } = await import('vite');
-  const resolved = await resolveConfig(
-    { mode: prepareOptions.mode ?? 'development', ...prepareOptions.vite },
-    'serve',
-    prepareOptions.mode ?? 'development',
-  );
+  // TLS is chosen in the same mode Vite then runs in.
+  const mode = getDevMode(prepareOptions.mode, prepareOptions.vite);
+  const resolved = await resolveConfig({ ...prepareOptions.vite, mode }, 'serve', mode);
   const tls = await resolveTlsOptions(resolved.server.https);
   const server = tls ? https.createServer(tls) : http.createServer();
-  const app = await prepareDev({ ...prepareOptions, server });
+  const app = await prepareDev({ ...prepareOptions, mode, server });
   const render = adapterNode(app.handler, { compression });
   const lifecycle = createLifecycle(server, {
     health,

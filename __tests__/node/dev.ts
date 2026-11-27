@@ -399,6 +399,19 @@ export default defineEntry(App, routes, {
     expect(warnings.filter((message) => /hmr/i.test(message))).toEqual([]);
   });
 
+  it('runs in the inline Vite mode unless the mode option is set', async () => {
+    writeProject();
+
+    const inline = await start({ vite: viteConfig({ mode: 'secure' }) });
+
+    expect(inline.app.vite.config.mode).toBe('secure');
+
+    const explicit = await start({ mode: 'staging', vite: viteConfig({ mode: 'secure' }) });
+
+    expect(explicit.app.vite.config.mode).toBe('staging');
+    expect((await request(`${explicit.url}/`)).body).toContain('Home v1');
+  });
+
   it('keeps HMR off the parent port when the project turned it off', async () => {
     writeProject();
 
