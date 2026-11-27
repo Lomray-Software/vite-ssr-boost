@@ -157,7 +157,9 @@ outputs, a kind of file is listed only when every output names it with `[hash]`,
 manifest does not say which output wrote a file. The list is decided by the name, not by the
 content: a plugin that emits a file under an explicit `fileName` shaped like a hashed name, such
 as `assets/logo-abcd1234.svg`, is listed too. Give your own `immutableFiles` when a plugin does
-that with stable content. Setting
+that with stable content. A path is matched as written, case included, so on a case-insensitive
+disk a request that changes the case of a hashed name gets the revalidating default instead of
+the year-long one. Setting
 `maxAge`, `immutable` or `cacheControl: false` hands the policy for every file to you.
 
 With the default `fallthrough` and no `extensions`, SSR builds read the top-level names of the
