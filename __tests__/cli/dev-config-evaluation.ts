@@ -133,15 +133,19 @@ describe('ssr-boost dev config evaluation', { timeout: 30000 }, () => {
     createDevServerMock.mockRejectedValue(new Error('node server started'));
 
     const started = runDev({ version: '1', isPrintInfo: false, mode: 'development' });
+    // Attach the rejection handler at once so a failure while the gate is held is not unhandled.
+    const outcome = expect(started).rejects.toThrow('node server started');
 
-    await vi.waitFor(() => expect(picks[0]?.close).toHaveBeenCalledOnce(), { timeout: 20000 });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    try {
+      await vi.waitFor(() => expect(picks[0]?.close).toHaveBeenCalledOnce(), { timeout: 20000 });
 
-    expect(createDevServerMock).not.toHaveBeenCalled();
+      // The gate keeps close pending, so a start that awaits it cannot have gone further.
+      expect(createDevServerMock).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
 
-    release();
-
-    await expect(started).rejects.toThrow('node server started');
+    await outcome;
     expect(createServerMock).not.toHaveBeenCalled();
     expect(createDevServerMock).toHaveBeenCalledOnce();
     expect(evaluations()).toBe(1);
