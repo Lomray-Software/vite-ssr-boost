@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { html as htmlSpec, parse } from 'parse5';
 import type { DefaultTreeAdapterTypes } from 'parse5';
+import getOriginForm from '@helpers/origin-form';
 
 type TNode = DefaultTreeAdapterTypes.ChildNode | DefaultTreeAdapterTypes.Document;
 
@@ -169,9 +170,11 @@ const stripEntryAsync = (
 ): string => {
   const entryPath = new URL(path.posix.normalize(`/${base ?? '/'}/${clientFile}`), ORIGIN).pathname;
   const document = parse(html, { sourceCodeLocationInfo: true });
-  // The request target is a path on this origin, even when it starts with two slashes.
+  // The request target is a path on this origin, even when it starts with two slashes, and an
+  // absolute-form target such as Express gives in originalUrl resolves from its path.
+  const target = getOriginForm(documentUrl);
   const documentBase =
-    (documentUrl.startsWith('/') && parseUrl(`${ORIGIN}${documentUrl}`)) || new URL('/', ORIGIN);
+    (target !== undefined && parseUrl(`${ORIGIN}${target}`)) || new URL('/', ORIGIN);
   const ranges = collectAsyncRanges(document, entryPath, documentBase);
 
   if (!ranges.length) {

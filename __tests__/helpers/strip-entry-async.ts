@@ -129,6 +129,18 @@ describe('stripEntryAsync', () => {
     expect(stripEntryAsync(relative, '/', 'client.ts', '/blog/post')).toBe(relative);
   });
 
+  it('should resolve a relative src from the path of an absolute-form document URL', () => {
+    const relative = '<script src="client.ts" async></script>';
+
+    expect(stripEntryAsync(relative, '/', 'client.ts', 'http://service/catalog/page')).toBe(
+      relative,
+    );
+    expect(stripEntryAsync(relative, '/', 'client.ts', '/catalog/page')).toBe(relative);
+    expect(stripEntryAsync(relative, '/', 'client.ts', 'http://service/page')).toBe(
+      '<script src="client.ts"></script>',
+    );
+  });
+
   it('should resolve a relative src from the base element', () => {
     const scripts = '<script src="client.ts" async></script>';
 

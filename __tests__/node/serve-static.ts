@@ -493,6 +493,29 @@ describe('node serveStatic', () => {
     }
   });
 
+  it('answers a raw dot-segment target the same in the absolute and the origin form', async () => {
+    for (const options of [{}, { extensions: ['html'] }, { fallthrough: false }]) {
+      const node = await startNode(options, false);
+      const { origin } = new URL(node);
+      const targets = [
+        '/base/assets/../index.html',
+        '/base/assets/../index',
+        '/base/x/../assets/app.js',
+        '/base/../../etc/passwd',
+      ];
+
+      for (const target of targets) {
+        const [plain, absolute] = await Promise.all([
+          observeTarget(node, target),
+          observeTarget(node, `${origin}${target}`),
+        ]);
+
+        expect(absolute, `${JSON.stringify(options)} ${target}`).toEqual(plain);
+        expect(absolute.body, target).not.toBe('document');
+      }
+    }
+  });
+
   it('redirects an absolute-form directory target to its path, not the client host', async () => {
     const node = await startNode({}, false);
     const { status, location } = await observeTarget(node, 'http://other.example/base/assets');

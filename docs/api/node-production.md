@@ -156,7 +156,9 @@ from a function pattern are never listed; give your own `immutableFiles` for the
 outputs, a kind of file is listed only when every output names it with `[hash]`, since the
 manifest does not say which output wrote a file. The list is decided by the name, not by the
 content: a plugin that emits a file under an explicit `fileName` shaped like a hashed name, such
-as `assets/logo-abcd1234.svg`, is listed too. Give your own `immutableFiles` when a plugin does
+as `assets/logo-abcd1234.svg`, is listed too. An ordinary word can fit the default eight
+character hash, so `assets/icon-facebook.svg` emitted under that explicit name is listed, while
+the same file copied from `public/` is not. Give your own `immutableFiles` when a plugin does
 that with stable content. A path is matched as written, case included, so on a case-insensitive
 disk a request that changes the case of a hashed name gets the revalidating default instead of
 the year-long one. Setting
@@ -210,7 +212,8 @@ The two health probes need two paths: `createLifecycle` throws a `TypeError` whe
 while the server drains. A path given as `undefined` keeps its default. `createProductionServer`,
 `createDevServer` and the Express `createServer` check this before they start Vite or load the
 entry, and keep the paths they checked. A probe matches an absolute-form target such as
-`GET http://host/readyz` by its path.
+`GET http://host/readyz` by its path, written as the client sent it: `.` and `..` segments are
+kept in both forms, as `serveStatic` reads them.
 
 Bind through `listen`, not `server.listen`: it applies the timeouts, rejects once `close()` has
 started or while an earlier native `server.close()` has not emitted `close`, and `close()` waits

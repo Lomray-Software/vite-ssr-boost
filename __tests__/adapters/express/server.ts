@@ -465,6 +465,28 @@ describe('node server', () => {
     expect(res.writeHead).toHaveBeenLastCalledWith(503, expect.anything());
   });
 
+  it('should read the health option once, so run() never reads it again', async () => {
+    let reads = 0;
+    const options = {
+      /**
+       * Health paths that can be read only once.
+       */
+      get health() {
+        reads += 1;
+
+        if (reads > 1) {
+          throw new Error('health read twice');
+        }
+
+        return true;
+      },
+    };
+    const result = await createServer(createDevConfig() as never, options);
+
+    expect(() => result.run({ isPrintInfo: false })).not.toThrow();
+    expect(reads).toBe(1);
+  });
+
   it('should answer health probes before application middleware once running', async () => {
     const result = await createServer(createDevConfig() as never, { health: true });
 

@@ -213,6 +213,31 @@ describe('createLifecycle', () => {
     await closing.catch(() => undefined);
   });
 
+  it('matches a probe path with dot segments as written in either target form', async () => {
+    let lifecycle!: ILifecycle;
+    const { server } = await listen(
+      (req, res) => lifecycle.health(req, res, () => res.end('app')),
+      (instance) => {
+        lifecycle = createLifecycle(instance, {
+          health: { readyPath: '/checks/../ready' },
+          readinessGraceMs: 2000,
+        });
+
+        return lifecycle;
+      },
+    );
+
+    lifecycle.setReady();
+
+    const closing = lifecycle.close();
+
+    expect(await rawGet(server, '/checks/../ready')).toMatch(/^HTTP\/1\.1 503 /);
+    expect(await rawGet(server, 'http://service/checks/../ready')).toMatch(/^HTTP\/1\.1 503 /);
+    expect(await rawGet(server, 'http://service/ready')).toMatch(/^HTTP\/1\.1 200 /);
+    await lifecycle.force();
+    await closing.catch(() => undefined);
+  });
+
   it('passes every request through when health is not configured', async () => {
     let lifecycle!: ILifecycle;
     const { url } = await listen(
