@@ -144,7 +144,8 @@ reaches the router, also with `fallthrough: false`. `prepareProduction` passes t
 `indexFile` from `ssr-boost.json`, so a renamed shell stays hidden too. The match is by path: a
 symlink or a copy of the shell under another name in the client directory is served as a file.
 On Windows, trailing dots and spaces in a segment are dropped before the match, as the file system
-drops them, so `/index.html.` is hidden too. Short 8.3 names such as `INDEX~1.HTM` are not matched;
+drops them, from the request, the configured shell name and each listed extension alike, so
+`/index.html.` is hidden too. Short 8.3 names such as `INDEX~1.HTM` are not matched;
 disable them on the volume that holds the build if that matters.
 
 Files listed in `immutableFiles` get `Cache-Control: public, max-age=31536000, immutable`. Every

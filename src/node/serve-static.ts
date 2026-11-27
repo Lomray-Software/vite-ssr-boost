@@ -79,6 +79,16 @@ const getPathname = (url: string): string | undefined => {
 const trimWindowsSegment = (segment: string): string => segment.replace(/[. ]+$/, '') || segment;
 
 /**
+ * Extension as send appends it after a dot, lowercased for case-insensitive disks and, on
+ * Windows, trimmed like the segment it ends. `.html` still looks for `page..html`.
+ */
+const normalizeExtension = (name: unknown, isWindows: boolean): string => {
+  const lowered = String(name).toLowerCase();
+
+  return isWindows ? trimWindowsSegment(lowered) : lowered;
+};
+
+/**
  * Lowercased resolved form of a pathname used to match the shell. A backslash counts as a
  * separator, as it does for send on Windows, so no spelling of the shell slips past. On Windows
  * the segments are also trimmed as the file system trims them, so `/index.html.` matches.
@@ -90,7 +100,45 @@ const getShellKey = (pathname: string, isWindows = process.platform === 'win32')
   return path.posix.normalize(resolved).toLowerCase();
 };
 
-export { getShellKey };
+/**
+ * Shell key and the extensionless alias keys a file server resolves to the shell, each with the
+ * configured extension that leads there. Both are canonicalized like a request key, so on Windows
+ * a shell named `index.html.` or an extension written `html.` match what the disk opens.
+ */
+const getShellGuardKeys = (
+  shellPath: string,
+  extensions: unknown,
+  isWindows = process.platform === 'win32',
+): { shellPath: string; aliases: Map<string, string> } => {
+  const shellKey = getShellKey(shellPath, isWindows);
+  const aliases = new Map<string, string>();
+
+  if (!Array.isArray(extensions)) {
+    return { shellPath: shellKey, aliases };
+  }
+
+  for (const name of new Set(extensions.map((ext) => normalizeExtension(ext, isWindows)))) {
+    const alias = name ? shellKey.slice(0, -(name.length + 1)) : '';
+
+    // send appends an extension only to a missing path without one, such as `/page` for
+    // `page.en.html` under `en.html`.
+    if (
+      !name ||
+      !shellKey.endsWith(`.${name}`) ||
+      alias.endsWith('/') ||
+      path.posix.extname(alias) ||
+      aliases.has(alias)
+    ) {
+      continue;
+    }
+
+    aliases.set(alias, name);
+  }
+
+  return { shellPath: shellKey, aliases };
+};
+
+export { getShellKey, getShellGuardKeys };
 
 /**
  * Lowercased mount prefix without trailing slashes; the root mount is empty.
@@ -161,12 +209,13 @@ const createCachePolicy = (
 /**
  * Guard for one file server: the shell's request path and, for every configured extension the
  * shell's name ends with, the extensionless alias with a server that resolves it without that
- * extension. Lowercased, since case-insensitive disks match any spelling.
+ * extension. Keyed like requests, since case-insensitive disks match any spelling.
  */
 const createShellGuard = (
   root: string,
   shellFile: string,
   options: TFileOptions,
+  isWindows = process.platform === 'win32',
 ): IShellGuard | undefined => {
   const relative = path.relative(root, path.resolve(root, shellFile));
 
@@ -180,35 +229,14 @@ const createShellGuard = (
     return undefined;
   }
 
-  const shellPath = `/${relative.split(path.sep).join('/')}`.toLowerCase();
-  const aliases = new Map<string, TStaticMiddleware>();
   const { extensions } = options;
+  const keys = getShellGuardKeys(`/${relative.split(path.sep).join('/')}`, extensions, isWindows);
+  const aliases = new Map<string, TStaticMiddleware>();
 
-  if (!Array.isArray(extensions)) {
-    return { shellPath, aliases };
-  }
-
-  /**
-   * Extension as send appends it after a dot, spelling kept, so `.html` looks for `page..html`.
-   */
-  const normalize = (name: unknown): string => String(name).toLowerCase();
-
-  for (const name of new Set(extensions.map(normalize))) {
-    const alias = name ? shellPath.slice(0, -(name.length + 1)) : '';
-
-    // send appends an extension only to a missing path without one, such as `/page` for
-    // `page.en.html` under `en.html`.
-    if (
-      !name ||
-      !shellPath.endsWith(`.${name}`) ||
-      alias.endsWith('/') ||
-      path.posix.extname(alias) ||
-      aliases.has(alias)
-    ) {
-      continue;
-    }
-
-    const otherExtensions = extensions.filter((other) => normalize(other) !== name);
+  for (const [alias, name] of keys.aliases) {
+    const otherExtensions = (extensions as unknown[]).filter(
+      (other) => normalizeExtension(other, isWindows) !== name,
+    ) as string[];
 
     // send still serves a literal file, redirects a directory and tries the other extensions.
     // A miss falls through to the router like the shell itself, also with `fallthrough: false`.
@@ -222,7 +250,7 @@ const createShellGuard = (
     );
   }
 
-  return { shellPath, aliases };
+  return { shellPath: keys.shellPath, aliases };
 };
 
 /**
@@ -277,6 +305,42 @@ const createSsrServe = (
 };
 
 /**
+ * serve-static options read by name, so options inherited from a prototype count too. Unset ones
+ * stay out, so serve-static and send keep their own defaults.
+ */
+const readFileOptions = ({
+  acceptRanges,
+  cacheControl,
+  dotfiles,
+  etag,
+  extensions,
+  fallthrough,
+  immutable,
+  index,
+  lastModified,
+  maxAge,
+  redirect,
+  setHeaders,
+}: Partial<IServeStaticOptions>): TFileOptions => {
+  const named: TFileOptions = {
+    acceptRanges,
+    cacheControl,
+    dotfiles,
+    etag,
+    extensions,
+    fallthrough,
+    immutable,
+    index,
+    lastModified,
+    maxAge,
+    redirect,
+    setHeaders,
+  };
+
+  return Object.fromEntries(Object.entries(named).filter(([, value]) => value !== undefined));
+};
+
+/**
  * Serve the public directory as Connect middleware.
  * serve-static skips dotfiles unless told otherwise, but `/.well-known/` (app links,
  * security.txt, ACME challenges) must reach the client: without an explicit `dotfiles`
@@ -284,15 +348,18 @@ const createSsrServe = (
  * Well-known files are requested without an extension (apple-app-site-association) while
  * tooling keeps them as `.json` on disk, so that prefix also resolves `name` to `name.json`.
  */
-const serveStatic = ({
-  root,
-  basename,
-  isSPA = false,
-  immutableFiles,
-  shellFile = 'index.html',
-  hasAccessIndexHtml,
-  ...options
-}: IServeStaticOptions): TStaticMiddleware => {
+const serveStatic = (staticOptions: IServeStaticOptions): TStaticMiddleware => {
+  const {
+    root,
+    basename,
+    isSPA = false,
+    immutableFiles,
+    shellFile = 'index.html',
+    hasAccessIndexHtml,
+    ...ownOptions
+  } = staticOptions;
+  // Own extra keys still reach serve-static as before; the declared ones are read by name.
+  const options: TFileOptions = { ...ownOptions, ...readFileOptions(staticOptions) };
   const mount = normalizeBasename(basename);
   // serve-static resolves its root once, so the shell is matched against that same directory.
   const resolvedRoot = path.resolve(root);

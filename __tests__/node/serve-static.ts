@@ -7,7 +7,7 @@ import path from 'node:path';
 import express from 'express';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import staticFiles from '@adapters/express/static-files';
-import serveStatic, { getShellKey } from '@node/serve-static';
+import serveStatic, { getShellGuardKeys, getShellKey } from '@node/serve-static';
 import type { IServeStaticOptions } from '@node/serve-static';
 
 type TOptions = Omit<IServeStaticOptions, 'root' | 'basename' | 'isSPA'>;
@@ -572,6 +572,34 @@ describe('node serveStatic', () => {
     expect(getShellKey('/nested. /shell.html ', true)).toBe('/nested/shell.html');
     expect(getShellKey('/assets/.../index.html', true)).toBe('/assets/.../index.html');
     expect(getShellKey('/index.html.', false)).toBe('/index.html.');
+  });
+
+  it('keys the configured shell and its aliases like a request on Windows', () => {
+    expect(getShellGuardKeys('/index.html.', [], true).shellPath).toBe('/index.html');
+    expect(getShellGuardKeys('/index.html.', [], false).shellPath).toBe('/index.html.');
+    expect([...getShellGuardKeys('/index.html', ['html.'], true).aliases]).toEqual([
+      ['/index', 'html'],
+    ]);
+    expect([...getShellGuardKeys('/index.html', ['html.'], false).aliases]).toEqual([]);
+    expect([...getShellGuardKeys('/Index.HTML', ['HTML. '], true).aliases]).toEqual([
+      ['/index', 'html'],
+    ]);
+  });
+
+  it('reads serve-static options inherited from a prototype', async () => {
+    const middleware = serveStatic(
+      Object.create({ root, basename: '/base', extensions: ['html'] }) as IServeStaticOptions,
+    );
+    const server = http.createServer((req, res) => {
+      middleware(req, res, () => res.end('SSR'));
+    });
+
+    servers.push(server);
+
+    const node = await listen(server);
+
+    expect(await (await fetch(`${node}/about`)).text()).toBe('extension-fallback');
+    expect(await (await fetch(`${node}/index`)).text()).toBe('SSR');
   });
 
   it('hides a well-known shell under both spellings unless access is granted', async () => {
