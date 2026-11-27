@@ -63,6 +63,7 @@ const acceptance = {
   chunks: [],
   deferred: [],
   policyInfo: 0,
+  expressHookDeprecations: 0,
   diagnosticsWarnings: 0,
 };
 const cli = join(directory, 'node_modules', '@lomray', 'vite-ssr-boost', 'cli.js');
@@ -92,12 +93,25 @@ const getPort = async () => {
   return address.port;
 };
 
+/**
+ * Count one process's diagnostics. The template keeps Express-only hooks, so their
+ * deprecation is expected, but each hook must be reported at most once per process.
+ */
 const recordDiagnostics = (output) => {
-  for (const [, code] of stripVTControlCharacters(output).matchAll(
-    /\b(SSR_BOOST_[A-Z_]+)(?=:|\])/g,
+  const deprecations = new Set();
+
+  for (const [, code, detail] of stripVTControlCharacters(output).matchAll(
+    /\b(SSR_BOOST_[A-Z_]+)(?::|\])([^\n]*)/g,
   )) {
-    if (code === 'SSR_BOOST_SSR_POLICY') acceptance.policyInfo += 1;
-    else acceptance.diagnosticsWarnings += 1;
+    if (code === 'SSR_BOOST_SSR_POLICY') {
+      acceptance.policyInfo += 1;
+    } else if (code === 'SSR_BOOST_DEPRECATED_EXPRESS_HOOK') {
+      assert.ok(!deprecations.has(detail), `Express hook deprecation repeated:${detail}`);
+      deprecations.add(detail);
+      acceptance.expressHookDeprecations += 1;
+    } else {
+      acceptance.diagnosticsWarnings += 1;
+    }
   }
 };
 
@@ -455,6 +469,7 @@ const reportAcceptance = async () => {
         `| ${mode} deferred settle delay (first HTML to resolve frame) | ${milliseconds(settleMs)} | > 100 ms |`,
     ),
     `| SSR_BOOST_SSR_POLICY info lines | ${acceptance.policyInfo} | informational |`,
+    `| SSR_BOOST_DEPRECATED_EXPRESS_HOOK lines | ${acceptance.expressHookDeprecations} | once per hook and process |`,
     `| Other SSR_BOOST_ diagnostics | ${acceptance.diagnosticsWarnings} | 0 |`,
     '',
   ].join('\n');
