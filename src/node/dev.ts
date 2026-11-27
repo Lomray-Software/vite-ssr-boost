@@ -11,6 +11,7 @@ import type { IEntry, IEntryHost } from '@core/entry';
 import type { TSsrHandler } from '@core/types';
 import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
 import settleAll from '@helpers/settle-all';
+import stripEntryAsync from '@helpers/strip-entry-async';
 import createLifecycle from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions, TLifecycleServer } from '@node/lifecycle';
 import renderToStream from '@node/render-to-stream';
@@ -94,13 +95,10 @@ const loadDevHtml = async (
   const { root, indexFile, clientFile } = config.getParams();
   const file = path.resolve(`${root}/${indexFile}`);
   const html = await readFile(file, 'utf8');
-  const clientFileEntry = path.posix.normalize(`${vite.config.base}/${clientFile}`);
-  const transformed = (await vite.transformIndexHtml(url, html, indexFile)).replace(
-    new RegExp(
-      String.raw`<script[^>]*?\bsrc=["']/?${clientFileEntry}([^"']*)["'][^>]*?\sasync\b`,
-      'g',
-    ),
-    (match) => match.replace(/\sasync\b/, ''),
+  const transformed = stripEntryAsync(
+    await vite.transformIndexHtml(url, html, indexFile),
+    vite.config.base,
+    clientFile,
   );
 
   return splitHtmlShell(transformed, file);

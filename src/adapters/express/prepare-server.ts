@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import type { Express, Request } from 'express';
 import type { IEntrypointOptions, IPrepareRenderOut } from '@adapters/express/entry';
 import type { TRender } from '@adapters/express/render';
+import stripEntryAsync from '@helpers/strip-entry-async';
 import type { TRouteObject } from '@interfaces/route-object';
 import Diagnostics, { isDiagnosticsEnabled, splitHtmlShell } from '@services/diagnostics';
 import type { TExpressHook } from '@services/diagnostics';
@@ -205,21 +206,13 @@ class PrepareServer {
     let modifiedHtml = this.html;
 
     if (!isProd) {
-      const clientFileEntry = path.posix.normalize(
-        `${this.config.getVite()?.config.base}/${clientFile}`,
-      );
-
       /**
        * Apply Vite transforms and remove async from the entry to preserve plugin preambles.
        */
-      modifiedHtml = (
-        await this.config.getVite()!.transformIndexHtml(req.originalUrl, this.html, indexFile)
-      ).replace(
-        new RegExp(
-          String.raw`<script[^>]*?\bsrc=["']/?${clientFileEntry}([^"']*)["'][^>]*?\sasync\b`,
-          'g',
-        ),
-        (match) => match.replace(/\sasync\b/, ''),
+      modifiedHtml = stripEntryAsync(
+        await this.config.getVite()!.transformIndexHtml(req.originalUrl, this.html, indexFile),
+        this.config.getVite()?.config.base,
+        clientFile,
       );
     }
 
