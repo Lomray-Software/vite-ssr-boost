@@ -15,6 +15,14 @@ import type { ICreateDevServerOptions, IDevServer } from '@node/dev';
 import ServerConfig from '@services/server-config';
 import ViteSsrBoostPlugin from '../../src/plugin';
 
+// The node dev server must run where the optional Express peers are not installed.
+vi.mock('express', () => {
+  throw new Error('express loaded by the node dev server');
+});
+vi.mock('compression', () => {
+  throw new Error('compression loaded by the node dev server');
+});
+
 interface IProjectOptions {
   base?: string;
   html?: string;
