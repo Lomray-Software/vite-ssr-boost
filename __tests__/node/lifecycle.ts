@@ -395,11 +395,16 @@ describe('createLifecycle', () => {
 
       const before = process.listeners('SIGTERM');
       const unsubscribe = lifecycle.handleSignals({ shouldHandle: () => false });
-      const [first, ...rest] = process.listeners('SIGTERM');
 
-      expect(before).not.toContain(first);
-      expect(rest).toEqual(before);
-      unsubscribe();
+      try {
+        const [first, ...rest] = process.listeners('SIGTERM');
+
+        expect(before).not.toContain(first);
+        expect(rest).toEqual(before);
+      } finally {
+        unsubscribe();
+      }
+
       expect(process.listeners('SIGTERM')).toEqual(before);
     } finally {
       process.off('SIGTERM', earlier);

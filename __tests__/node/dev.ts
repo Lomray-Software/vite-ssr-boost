@@ -548,15 +548,18 @@ export default defineEntry(App, routes, {
     void closed.then(() => {
       isSettled = true;
     });
-    await vi.waitFor(() => expect(release).toBeDefined());
-    await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(isSettled).toBe(false);
+    try {
+      await vi.waitFor(() => expect(release).toBeDefined());
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
-    release!();
+      expect(isSettled).toBe(false);
+    } finally {
+      release?.();
+      started = [];
+    }
 
     expect(await closed).toEqual({ isRejected: true, reason: hookError });
-    started = [];
   });
 
   it('answers readiness 503 and keeps accepting during the readiness grace', async () => {
