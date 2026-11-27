@@ -836,6 +836,38 @@ describe('node server', () => {
     expect(vite.close).toHaveBeenCalledOnce();
   });
 
+  it('should close a server bound again after a drain closed the shared Vite', async () => {
+    const vite = createViteDouble('shared-middleware');
+    const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
+    const servers = await mockPendingServers();
+
+    createViteServer.mockResolvedValueOnce(vite);
+
+    const started = await createServer(createStatefulDevConfig() as never);
+    const retried = started.run({ isPrintInfo: false });
+
+    retried.once('error', vi.fn());
+    servers[0].emit('error', failure);
+
+    const first = started.getLifecycle()!;
+
+    started.run({ isPrintInfo: false });
+    await flush();
+    await started.getLifecycle()!.close();
+
+    expect(vite.close).toHaveBeenCalledOnce();
+
+    const close = vi.fn((cb?: () => void) => cb?.());
+
+    // The caller retries the bind on the same server after the other server drained.
+    Object.assign(servers[0], { listening: true, close });
+    servers[0].emit('listening');
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(first.isReady()).toBe(false);
+    expect(vite.close).toHaveBeenCalledOnce();
+  });
+
   it('should refuse a run started from the shared Vite close code', async () => {
     const vite = createViteDouble('shared-middleware');
     let attempt: unknown;

@@ -269,8 +269,9 @@ async function createServer(
        * so they see the state onServerStarted prepared.
        */
       const onListening = (): void => {
-        // A bind that lands once the drain started is released by the lifecycle; start nothing.
-        if (runLifecycle.isDraining()) {
+        // A bind that lands once the drain started is released by the lifecycle, and one that
+        // lands once another drain closed the Vite is closed below: start nothing for either.
+        if (runLifecycle.isDraining() || viteClosing) {
           return;
         }
 
@@ -317,9 +318,16 @@ async function createServer(
         emitter.on(errorMonitor, onBindError);
 
         // A server bound again after a failed bind or a native close serves on the Vite once
-        // more, so it takes the hold back unless a drain started or the Vite is closing.
+        // more, so it takes the hold back unless a drain started. Once another drain closed the
+        // Vite, the server would serve on a closed one, so it is closed instead.
         server.on('listening', () => {
-          if (isCounted || viteClosing || runLifecycle.isDraining()) {
+          if (isCounted || runLifecycle.isDraining()) {
+            return;
+          }
+
+          if (viteClosing) {
+            server.close();
+
             return;
           }
 
