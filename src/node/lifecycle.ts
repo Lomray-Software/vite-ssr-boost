@@ -616,10 +616,9 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
             done();
           }
         });
-
-        return;
       }
 
+      // Every branch sweeps: a tunnel upgraded before the stop holds a native close too.
       server.closeIdleConnections();
       sweepTunnels();
     });

@@ -913,6 +913,41 @@ describe('createLifecycle', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('sweeps a tunnel upgraded after a native close from before the lifecycle', async () => {
+    const { server } = await listen(
+      () => undefined,
+      () => createLifecycle(http.createServer()),
+    );
+    const accepted = new Promise<void>((resolve) => server.once('connection', () => resolve()));
+    const client = net.connect((server.address() as AddressInfo).port, '127.0.0.1');
+    const clientClosed = new Promise<void>((resolve) => client.once('close', () => resolve()));
+
+    client.on('error', () => undefined);
+    await accepted;
+    client.write('GET /hmr HTTP/1.1\r\nHost: test\r\n');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    server.close();
+
+    const lifecycle = createLifecycle(server, { drainTimeoutMs: 5000 });
+
+    server.on('upgrade', (_req, socket: Socket) => {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const answered = new Promise<void>((resolve) => client.once('data', () => resolve()));
+
+    client.write('Connection: Upgrade\r\nUpgrade: test\r\n\r\n');
+    await answered;
+
+    const started = Date.now();
+
+    await lifecycle.close();
+    await clientClosed;
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
   it('keeps waiting for a native close when the connection count fails', async () => {
     /**
      * Start a server, hold an upgraded socket, close it natively and break its connection count.
