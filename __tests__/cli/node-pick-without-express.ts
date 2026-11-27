@@ -50,10 +50,12 @@ describe('ssr-boost dev node pick', () => {
       close,
     });
 
-    // Vitest wraps a throwing mock factory; the cause is the factory's own error.
-    await expect(
-      runDev({ version: '1', isPrintInfo: false, mode: 'development' }),
-    ).rejects.toMatchObject({ cause: { message: 'express adapter loaded' } });
+    const error = (await runDev({ version: '1', isPrintInfo: false, mode: 'development' }).catch(
+      (reason: unknown) => reason,
+    )) as Error & { cause?: Error };
+
+    // Vitest may wrap a throwing mock factory; then the cause is the factory's own error.
+    expect((error.cause ?? error).message).toMatch(/express adapter loaded/);
     expect(close).toHaveBeenCalledOnce();
     expect(createDevServerMock).not.toHaveBeenCalled();
   });

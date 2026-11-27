@@ -403,7 +403,7 @@ describe('cli integration', () => {
     const failure = new RangeError('bad port');
 
     createDevViteMock.mockResolvedValue(pick);
-    createServerMock.mockImplementation(
+    createServerMock.mockImplementationOnce(
       (config: { setVite: (vite: unknown) => void }, _options: unknown, vite: unknown) => {
         config.setVite(vite);
 
@@ -425,7 +425,7 @@ describe('cli integration', () => {
     const own = devVite();
     const failure = new RangeError('bad port');
 
-    createServerMock.mockImplementation((config: { setVite: (vite: unknown) => void }) => {
+    createServerMock.mockImplementationOnce((config: { setVite: (vite: unknown) => void }) => {
       config.setVite(own);
 
       return Promise.resolve({
@@ -451,7 +451,7 @@ describe('cli integration', () => {
       throw new Error('no plugin');
     });
     createDevViteMock.mockResolvedValue(pick);
-    createServerMock.mockImplementation(
+    createServerMock.mockImplementationOnce(
       (config: { setVite: (vite: unknown) => void }, _options: unknown, vite: unknown) => {
         config.setVite(vite);
 
