@@ -539,15 +539,19 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
           fail(error);
         }
       });
-    // Any server that is not listening can carry a close() whose `close` event is still queued.
-    const bound = (server.listening ? bind() : settleNativeClose().then(bind)).finally(() => {
-      isBinding = false;
-      binding = undefined;
+    let settleBinding!: () => void;
+
+    // close() waits on this, so a rejected bind is still reported to the caller of listen() alone.
+    binding = new Promise<void>((resolve) => {
+      settleBinding = resolve;
     });
 
-    binding = bound.catch(() => undefined);
-
-    return bound;
+    // Any server that is not listening can carry a close() whose `close` event is still queued.
+    return (server.listening ? bind() : settleNativeClose().then(bind)).finally(() => {
+      isBinding = false;
+      binding = undefined;
+      settleBinding();
+    });
   };
 
   /**

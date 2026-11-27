@@ -1300,6 +1300,26 @@ setTimeout(() => process.exit(0), 50);
     );
   });
 
+  it('reports a bind error of a listen nobody awaits as an unhandled rejection', () => {
+    const source = readFileSync(
+      fileURLToPath(new URL('../../src/node/lifecycle.ts', import.meta.url)),
+      'utf8',
+    );
+    const { code } = transformSync(source, { loader: 'ts', format: 'esm' });
+    const script = `${code}
+const http = await import('node:http');
+const address = await createLifecycle(http.createServer()).listen(0);
+process.once('unhandledRejection', (error) => process.exit(error.code === 'EADDRINUSE' ? 3 : 1));
+void createLifecycle(http.createServer()).listen(address.port);
+setTimeout(() => process.exit(0), 500);
+`;
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8',
+    });
+
+    expect(child.status).toBe(3);
+  });
+
   it('answers 503 on readiness while still accepting during the grace period', async () => {
     let lifecycle!: ILifecycle;
     const { server, url } = await listen(
