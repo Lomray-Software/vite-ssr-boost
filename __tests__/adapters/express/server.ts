@@ -206,6 +206,7 @@ describe('node server', () => {
           closeIdleConnections: vi.fn(),
           closeAllConnections: vi.fn(),
           close: vi.fn(),
+          getConnections: vi.fn((cb: (error: Error | null, count: number) => void) => cb(null, 0)),
           // Node registers the listen callback as a `listening` listener.
           listen: vi.fn((_port: number, _host: string, cb?: () => void) => {
             if (cb) {
