@@ -145,6 +145,74 @@ describe('ownSignalsUnlessHandled', () => {
     expect(firstLifecycle.handleSignals).toHaveBeenCalledOnce();
   });
 
+  /**
+   * Lifecycle double whose subscription adds a real SIGTERM listener.
+   */
+  const createSubscribingLifecycle = () => {
+    const sigterm = vi.fn();
+    const lifecycle = {
+      handleSignals: vi.fn(() => {
+        process.on('SIGTERM', sigterm);
+
+        return () => process.off('SIGTERM', sigterm);
+      }),
+    };
+
+    added.push(() => process.off('SIGTERM', sigterm));
+
+    return { lifecycle, sigterm };
+  };
+
+  it('drops a pending check of a start a newer one replaced', async () => {
+    const first = new EventEmitter();
+    const second = new EventEmitter();
+    const older = createSubscribingLifecycle();
+    const newer = createSubscribingLifecycle();
+
+    ownSignalsUnlessHandled(first as never, older.lifecycle as never);
+    // The older check is queued but has not run when the newer start is selected.
+    first.emit('listening');
+    ownSignalsUnlessHandled(second as never, newer.lifecycle as never);
+    await listen(second);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(older.lifecycle.handleSignals).not.toHaveBeenCalled();
+    expect(newer.lifecycle.handleSignals).toHaveBeenCalledOnce();
+    expect(process.listeners('SIGTERM')).toEqual([newer.sigterm]);
+  });
+
+  it('removes the listening listener of a start replaced before it listened', async () => {
+    const first = new EventEmitter();
+    const second = new EventEmitter();
+    const older = createSubscribingLifecycle();
+    const newer = createSubscribingLifecycle();
+
+    ownSignalsUnlessHandled(first as never, older.lifecycle as never);
+    ownSignalsUnlessHandled(second as never, newer.lifecycle as never);
+
+    expect(first.listenerCount('listening')).toBe(0);
+
+    await listen(second);
+    await listen(first);
+
+    expect(older.lifecycle.handleSignals).not.toHaveBeenCalled();
+    expect(newer.lifecycle.handleSignals).toHaveBeenCalledOnce();
+  });
+
+  it('drops a pending check when the node server takes signals directly', async () => {
+    const server = new EventEmitter();
+    const older = createSubscribingLifecycle();
+    const { lifecycle } = createLifecycle();
+
+    ownSignalsUnlessHandled(server as never, older.lifecycle as never);
+    server.emit('listening');
+    ownSignals(lifecycle as never);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(older.lifecycle.handleSignals).not.toHaveBeenCalled();
+    expect(lifecycle.handleSignals).toHaveBeenCalledOnce();
+  });
+
   it('still yields after a restart to an application listener the restart kept', async () => {
     addSigterm();
 
