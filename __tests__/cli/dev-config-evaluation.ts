@@ -158,6 +158,8 @@ describe('ssr-boost dev config evaluation', { timeout: 30000 }, () => {
     expect(createServerMock).not.toHaveBeenCalled();
     expect(createDevServerMock).toHaveBeenCalledOnce();
     expect(closedAtStart).toBe(true);
+    // Only the picking Vite ran here: @node/dev is mocked, so its HTTPS and serving
+    // evaluations (documented as three in total) are not counted by this test.
     expect(evaluations()).toBe(1);
   });
 });
