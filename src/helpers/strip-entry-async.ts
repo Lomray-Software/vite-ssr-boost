@@ -10,9 +10,23 @@ type TNode = DefaultTreeAdapterTypes.ChildNode | DefaultTreeAdapterTypes.Documen
 const ORIGIN = 'http://document.invalid';
 
 /**
- * Drop the ASCII whitespace the browser trims around an attribute URL.
+ * Prepare an attribute URL as the URL parser does: trim C0 controls and spaces at both ends and
+ * drop every ASCII tab or newline, so the scheme and host checks see the URL the browser parses.
  */
-const trimUrl = (value: string): string => value.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '');
+const normalizeUrl = (value: string): string => {
+  let start = 0;
+  let end = value.length;
+
+  while (start < end && value.charCodeAt(start) <= 0x20) {
+    start += 1;
+  }
+
+  while (end > start && value.charCodeAt(end - 1) <= 0x20) {
+    end -= 1;
+  }
+
+  return value.slice(start, end).replace(/[\t\n\r]/g, '');
+};
 
 /**
  * Parse a URL against a base as the browser does, or undefined when it does not parse.
@@ -50,7 +64,7 @@ const isForeignSrc = (src: string): boolean => {
  * ignored and empty segments kept.
  */
 const getSrcPath = (src: string, base: URL): string | undefined => {
-  const value = trimUrl(src);
+  const value = normalizeUrl(src);
   const url = isForeignSrc(value) ? undefined : parseUrl(value, base);
 
   return url?.origin === base.origin ? url.pathname : undefined;
@@ -83,7 +97,8 @@ const findBaseHref = (node: TNode): string | undefined => {
 };
 
 /**
- * Collect the source ranges of async attributes on scripts whose src is the entry.
+ * Collect the source ranges of async attributes on HTML scripts whose src is the entry.
+ * A script inside SVG or MathML is foreign content and never the entry.
  */
 const collectAsyncRanges = (
   node: TNode,
@@ -91,7 +106,7 @@ const collectAsyncRanges = (
   base: URL,
   ranges: [number, number][],
 ): void => {
-  if ('tagName' in node && node.tagName === 'script') {
+  if ('tagName' in node && node.tagName === 'script' && node.namespaceURI === htmlSpec.NS.HTML) {
     const src = node.attrs.find(({ name }) => name === 'src');
     const location = node.sourceCodeLocation?.attrs?.async;
 
@@ -122,7 +137,7 @@ const stripEntryAsync = (
   const documentBase =
     (documentUrl.startsWith('/') && parseUrl(`${ORIGIN}${documentUrl}`)) || new URL('/', ORIGIN);
   const baseHref = findBaseHref(document);
-  const baseValue = baseHref === undefined ? undefined : trimUrl(baseHref);
+  const baseValue = baseHref === undefined ? undefined : normalizeUrl(baseHref);
   // A base href that does not parse leaves the document URL as the base, as in the browser.
   const baseUrl =
     baseValue === undefined ? documentBase : (parseUrl(baseValue, documentBase) ?? documentBase);

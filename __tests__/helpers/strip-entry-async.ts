@@ -28,9 +28,9 @@ describe('stripEntryAsync', () => {
   });
 
   it('should remove async written before src, with a value or in any case', () => {
-    expect(stripEntryAsync('<script async type="module" src="/client.ts"></script>', '/', 'client.ts')).toBe(
-      '<script type="module" src="/client.ts"></script>',
-    );
+    expect(
+      stripEntryAsync('<script async type="module" src="/client.ts"></script>', '/', 'client.ts'),
+    ).toBe('<script type="module" src="/client.ts"></script>');
     expect(stripEntryAsync('<script src="/client.ts" async=""></script>', '/', 'client.ts')).toBe(
       '<script src="/client.ts"></script>',
     );
@@ -48,7 +48,8 @@ describe('stripEntryAsync', () => {
   });
 
   it('should match the entry under a base with or without a leading slash', () => {
-    const html = '<script src="app/client.ts" async></script><script src="/client.ts" async></script>';
+    const html =
+      '<script src="app/client.ts" async></script><script src="/client.ts" async></script>';
 
     expect(stripEntryAsync(html, '/app/', 'client.ts')).toBe(
       '<script src="app/client.ts"></script><script src="/client.ts" async></script>',
@@ -172,6 +173,38 @@ describe('stripEntryAsync', () => {
     expect(stripEntryAsync('<script src=" /client.ts\n" async></script>', '/', 'client.ts')).toBe(
       '<script src=" /client.ts\n"></script>',
     );
+  });
+
+  it('should keep async when a base names a scheme or a host the URL parser cleans up', () => {
+    const scripts = '<script src="client.ts" async></script>';
+
+    for (const href of [
+      'ht&#9;tp://document.invalid/app/',
+      'ht\ntp://document.invalid/app/',
+      '\x01http://document.invalid/app/',
+      '/\t/document.invalid/app/',
+    ]) {
+      const html = `<base href="${href}">${scripts}`;
+
+      expect(stripEntryAsync(html, '/app/', 'client.ts', '/app/page')).toBe(html);
+    }
+  });
+
+  it('should keep async on a src whose scheme the URL parser cleans up', () => {
+    for (const src of [
+      'ht\ntp://document.invalid/app/client.ts',
+      '\x01//document.invalid/app/client.ts',
+    ]) {
+      const html = `<script src="${src}" async></script>`;
+
+      expect(stripEntryAsync(html, '/app/', 'client.ts')).toBe(html);
+    }
+  });
+
+  it('should keep async on a script inside SVG, which is not an HTML script', () => {
+    const html = '<svg><script src="/client.ts" async></script></svg>';
+
+    expect(stripEntryAsync(html, '/', 'client.ts')).toBe(html);
   });
 
   it('should remove a repeated async attribute', () => {
