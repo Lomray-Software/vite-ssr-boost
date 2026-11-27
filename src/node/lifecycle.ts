@@ -73,7 +73,8 @@ interface ILifecycle {
   /**
    * Bind the server and resolve with its address, rejecting bind errors and a bind that was
    * closed as it landed.
-   * Refused while another bind is in flight and once close() has started;
+   * Refused while another bind is in flight, before an earlier close() emitted `close`, and once
+   * close() has started;
    * close() waits for a bind in flight, within its deadline.
    */
   listen: (port?: number, host?: string) => Promise<AddressInfo | string | null>;
@@ -419,6 +420,13 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     if (isBinding) {
       return Promise.reject(
         new Error('[ssr-boost] listen() was called while a bind is in flight.'),
+      );
+    }
+
+    // The pending `close` event of that close() would otherwise cancel this bind as it starts.
+    if (hasListened && !server.listening && !isClosed) {
+      return Promise.reject(
+        new Error('[ssr-boost] listen() was called before the previous close() finished.'),
       );
     }
 

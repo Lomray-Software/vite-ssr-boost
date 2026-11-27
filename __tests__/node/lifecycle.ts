@@ -984,6 +984,30 @@ describe('createLifecycle', () => {
     expect(Date.now() - startedAt).toBeLessThan(2_000);
   });
 
+  it('refuses a managed listen before the previous native close finished', async () => {
+    const server = http.createServer();
+    const lifecycle = createLifecycle(server);
+
+    servers.push(server);
+    await lifecycle.listen(0);
+
+    const counts = (): number[] =>
+      ['listening', 'error', 'close'].map((event) => server.listenerCount(event));
+    const before = counts();
+
+    // The `close` event of this close() is still pending when the retry starts its host lookup.
+    server.close();
+    await expect(lifecycle.listen(0, 'localhost')).rejects.toThrow(
+      'before the previous close() finished',
+    );
+    expect(counts()).toEqual(before);
+    // A refused retry must never open a port later.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(server.listening).toBe(false);
+    // Once the close settled, a retry binds.
+    await expect(lifecycle.listen(0)).resolves.toMatchObject({ port: expect.any(Number) });
+  });
+
   it('lets a new managed listen start once a cancelled one ended', async () => {
     const server = http.createServer();
     const lifecycle = createLifecycle(server);
