@@ -400,20 +400,35 @@ const serveStatic = (staticOptions: IServeStaticOptions): TStaticMiddleware => {
   const mount = normalizeBasename(basename);
   // serve-static resolves its root once, so the shell is matched against that same directory.
   const resolvedRoot = path.resolve(root);
-  const fileOptions: TFileOptions = {
-    ...options,
-    index: isSPA ? options.index : false,
-    setHeaders: createCachePolicy(
-      resolvedRoot,
-      immutableFiles,
-      options,
-      isSPA ? shellFile : undefined,
-    ),
-  };
+  // send reads the extension list on every request, so every server and guard shares one copy
+  // taken here and a caller changing its array later cannot split them.
+  const extensions = Array.isArray(options.extensions)
+    ? [...(options.extensions as unknown[])]
+    : options.extensions;
+  const fileOptions: TFileOptions = { ...options };
+  const setHeaders = createCachePolicy(
+    resolvedRoot,
+    immutableFiles,
+    options,
+    isSPA ? shellFile : undefined,
+  );
+
+  if (extensions !== undefined) {
+    fileOptions.extensions = extensions as TFileOptions['extensions'];
+  }
+
+  if (!isSPA) {
+    fileOptions.index = false;
+  }
+
+  if (setHeaders) {
+    fileOptions.setHeaders = setHeaders;
+  }
+
   const wellKnownOptions: TFileOptions = {
     ...fileOptions,
     dotfiles: 'allow',
-    extensions: options.extensions ?? ['json'],
+    extensions: fileOptions.extensions ?? ['json'],
   };
   const plain = createServeStatic(resolvedRoot, fileOptions) as TStaticMiddleware;
   const serve = isSPA ? plain : createSsrServe(resolvedRoot, plain, fileOptions);

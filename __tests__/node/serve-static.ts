@@ -647,6 +647,17 @@ describe('node serveStatic', () => {
     expect(Object.keys(read).sort()).toEqual(['extra', 'root']);
   });
 
+  it('keeps the extension list taken at setup when the caller changes its array', async () => {
+    await writeFile(path.join(root, 'index.txt'), 'index-text');
+    const extensions = ['html', 'txt'];
+    const node = await startNode({ extensions }, false);
+
+    extensions.pop();
+
+    expect(await (await fetch(`${node}/index`)).text()).toBe('index-text');
+    expect(await (await fetch(`${node}/about`)).text()).toBe('extension-fallback');
+  });
+
   it('reads serve-static options inherited from a prototype', async () => {
     const middleware = serveStatic(
       Object.create({ root, basename: '/base', extensions: ['html'] }) as IServeStaticOptions,
