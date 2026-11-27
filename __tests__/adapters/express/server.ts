@@ -571,6 +571,32 @@ describe('node server', () => {
     expect(second.close).not.toHaveBeenCalled();
   });
 
+  it('should keep the dev Vite open until the last server started on it drains', async () => {
+    const vite = createViteDouble('shared-middleware');
+
+    createViteServer.mockResolvedValueOnce(vite);
+
+    const started = await createServer(createStatefulDevConfig() as never);
+
+    started.run({ isPrintInfo: false });
+    await flush();
+
+    const first = started.getLifecycle()!;
+
+    started.run({ isPrintInfo: false });
+    await flush();
+
+    const second = started.getLifecycle()!;
+
+    await first.close();
+
+    expect(vite.close).not.toHaveBeenCalled();
+
+    await second.close();
+
+    expect(vite.close).toHaveBeenCalledOnce();
+  });
+
   it('should mount a supplied dev Vite without creating another', async () => {
     const supplied = createViteDouble('supplied-middleware');
     const config = createStatefulDevConfig();

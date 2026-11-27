@@ -55,6 +55,8 @@ async function createServer(
   let ownVite: ViteDevServer | undefined;
   // The Vite this start mounted: its drain closes this one, never a later start's.
   let mountedVite: ViteDevServer | undefined;
+  // Servers run() started on the mounted Vite; the last one to drain closes it.
+  let viteUsers = 0;
 
   try {
     if (!config.isProd) {
@@ -201,14 +203,20 @@ async function createServer(
 
       const { onClose } = lifecycleOptions;
 
+      if (!config.isProd) {
+        viteUsers += 1;
+      }
+
       const runLifecycle = createLifecycle(server, {
         ...lifecycleOptions,
         // Vite closes after the socket drain, as in 8.6, so a response still rendering completes.
         onClose: config.isProd
           ? onClose
           : async () => {
+              viteUsers -= 1;
+
               await settleAll(
-                () => mountedVite?.close(),
+                () => (viteUsers === 0 ? mountedVite?.close() : undefined),
                 () => onClose?.(),
               );
             },
