@@ -110,7 +110,8 @@ entrypoints receive the transformed document on every route with `Cache-Control:
 
 Development route assets live in one cache per process, tied to the latest config and Vite that
 asked for them. Two `prepareDev` apps in one process rebuild it whenever requests alternate between
-them, so run one development server per process.
+them, so run one development server per process. A `config` passed in belongs to one project:
+every start on it reads the root, the entry and the shell from the Vite that started on it last.
 
 `close()` closes Vite, its watcher and HMR clients; the parent server stays open. It closes the
 instance a restart left on `config`, and `viteMiddleware` keeps serving after a Vite restart.
