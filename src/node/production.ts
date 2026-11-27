@@ -153,7 +153,10 @@ const loadServerEntry = async (
   try {
     module = (await loadEntry(file)) as { default?: unknown } | undefined;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND' && !existsSync(file)) {
+    // A loader may reject with any value, null included; only a missing module is explained.
+    const code = (error as NodeJS.ErrnoException | null | undefined)?.code;
+
+    if (code === 'ERR_MODULE_NOT_FOUND' && !existsSync(file)) {
       throw new Error(
         `[ssr-boost] Server entry not found: ${file}. Run ssr-boost build or pass the build directory.`,
         { cause: error },

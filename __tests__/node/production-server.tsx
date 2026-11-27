@@ -244,6 +244,12 @@ describe('prepareProduction', () => {
     ).rejects.toBe(error);
   });
 
+  it('propagates a loader rejection with no error object unchanged', async () => {
+    await expect(
+      prepareProduction({ buildDir, loadEntry: () => Promise.reject(null) }),
+    ).rejects.toBeNull();
+  });
+
   it('leaves client files to the host when static serving is disabled', async () => {
     const { staticMiddleware } = await prepareProduction({
       buildDir,
