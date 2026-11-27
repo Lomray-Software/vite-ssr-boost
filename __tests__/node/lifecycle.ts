@@ -884,6 +884,33 @@ lifecycle.close().then(() => process.exit(0), () => process.exit(1));
     expect(child.status).toBe(1);
   });
 
+  it('lets lifecycles of two loaded copies of the module hold signals at once', () => {
+    const source = readFileSync(
+      fileURLToPath(new URL('../../src/node/lifecycle.ts', import.meta.url)),
+      'utf8',
+    );
+    const { code } = transformSync(source, { loader: 'ts', format: 'esm' });
+    const script = `
+const http = await import('node:http');
+const toUrl = (copy) => 'data:text/javascript,' + encodeURIComponent(copy);
+const code = ${JSON.stringify(code)};
+const first = await import(toUrl(code + '\\n// first copy'));
+const second = await import(toUrl(code + '\\n// second copy'));
+
+first.default(http.createServer()).handleSignals({ shouldHandle: () => false });
+second.default(http.createServer()).handleSignals({ shouldHandle: () => false });
+setTimeout(() => process.exit(0), 50);
+`;
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8',
+      // The child holds SIGTERM, so only SIGKILL ends a hang.
+      killSignal: 'SIGKILL',
+      timeout: 5000,
+    });
+
+    expect(child.status, child.stderr).toBe(0);
+  });
+
   it('rejects listen with the bind error', async () => {
     const first = http.createServer();
     const second = http.createServer();

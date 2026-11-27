@@ -105,9 +105,17 @@ const DEFAULT_SIGNALS: TSignal[] = ['SIGTERM', 'SIGINT'];
 const bindTrackers = new WeakMap<ILifecycle, () => void>();
 
 /**
- * Signal listeners of every lifecycle, so two lifecycles never keep moving each other forward.
+ * Brand of the signal listeners of every lifecycle, so two lifecycles never keep moving each
+ * other forward. A registry key, because two installed copies of this module share one process.
  */
-const signalListeners = new WeakSet<object>();
+const SIGNAL_LISTENER = Symbol.for('@lomray/vite-ssr-boost/signal-listener');
+
+/**
+ * Whether a process listener belongs to a lifecycle of any loaded copy.
+ */
+const isSignalListener = (listener: unknown): boolean =>
+  typeof listener === 'function' &&
+  (listener as unknown as Record<symbol, unknown>)[SIGNAL_LISTENER] === true;
 
 /**
  * Apply only the timeouts the caller set, keeping Node defaults otherwise.
@@ -625,7 +633,7 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     const keepFirst = (event: string | symbol, added: unknown): void => {
       const listener = listeners.get(event);
 
-      if (!listener || added === listener || signalListeners.has(added as object)) {
+      if (!listener || added === listener || isSignalListener(added)) {
         return;
       }
 
@@ -650,7 +658,7 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     // Ahead of earlier listeners, so shouldHandle still sees a process.once handler that Node
     // removes before calling it; it stays first when a later listener is prepended as well.
     listeners.forEach((listener, signal) => {
-      signalListeners.add(listener);
+      Object.defineProperty(listener, SIGNAL_LISTENER, { value: true });
       process.prependListener(signal as TSignal, listener);
     });
 
@@ -661,7 +669,6 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     return () => {
       process.off('newListener', keepFirst);
       listeners.forEach((listener, signal) => {
-        signalListeners.delete(listener);
         process.off(signal, listener);
       });
       listeners.clear();
