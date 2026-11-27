@@ -71,7 +71,8 @@ interface ILifecycle {
   /** Connect-compatible middleware answering the configured health paths. */
   health: (req: IncomingMessage, res: ServerResponse, next: TNext) => void;
   /**
-   * Bind the server and resolve with its address, rejecting bind errors.
+   * Bind the server and resolve with its address, rejecting bind errors and a bind that was
+   * closed as it landed.
    * Refused while another bind is in flight and once close() has started;
    * close() waits for a bind in flight, within its deadline.
    */
@@ -434,9 +435,15 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
       };
 
       /**
-       * Resolve with the bound address.
+       * Resolve with the bound address, unless an earlier listener already closed the server.
        */
       function onListening(): void {
+        if (!server.listening) {
+          fail(new Error('[ssr-boost] the server was closed as its bind landed.'));
+
+          return;
+        }
+
         detach();
         hasListened = true;
         resolve(server.address());

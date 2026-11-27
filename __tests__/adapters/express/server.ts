@@ -868,6 +868,43 @@ describe('node server', () => {
     expect(vite.close).toHaveBeenCalledOnce();
   });
 
+  it('should reject a lifecycle listen whose rebind lands after a drain closed the Vite', async () => {
+    const vite = createViteDouble('shared-middleware');
+    const failure = Object.assign(new Error('taken'), { code: 'EADDRINUSE' });
+    const servers = await mockPendingServers();
+
+    createViteServer.mockResolvedValueOnce(vite);
+
+    const started = await createServer(createStatefulDevConfig() as never);
+    const retried = started.run({ isPrintInfo: false });
+
+    retried.once('error', vi.fn());
+    servers[0].emit('error', failure);
+
+    const first = started.getLifecycle()!;
+
+    started.run({ isPrintInfo: false });
+    await flush();
+    await started.getLifecycle()!.close();
+
+    const rebound = servers[0] as (typeof servers)[number] & { listening: boolean };
+    const close = vi.fn((cb?: () => void) => {
+      rebound.listening = false;
+      cb?.();
+    });
+
+    Object.assign(rebound, { close, address: vi.fn(() => null) });
+
+    // The caller retries through the lifecycle of the run whose bind failed.
+    const bound = first.listen(0);
+
+    rebound.listening = true;
+    rebound.emit('listening');
+
+    await expect(bound).rejects.toThrow('closed as its bind landed');
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('should refuse a run started from the shared Vite close code', async () => {
     const vite = createViteDouble('shared-middleware');
     let attempt: unknown;

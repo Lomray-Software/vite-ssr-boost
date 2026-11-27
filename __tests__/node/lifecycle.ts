@@ -1065,6 +1065,20 @@ setTimeout(() => process.exit(0), 50);
     expect(child.status, child.stderr).toBe(0);
   });
 
+  it('rejects listen when a listener closed the server as its bind landed', async () => {
+    const server = http.createServer();
+    const lifecycle = createLifecycle(server);
+
+    servers.push(server);
+    server.once('listening', () => server.close());
+
+    const counts = (): number[] => ['error', 'close'].map((event) => server.listenerCount(event));
+    const before = counts();
+
+    await expect(lifecycle.listen(0)).rejects.toThrow('closed as its bind landed');
+    expect(counts()).toEqual(before);
+  });
+
   it('rejects listen with the bind error', async () => {
     const first = http.createServer();
     const second = http.createServer();
