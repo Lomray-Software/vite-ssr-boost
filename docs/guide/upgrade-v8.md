@@ -101,12 +101,11 @@ planned for **9.0**.
 The CLI now drains the managed server on `SIGTERM` and `SIGINT`: readiness turns off, new
 connections are refused, open requests finish within `drainTimeoutMs` per phase, and a second signal
 forces the close. With the Express server, an application that subscribes to `SIGTERM` or `SIGINT`
-itself keeps that handling: once the server is listening, the CLI leaves signals alone when any
-listener for them is present, whether a preloaded module (`node --require`), a library in your entry
-or `onServerStarted` added it. Remove your own listener to use the managed drain. A listener added
-in the synchronous part of `onServerStarted` is always seen by that check. One added later (after an
-`await` or a timer) is seen only when it is registered before the check runs; otherwise both your
-handler and the managed drain run on the same signal, so subscribe synchronously.
+itself keeps that handling: when a signal arrives, the CLI leaves it alone if any other listener
+for that signal is present, however late it was added, whether a preloaded module
+(`node --require`), a library in your entry or `onServerStarted` added it. The check is made per
+signal, so an application that handles only `SIGTERM` still gets the managed drain on `SIGINT`.
+Remove your own listener to use the managed drain.
 
 Configuration load errors in `ssr-boost dev` now stop the command with the original error instead of
 falling back to the Express server. Without `--server`, `ssr-boost dev` starts the Express dev Vite

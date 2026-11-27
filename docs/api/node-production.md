@@ -182,6 +182,7 @@ interface ILifecycle {
     signals?: NodeJS.Signals[]; // Default: ['SIGTERM', 'SIGINT']
     onSignal?: (signal: NodeJS.Signals) => void;
     onExit?: (code: number) => void;
+    shouldHandle?: (signal: NodeJS.Signals) => boolean;
   }) => () => void;
 }
 
@@ -213,13 +214,15 @@ balancer or a Kubernetes readiness probe takes the instance out of rotation befo
 Set it a little above the probe's `periodSeconds * failureThreshold`, and keep
 `terminationGracePeriodSeconds` above the grace plus the drain. `force()` cuts the grace short.
 
-`handleSignals({ signals, onSignal, onExit })` routes `SIGTERM` and `SIGINT` (by default) through
-`close()` and returns an unsubscribe function. A signal that arrives while a drain is already under
-way joins it; the next signal calls `force()`. `onExit` receives 0 after a clean drain and 1 when
-it failed. The CLI uses it: `ctrl+c` in the terminal forces the drain on the second press, and a
-restart requested while the process is exiting is skipped. With the Express server the CLI leaves
-signals alone when the application subscribed its own handlers. Embedded and serverless hosts own
-their lifecycle and leave it uncalled.
+`handleSignals({ signals, onSignal, onExit, shouldHandle })` routes `SIGTERM` and `SIGINT` (by
+default) through `close()` and returns an unsubscribe function. A signal that arrives while a drain
+is already under way joins it; the next signal calls `force()`. `onExit` receives 0 after a clean
+drain and 1 when it failed. `shouldHandle` is checked when a signal arrives; when it returns
+`false`, that signal is left to other listeners and the drain does not start. The CLI uses it:
+`ctrl+c` in the terminal forces the drain on the second press, and a restart requested while the
+process is exiting is skipped. With the Express server the CLI checks, when a signal arrives,
+whether the application subscribed its own handler for it and leaves that signal alone if so.
+Embedded and serverless hosts own their lifecycle and leave it uncalled.
 
 Timeouts stay at Node's defaults unless set. Behind a load balancer whose idle timeout is 60
 seconds, keep the server's keep-alive longer than the balancer's so the balancer closes first:
