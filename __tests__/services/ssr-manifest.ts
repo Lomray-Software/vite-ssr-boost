@@ -72,6 +72,16 @@ describe('SsrManifest', () => {
     expect(SsrManifest.get(config)).toBe(second);
   });
 
+  it('should key the instance on a given Vite instead of the one the config holds', () => {
+    const config = createConfig();
+    const own = { config: { resolve: { alias: [] } } };
+    const manifest = SsrManifest.get(config, {}, own as never);
+
+    expect(SsrManifest.get(config, {}, own as never)).toBe(manifest);
+    expect(SsrManifest.get(config)).not.toBe(manifest);
+    expect((manifest as unknown as { vite: unknown }).vite).toBe(own);
+  });
+
   it('should load and cleanup client manifest', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(

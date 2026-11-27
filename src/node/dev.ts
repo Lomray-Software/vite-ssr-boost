@@ -82,8 +82,11 @@ const originalUrl = (request: Request): string => {
 /**
  * Transform the dev document per request, dropping async from the client entry so plugin preambles run first.
  */
-const loadDevHtml = async (config: ServerConfig, url: string): Promise<[string, string]> => {
-  const vite = config.getVite()!;
+const loadDevHtml = async (
+  config: ServerConfig,
+  vite: ViteDevServer,
+  url: string,
+): Promise<[string, string]> => {
   const { root, indexFile, clientFile } = config.getParams();
   const file = path.resolve(`${root}/${indexFile}`);
   const html = await readFile(file, 'utf8');
@@ -100,12 +103,13 @@ const loadDevHtml = async (config: ServerConfig, url: string): Promise<[string, 
 };
 
 /**
- * Inject the current dev graph's route assets; the manifest changes with every edit.
+ * Inject the route assets of this start's dev graph, never those of a Vite a later start put on
+ * the shared config; the manifest changes with every edit.
  */
 const createDevPreparer =
-  (config: ServerConfig): NonNullable<IEntryHost['prepare']> =>
+  (config: ServerConfig, vite: ViteDevServer): NonNullable<IEntryHost['prepare']> =>
   async ({ context, executionContext }) => {
-    const assets = await getRouteAssets(config, context.matches, context.isSpa);
+    const assets = await getRouteAssets(config, context.matches, context.isSpa, vite);
     const hints = assets.injectAssets(context, Boolean(executionContext?.onEarlyHints));
 
     if (hints.has('Link')) {
@@ -150,7 +154,7 @@ const prepareDev = async ({
   }
 
   const { isSPA } = config.getParams();
-  const prepare = createDevPreparer(config);
+  const prepare = createDevPreparer(config, vite);
 
   let mounted: { entry: IEntry; handler: TSsrHandler } | undefined;
 
@@ -167,7 +171,7 @@ const prepareDev = async ({
        * Transform the document only when the entry renders, never for an onRequest bypass.
        */
       getHtml: async (renderRequest) => {
-        const [header, footer] = await loadDevHtml(config, originalUrl(renderRequest));
+        const [header, footer] = await loadDevHtml(config, vite, originalUrl(renderRequest));
 
         return { header, footer };
       },
@@ -195,7 +199,9 @@ const prepareDev = async ({
    */
   const spaHandler: TSsrHandler = async (request) =>
     new Response(
-      request.method === 'HEAD' ? null : (await loadDevHtml(config, originalUrl(request))).join(''),
+      request.method === 'HEAD'
+        ? null
+        : (await loadDevHtml(config, vite, originalUrl(request))).join(''),
       { headers: { 'Cache-Control': 'no-cache', 'Content-Type': 'text/html; charset=utf-8' } },
     );
 

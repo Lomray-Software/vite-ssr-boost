@@ -114,32 +114,38 @@ class SsrManifest extends RouteAssets {
   protected constructor(
     config: ServerConfig,
     { buildDir, viteAliases, basename, renderBuiltUrl, buildOutput }: ISsrManifestParams = {},
+    vite = config.getVite(),
   ) {
     super(path.resolve(config.getParams().root, buildDir || ''), config.isModulePreload);
 
     this.config = config;
-    this.vite = config.getVite();
+    this.vite = vite;
     this.root = config.getParams().root;
     this.buildDir = buildDir;
-    this.viteAliases = viteAliases ?? config.getVite()?.config?.resolve.alias;
-    this.pathNormalize = new PathNormalize(config, viteAliases);
+    this.viteAliases = viteAliases ?? vite?.config?.resolve.alias;
+    this.pathNormalize = new PathNormalize(config, this.viteAliases);
     this.basename = basename;
     this.renderBuiltUrl = renderBuiltUrl;
     this.buildOutput = buildOutput;
   }
 
   /**
-   * Get singleton instance
+   * Get the instance for a config and the Vite it reads, by default the one the config holds.
    */
-  public static get(config: ServerConfig, params: ISsrManifestParams = {}): SsrManifest {
+  public static get(
+    config: ServerConfig,
+    params: ISsrManifestParams = {},
+    vite = config.getVite(),
+  ): SsrManifest {
     const { instance } = SsrManifest;
 
-    // A dev restart brings a new Vite, on a new config or the same one; the old instance holds the closed one.
-    if (instance && instance.config === config && instance.vite === config.getVite()) {
+    // A dev restart brings a new Vite, on a new config or the same one, and the old instance
+    // holds the closed one.
+    if (instance && instance.config === config && instance.vite === vite) {
       return instance;
     }
 
-    SsrManifest.instance = new SsrManifest(config, params);
+    SsrManifest.instance = new SsrManifest(config, params, vite);
 
     return SsrManifest.instance;
   }
@@ -148,14 +154,14 @@ class SsrManifest extends RouteAssets {
    * Use inline styles while the managed Vite server is running.
    */
   protected get isDev(): boolean {
-    return Boolean(this.config.getVite());
+    return Boolean(this.vite);
   }
 
   /**
    * Compile SSR graph styles before the browser has populated the client graph.
    */
   public async prepareDevAssets(routes?: RouterState['matches'], isSpa = false): Promise<void> {
-    const vite = this.config.getVite();
+    const { vite } = this;
 
     if (!vite) {
       return;
@@ -438,7 +444,7 @@ class SsrManifest extends RouteAssets {
 
     [...rootIds, ...routeIds].forEach((moduleId) => {
       for (const ext of postfixes) {
-        const module = this.config.getVite()?.moduleGraph.getModuleById(`${moduleId}${ext}`);
+        const module = this.vite?.moduleGraph.getModuleById(`${moduleId}${ext}`);
 
         if (module) {
           modules.push(module);
@@ -466,7 +472,7 @@ class SsrManifest extends RouteAssets {
       ? this.getDevRouteIds(routes).flatMap((id) => {
           const module = this.pathNormalize
             .getImportPostfix()
-            .map((ext) => this.config.getVite()?.moduleGraph.getModuleById(`${id}${ext}`))
+            .map((ext) => this.vite?.moduleGraph.getModuleById(`${id}${ext}`))
             .find(Boolean);
 
           return module

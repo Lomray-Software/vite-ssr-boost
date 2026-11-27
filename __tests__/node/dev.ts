@@ -456,6 +456,23 @@ export default defineEntry(App, routes, {
     started = [second.app];
   });
 
+  it('keeps its own Vite after a later start on the shared config closed', async () => {
+    writeProject();
+
+    const config = ServerConfig.init({ mode: 'development' });
+    const first = await start({ config });
+    const second = await start({ config });
+
+    await second.app.close();
+
+    const response = await request(`${first.url}/about`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toContain('About page');
+    expect(response.body).toMatch(/<style data-vite-dev-id="[^"]*about\.css">[^<]*red/);
+    started = [first.app];
+  });
+
   it('answers readiness 503 and keeps accepting during the readiness grace', async () => {
     writeProject();
 
