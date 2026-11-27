@@ -523,6 +523,12 @@ describe('node serveStatic', () => {
 
     expect(await policy(`${plain}/`)).toBe('no-cache');
     expect(await policy(`${plain}/robots.txt`)).toBe('public, max-age=0');
+
+    const listed = await startNode({}, true, { immutableFiles: ['index.html', 'robots.txt'] });
+
+    expect(await policy(`${listed}/`)).toBe('no-cache');
+    expect(await policy(`${listed}/index.html`)).toBe('no-cache');
+    expect(await policy(`${listed}/robots.txt`)).toBe('public, max-age=31536000, immutable');
   });
 
   it('hides a shell whose name starts with two dots', async () => {

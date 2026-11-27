@@ -137,7 +137,7 @@ const createCachePolicy = (
   const fingerprinted = new Set(
     [...(immutableFiles ?? [])].map((file) => path.posix.normalize(file).replace(/^\/+/, '')),
   );
-  const spaShell = spaShellFile ? path.resolve(root, spaShellFile) : undefined;
+  const spaShell = spaShellFile ? path.resolve(root, spaShellFile).toLowerCase() : undefined;
 
   // An explicit maxAge or immutable option means the caller owns the policy for every file.
   if (
@@ -153,10 +153,11 @@ const createCachePolicy = (
    * send keeps a Cache-Control header that is already set, so this runs before its default.
    */
   return (res, filePath, stat) => {
-    if (fingerprinted.has(path.relative(root, filePath).split(path.sep).join('/'))) {
-      res.setHeader('Cache-Control', IMMUTABLE);
-    } else if (spaShell && path.resolve(filePath) === spaShell) {
+    // The document names the current hashed files, so it revalidates even when listed.
+    if (spaShell && path.resolve(filePath).toLowerCase() === spaShell) {
       res.setHeader('Cache-Control', 'no-cache');
+    } else if (fingerprinted.has(path.relative(root, filePath).split(path.sep).join('/'))) {
+      res.setHeader('Cache-Control', IMMUTABLE);
     }
 
     setHeaders?.(res, filePath, stat);
