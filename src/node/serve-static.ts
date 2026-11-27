@@ -50,6 +50,25 @@ const getShellKey = (pathname: string): string =>
 export { getShellKey };
 
 /**
+ * Origin-form target of a request: an absolute-form target (`GET http://host/path`) keeps only
+ * its path and query, so the shell check and serve-static read the same path. Undefined when
+ * the target is neither form, which leaves the request to the next handler.
+ */
+const getOriginForm = (url: string): string | undefined => {
+  if (url.startsWith('/')) {
+    return url;
+  }
+
+  try {
+    const { protocol, pathname, search } = new URL(url);
+
+    return protocol === 'http:' || protocol === 'https:' ? `${pathname}${search}` : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
  * Lowercased mount prefix without trailing slashes; the root mount is empty.
  */
 const normalizeBasename = (basename = '/'): string => basename.replace(/\/+$/, '').toLowerCase();
@@ -246,7 +265,8 @@ const serveStatic = ({
    */
   return (req, res, next) => {
     const url = req.url ?? '/';
-    const mountedUrl = getMountedUrl(url, mount);
+    const target = getOriginForm(url);
+    const mountedUrl = target === undefined ? undefined : getMountedUrl(target, mount);
 
     if (mountedUrl === undefined) {
       next();

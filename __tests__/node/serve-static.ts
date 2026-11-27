@@ -106,6 +106,31 @@ const observe = (
   });
 };
 
+/**
+ * Send one GET with a raw request target, such as the absolute form a proxy uses.
+ */
+const observeTarget = (url: string, target: string): Promise<{ status: number; body: string }> => {
+  const { hostname, port } = new URL(url);
+
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      { hostname, port, path: target, method: 'GET', headers: { host: `${hostname}:${port}` } },
+      (response) => {
+        const chunks: Buffer[] = [];
+
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('error', reject);
+        response.on('end', () =>
+          resolve({ status: response.statusCode!, body: Buffer.concat(chunks).toString('utf8') }),
+        );
+      },
+    );
+
+    request.on('error', reject);
+    request.end();
+  });
+};
+
 describe('node serveStatic', () => {
   let root: string;
   let servers: Server[] = [];
@@ -328,6 +353,33 @@ describe('node serveStatic', () => {
 
     for (const pathname of ['/nested\\shell.html', '/nested\\shell', '/Nested\\Shell.html']) {
       expect((await observe(node + pathname)).body, pathname).toBe('SSR');
+    }
+  });
+
+  it('reads an absolute-form target by its path, so the shell stays hidden', async () => {
+    for (const options of [{}, { extensions: ['html'] }, { fallthrough: false }]) {
+      const node = await startNode(options, false);
+      const { origin } = new URL(node);
+
+      for (const pathname of ['/index.html', '/INDEX.html', '/assets/../index.html']) {
+        expect(
+          (await observeTarget(node, `${origin}/base${pathname}`)).body,
+          `${JSON.stringify(options)} ${pathname}`,
+        ).toBe('SSR');
+      }
+
+      expect((await observeTarget(node, `${origin}/base/assets/app.js`)).body).toBe(
+        'built-script',
+      );
+      expect((await observeTarget(node, `${origin}/elsewhere/index.html`)).body).toBe('SSR');
+    }
+
+    // At the root mount a raw target missed the shell key while serve-static found the file.
+    for (const options of [{ extensions: ['html'] }, { fallthrough: false }]) {
+      const node = await startNode(options, false, { basename: '/' });
+      const { origin } = new URL(node);
+
+      expect((await observeTarget(node, `${origin}/index.html`)).body).toBe('SSR');
     }
   });
 
