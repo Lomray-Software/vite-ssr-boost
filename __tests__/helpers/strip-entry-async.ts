@@ -252,6 +252,27 @@ describe('stripEntryAsync', () => {
     );
   });
 
+  it('should resolve a script from the first base in tree order the parser had inserted', () => {
+    const tail = '<base href="/app/"></table><script src="client.ts" async></script>';
+    const html = `<table><tr><td><base href="/old/"></td></tr>${tail}`;
+
+    expect(stripEntryAsync(html, '/app/', 'client.ts', '/x/page')).toBe(html.replace(' async', ''));
+  });
+
+  it('should keep an attribute written right after async apart from an unquoted src', () => {
+    const result = stripEntryAsync(
+      '<script src=/client.ts async=""defer></script>',
+      '/',
+      'client.ts',
+    );
+    const [script] = parseFragment(result).childNodes as DefaultTreeAdapterTypes.Element[];
+
+    expect(script.attrs).toEqual([
+      { name: 'src', value: '/client.ts' },
+      { name: 'defer', value: '' },
+    ]);
+  });
+
   it('should keep the self-closing slash out of an unquoted src', () => {
     const result = stripEntryAsync('<script src=/client.ts async/></script>', '/', 'client.ts');
     const [script] = parseFragment(result).childNodes as DefaultTreeAdapterTypes.Element[];

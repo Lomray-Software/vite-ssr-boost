@@ -114,9 +114,10 @@ const getStartOffset = (element: TElement): number => element.sourceCodeLocation
 
 /**
  * Source ranges of async attributes on HTML scripts whose src is the entry. The browser fetches
- * a script against the base in effect when the parser reaches it: the document URL before the
- * first HTML base element with an href, that base after it. Elements are taken in source order,
- * since the tree builder can move a base, out of a table for one, ahead of an earlier script.
+ * a script against the base in effect when the parser reaches it: the first HTML base element
+ * with an href in tree order among those inserted so far, or the document URL before any. Elements
+ * are taken in source order, since the tree builder can move a base, out of a table for one, ahead
+ * of an earlier script or an earlier base.
  */
 const collectAsyncRanges = (
   document: DefaultTreeAdapterTypes.Document,
@@ -126,16 +127,17 @@ const collectAsyncRanges = (
   const elements: TElement[] = [];
   const ranges: [number, number][] = [];
   let base: URL | undefined = documentBase;
-  let hasBase = false;
+  let baseIndex = Infinity;
 
   collectElements(document, elements);
   elements
-    .sort((left, right) => getStartOffset(left) - getStartOffset(right))
-    .forEach((element) => {
+    .map((element, index) => ({ element, index }))
+    .sort((left, right) => getStartOffset(left.element) - getStartOffset(right.element))
+    .forEach(({ element, index }) => {
       const href = element.tagName === 'base' && element.attrs.find(({ name }) => name === 'href');
 
-      if (href && !hasBase) {
-        hasBase = true;
+      if (href && index < baseIndex) {
+        baseIndex = index;
         base = resolveBase(href.value, documentBase);
       }
 
@@ -184,8 +186,9 @@ const stripEntryAsync = (
       // Only HTML whitespace separates attributes; a no-break space belongs to the value before.
       const head = text.slice(0, start).replace(/[\t\n\f\r ]+$/, '');
 
-      // A slash right after the cut would join an unquoted value before it, so one space stays.
-      return `${head}${rest.startsWith('/') ? ' ' : ''}${rest}`;
+      // Another attribute or a slash right after the cut would join the token before it, so one
+      // space stays unless whitespace or the end of the tag follows.
+      return `${head}${/^[^\t\n\f\r >]/.test(rest) ? ' ' : ''}${rest}`;
     }, html);
 
   // The parser reports only the first of repeated attributes, so a repeated async needs a pass.
