@@ -201,6 +201,32 @@ describe('stripEntryAsync', () => {
     }
   });
 
+  it('should resolve from the document URL when the base element does not parse', () => {
+    for (const href of ['http://[', '//[']) {
+      const html = `<base href="${href}"><script src="/client.ts" async></script>`;
+
+      expect(stripEntryAsync(html, '/', 'client.ts')).toBe(
+        `<base href="${href}"><script src="/client.ts"></script>`,
+      );
+    }
+  });
+
+  it('should resolve each script from the base in effect where the parser reached it', () => {
+    const script = '<script src="client.ts" async></script>';
+    const local = `${script}<base href="/docs/">${script}`;
+
+    expect(stripEntryAsync(local, '/app/', 'client.ts', '/app/page')).toBe(
+      `<script src="client.ts"></script><base href="/docs/">${script}`,
+    );
+
+    const rooted = '<script src="/client.ts" async></script>';
+    const foreign = `${rooted}<base href="https://cdn.test/">${rooted}`;
+
+    expect(stripEntryAsync(foreign, '/', 'client.ts')).toBe(
+      `<script src="/client.ts"></script><base href="https://cdn.test/">${rooted}`,
+    );
+  });
+
   it('should keep async on a script inside SVG, which is not an HTML script', () => {
     const html = '<svg><script src="/client.ts" async></script></svg>';
 

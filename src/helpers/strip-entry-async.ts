@@ -71,59 +71,70 @@ const getSrcPath = (src: string, base: URL): string | undefined => {
 };
 
 /**
- * Find the first HTML base element with an href, which the browser resolves every src against.
- * A base inside SVG or MathML is foreign content and sets no document base.
+ * Base a script after this base element resolves against: the document URL when the href does
+ * not parse, as in the browser, or none when it names a scheme or a host, which sends every src
+ * away from the entry.
  */
-const findBaseHref = (node: TNode): string | undefined => {
-  if ('tagName' in node && node.tagName === 'base' && node.namespaceURI === htmlSpec.NS.HTML) {
-    const href = node.attrs.find(({ name }) => name === 'href');
+const resolveBase = (href: string, documentBase: URL): URL | undefined => {
+  const value = normalizeUrl(href);
+  const url = parseUrl(value, documentBase);
 
-    if (href) {
-      return href.value;
-    }
+  if (!url) {
+    return documentBase;
   }
 
-  if ('childNodes' in node) {
-    for (const child of node.childNodes) {
-      const href = findBaseHref(child);
-
-      if (href !== undefined) {
-        return href;
-      }
-    }
-  }
-
-  return undefined;
+  return hasSchemeOrHost(value) || url.origin !== documentBase.origin ? undefined : url;
 };
 
+interface IScanState {
+  /** The base the next script resolves against; undefined when no later script is the entry. */
+  base: URL | undefined;
+  /** Whether the first HTML base element with an href was reached. */
+  hasBase: boolean;
+}
+
 /**
- * Collect the source ranges of async attributes on HTML scripts whose src is the entry.
- * A script inside SVG or MathML is foreign content and never the entry.
+ * Collect, in document order, the source ranges of async attributes on HTML scripts whose src
+ * is the entry. The browser fetches a script against the base in effect when the parser reaches
+ * it: the document URL before the first HTML base element with an href, that base after it.
+ * A base or a script inside SVG or MathML is foreign content and ignored.
  */
 const collectAsyncRanges = (
   node: TNode,
   entryPath: string,
-  base: URL,
+  documentBase: URL,
+  state: IScanState,
   ranges: [number, number][],
 ): void => {
-  if ('tagName' in node && node.tagName === 'script' && node.namespaceURI === htmlSpec.NS.HTML) {
-    const src = node.attrs.find(({ name }) => name === 'src');
-    const location = node.sourceCodeLocation?.attrs?.async;
+  if ('tagName' in node && node.namespaceURI === htmlSpec.NS.HTML) {
+    const href = node.tagName === 'base' && node.attrs.find(({ name }) => name === 'href');
 
-    if (src?.value && location && getSrcPath(src.value, base) === entryPath) {
-      ranges.push([location.startOffset, location.endOffset]);
+    if (href && !state.hasBase) {
+      state.hasBase = true;
+      state.base = resolveBase(href.value, documentBase);
+    }
+
+    if (node.tagName === 'script' && state.base) {
+      const src = node.attrs.find(({ name }) => name === 'src');
+      const location = node.sourceCodeLocation?.attrs?.async;
+
+      if (src?.value && location && getSrcPath(src.value, state.base) === entryPath) {
+        ranges.push([location.startOffset, location.endOffset]);
+      }
     }
   }
 
   if ('childNodes' in node) {
-    node.childNodes.forEach((child) => collectAsyncRanges(child, entryPath, base, ranges));
+    node.childNodes.forEach((child) =>
+      collectAsyncRanges(child, entryPath, documentBase, state, ranges),
+    );
   }
 };
 
 /**
  * Remove async from the client entry script, so plugin preambles run before it.
- * The entry is found by the exact pathname its src resolves to from the document URL, or from
- * the base element, with the URL rules the browser applies.
+ * The entry is found by the exact pathname its src resolves to, with the URL rules the browser
+ * applies, from the document URL or the base element in effect for that script.
  */
 const stripEntryAsync = (
   html: string,
@@ -136,22 +147,15 @@ const stripEntryAsync = (
   // The request target is a path on this origin, even when it starts with two slashes.
   const documentBase =
     (documentUrl.startsWith('/') && parseUrl(`${ORIGIN}${documentUrl}`)) || new URL('/', ORIGIN);
-  const baseHref = findBaseHref(document);
-  const baseValue = baseHref === undefined ? undefined : normalizeUrl(baseHref);
-  // A base href that does not parse leaves the document URL as the base, as in the browser.
-  const baseUrl =
-    baseValue === undefined ? documentBase : (parseUrl(baseValue, documentBase) ?? documentBase);
   const ranges: [number, number][] = [];
 
-  // A base element with a scheme or a host sends every src there, so none is the entry.
-  if (
-    (baseValue !== undefined && hasSchemeOrHost(baseValue)) ||
-    baseUrl.origin !== documentBase.origin
-  ) {
-    return html;
-  }
-
-  collectAsyncRanges(document, entryPath, baseUrl, ranges);
+  collectAsyncRanges(
+    document,
+    entryPath,
+    documentBase,
+    { base: documentBase, hasBase: false },
+    ranges,
+  );
 
   if (!ranges.length) {
     return html;
