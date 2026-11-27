@@ -665,6 +665,9 @@ describe('createLifecycle', () => {
     server.close();
     await expect(bound).rejects.toThrow('cancelled by close()');
     expect(counts()).toEqual(before);
+    // The cancelled lookup must not bind once it resolves.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(server.listening).toBe(false);
 
     const startedAt = Date.now();
 
