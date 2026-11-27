@@ -306,7 +306,8 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     res.once('close', () => {
       activeResponses -= 1;
 
-      if (closing && activeResponses === 0) {
+      // Tunnels outlive the readiness grace; a stopped server drops them after its last response.
+      if (isStopped && activeResponses === 0) {
         destroyUpgraded();
       }
     });
@@ -525,11 +526,17 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
       ]),
     );
 
-    await withDeadline((deadline) =>
-      bounded(onClose, deadline, `[ssr-boost] onClose did not settle within ${drainTimeoutMs} ms.`),
+    const [closed] = await withDeadline((deadline) =>
+      Promise.allSettled([
+        bounded(
+          onClose,
+          deadline,
+          `[ssr-boost] onClose did not settle within ${drainTimeoutMs} ms.`,
+        ),
+      ]),
     );
-
-    const failure = results.find((result) => result.status === 'rejected');
+    // The first failure in phase order wins, so an onClose error never hides a drain error.
+    const failure = [...results, closed].find((result) => result.status === 'rejected');
 
     if (failure) {
       throw failure.reason;

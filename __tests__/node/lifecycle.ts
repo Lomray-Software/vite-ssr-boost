@@ -843,6 +843,70 @@ lifecycle.close().then(() => process.exit(0), () => process.exit(1));
     expect(server.listening).toBe(false);
   });
 
+  it('keeps a tunnel through a readiness probe during grace and drops it after', async () => {
+    let lifecycle!: ILifecycle;
+    const { server, url } = await listen(
+      (req, res) => lifecycle.health(req, res, () => res.end('app')),
+      (instance) => {
+        lifecycle = createLifecycle(instance, { health: true, readinessGraceMs: 300 });
+
+        return lifecycle;
+      },
+    );
+
+    server.on('upgrade', (_req, socket: Socket) => {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const client = await upgrade(server);
+    const closed = lifecycle.close();
+
+    expect(await getText(`${url}/readyz`)).toEqual({ status: 503, body: 'unavailable' });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.destroyed).toBe(false);
+    expect(server.listening).toBe(true);
+    await closed;
+    await vi.waitFor(() => expect(client.destroyed).toBe(true));
+  });
+
+  it('rejects close with the drain failure when onClose fails as well', async () => {
+    const drainError = new Error('drain failed');
+    const closeError = new Error('close failed');
+    let lifecycle!: ILifecycle;
+    const { server } = await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance, {
+          onDrain: () => Promise.reject(drainError),
+          onClose: () => Promise.reject(closeError),
+        });
+
+        return lifecycle;
+      },
+    );
+
+    await expect(lifecycle.close()).rejects.toBe(drainError);
+    expect(server.listening).toBe(false);
+  });
+
+  it('rejects close with the onClose failure when the drain succeeded', async () => {
+    const closeError = new Error('close failed');
+    let lifecycle!: ILifecycle;
+
+    await listen(
+      (_req, res) => res.end('app'),
+      (instance) => {
+        lifecycle = createLifecycle(instance, { onClose: () => Promise.reject(closeError) });
+
+        return lifecycle;
+      },
+    );
+
+    await expect(lifecycle.close()).rejects.toBe(closeError);
+  });
+
   it('joins a drain already under way on the first signal and exits once', async () => {
     const listeners = new Map<string, () => void>();
 
