@@ -48,7 +48,7 @@ const FRAMING_HEADERS = new Set([
  * and a client error's own headers, such as the Content-Range of a 416 or a WWW-Authenticate,
  * are applied except framing headers, which describe the error body instead.
  */
-const sendError = (res: ServerResponse, error: unknown, logger: IErrorLogger): void => {
+const writeError = (res: ServerResponse, error: unknown, logger: IErrorLogger): void => {
   const {
     status,
     statusCode,
@@ -58,9 +58,13 @@ const sendError = (res: ServerResponse, error: unknown, logger: IErrorLogger): v
   const httpStatus = code && code >= 400 && code < 600 ? code : 500;
 
   if (httpStatus >= 500) {
-    logger.error(`Failed to handle request: ${(error as Error)?.message}`, {
-      error: error as Error,
-    });
+    try {
+      logger.error(`Failed to handle request: ${(error as Error)?.message}`, {
+        error: error as Error,
+      });
+    } catch {
+      // A failing logger must not keep the client from its answer.
+    }
   }
 
   if (res.headersSent) {
@@ -76,8 +80,14 @@ const sendError = (res: ServerResponse, error: unknown, logger: IErrorLogger): v
   // Server errors keep their details private, so only client errors forward headers.
   if (httpStatus < 500 && errorHeaders && typeof errorHeaders === 'object') {
     for (const [name, value] of Object.entries(errorHeaders as Record<string, string>)) {
-      if (!FRAMING_HEADERS.has(name.toLowerCase())) {
+      if (FRAMING_HEADERS.has(name.toLowerCase())) {
+        continue;
+      }
+
+      try {
         res.setHeader(name, value);
+      } catch {
+        // An invalid header name or value is skipped; the status still reaches the client.
       }
     }
   }
@@ -91,6 +101,17 @@ const sendError = (res: ServerResponse, error: unknown, logger: IErrorLogger): v
       'Content-Type': 'text/plain; charset=utf-8',
     })
     .end(body);
+};
+
+/**
+ * Answer an error without ever throwing: a response that cannot be written is destroyed.
+ */
+const sendError = (res: ServerResponse, error: unknown, logger: IErrorLogger): void => {
+  try {
+    writeError(res, error, logger);
+  } catch {
+    res.destroy();
+  }
 };
 
 /**

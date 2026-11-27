@@ -254,6 +254,61 @@ describe('node/server-kit', () => {
       expect(response.headers.get('content-range')).toBe('bytes */12');
     });
 
+    it('should answer 500 when the logger throws, on sync and async errors alike', async () => {
+      const logger = {
+        error: vi.fn<(message: string) => void>(() => {
+          throw new Error('logger down');
+        }),
+      };
+      const syncUrl = await serve([(_req, _res, next) => next(new Error('sync'))], logger);
+      const asyncUrl = await serve(
+        [(_req, _res, next) => void setTimeout(() => next(new Error('async')), 5)],
+        logger,
+      );
+
+      expect((await request(syncUrl)).status).toBe(500);
+      expect((await request(asyncUrl)).status).toBe(500);
+      expect(logger.error).toHaveBeenCalledTimes(2);
+    });
+
+    it('should skip an invalid header of a client error and still answer it', async () => {
+      const url = await serve([
+        (_req, _res, next) =>
+          void setTimeout(
+            () =>
+              next(
+                Object.assign(new Error('Range'), {
+                  status: 416,
+                  headers: { 'Bad Name': 'x', 'X-Bad': 'a\nb', 'Content-Range': 'bytes */10' },
+                }),
+              ),
+            5,
+          ),
+      ]);
+
+      const response = await fetch(url);
+
+      expect(response.status).toBe(416);
+      expect(response.headers.get('content-range')).toBe('bytes */10');
+      expect(response.headers.get('x-bad')).toBeNull();
+    });
+
+    it('should destroy the response when the error answer itself cannot be written', async () => {
+      let serverResponse: http.ServerResponse | undefined;
+      const url = await serve([
+        (_req, res, next) => {
+          serverResponse = res;
+          vi.spyOn(res, 'writeHead').mockImplementation(() => {
+            throw new Error('write failed');
+          });
+          setTimeout(() => next(new Error('late')), 5);
+        },
+      ]);
+
+      await expect(fetch(url)).rejects.toThrow();
+      expect(serverResponse?.destroyed).toBe(true);
+    });
+
     it('should not forward the headers of a server error', async () => {
       const url = await serve([
         (_req, _res, next) =>
