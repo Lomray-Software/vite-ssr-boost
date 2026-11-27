@@ -518,7 +518,16 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
         // A native close() already stopped accepting; its connections still run, so join it.
         server.once('close', () => done());
       } else {
-        done();
+        // A native close() before the lifecycle existed leaves no trace but its connections.
+        const onNativeClose = (): void => done();
+
+        server.once('close', onNativeClose);
+        server.getConnections((error, count) => {
+          if (error || count === 0) {
+            server.off('close', onNativeClose);
+            done();
+          }
+        });
 
         return;
       }

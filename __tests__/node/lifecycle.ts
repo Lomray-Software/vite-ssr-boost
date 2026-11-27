@@ -725,6 +725,36 @@ describe('createLifecycle', () => {
     expect(server.listening).toBe(false);
   });
 
+  it('joins a native close that started before the lifecycle existed', async () => {
+    const { server } = await listen(
+      () => undefined,
+      () => createLifecycle(http.createServer()),
+    );
+    let accepted: Socket | undefined;
+
+    server.on('upgrade', (_req, socket: Socket) => {
+      accepted = socket;
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const client = await upgrade(server);
+    const onClose = vi.fn();
+
+    server.close();
+
+    const lifecycle = createLifecycle(server, { drainTimeoutMs: 5000, onClose });
+    const closed = lifecycle.close();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(onClose).not.toHaveBeenCalled();
+    accepted?.destroy();
+    client.destroy();
+    await closed;
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('rejects close when a socket from before the lifecycle outlives the deadline', async () => {
     const { server } = await listen(
       () => undefined,
