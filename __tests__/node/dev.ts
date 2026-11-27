@@ -406,7 +406,7 @@ export default defineEntry(App, routes, {
       const { app, url } = await start({
         vite: viteConfig({ server: server as InlineConfig['server'] }),
       });
-      const resolved = app.vite.config.server as Record<string, unknown>;
+      const resolved = app.vite.config.server as unknown as Record<string, unknown>;
 
       expect(app.server.listenerCount('upgrade')).toBe(0);
       expect(resolved.hmr).not.toMatchObject({ server: app.server });
