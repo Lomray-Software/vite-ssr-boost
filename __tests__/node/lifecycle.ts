@@ -1051,6 +1051,57 @@ describe('createLifecycle', () => {
     await expect(lifecycle.listen(0)).resolves.toMatchObject({ port: expect.any(Number) });
   });
 
+  it('cancels a managed rebind with a repeated native close on the stopped server', async () => {
+    const server = http.createServer();
+    const lifecycle = createLifecycle(server);
+
+    servers.push(server);
+    await lifecycle.listen(0);
+    await new Promise((resolve) => server.close(resolve));
+    // A close() on a stopped server still queues a `close` event.
+    server.close();
+
+    await expect(lifecycle.listen(0)).rejects.toThrow('cancelled by close()');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(server.listening).toBe(false);
+    await expect(lifecycle.listen(0)).resolves.toMatchObject({ port: expect.any(Number) });
+  });
+
+  it('refuses a managed listen when the count of a draining close fails', async () => {
+    const server = http.createServer();
+
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+
+    const client = net.connect((server.address() as AddressInfo).port);
+
+    await new Promise((resolve) => client.once('connect', resolve));
+    await vi.waitFor(
+      () =>
+        new Promise<void>((resolve, reject) =>
+          server.getConnections((_error, count) => (count === 1 ? resolve() : reject())),
+        ),
+    );
+
+    const closed = new Promise((resolve) => server.close(resolve));
+    const lifecycle = createLifecycle(server);
+    const count = vi.spyOn(server, 'getConnections').mockImplementation((callback) => {
+      callback(new Error('count failed'), 0);
+
+      return server;
+    });
+    const nativeListen = vi.spyOn(server, 'listen');
+
+    await expect(lifecycle.listen(0)).rejects.toThrow('count failed');
+    expect(nativeListen).not.toHaveBeenCalled();
+    expect(server.listening).toBe(false);
+    count.mockRestore();
+    nativeListen.mockRestore();
+    client.destroy();
+    await closed;
+    await expect(lifecycle.listen(0)).resolves.toMatchObject({ port: expect.any(Number) });
+  });
+
   it('lets a new managed listen start once a cancelled one ended', async () => {
     const server = http.createServer();
     const lifecycle = createLifecycle(server);

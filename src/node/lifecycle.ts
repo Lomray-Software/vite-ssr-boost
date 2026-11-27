@@ -73,9 +73,10 @@ interface ILifecycle {
   /**
    * Bind the server and resolve with its address, rejecting bind errors and a bind that was
    * closed as it landed.
-   * Refused while another bind is in flight, before an earlier close() emitted `close`, and once
-   * close() has started; a native close() that emits `close` before the first bind starts
-   * cancels it;
+   * Refused while another bind is in flight, before an earlier close() emitted `close`, when the
+   * connection count of a stopped server cannot be read, and once close() has started; a bind on
+   * a server that is not listening starts a turn later, and a native close() that emits `close`
+   * before it starts cancels it;
    * close() waits for a bind in flight, within its deadline.
    */
   listen: (port?: number, host?: string) => Promise<AddressInfo | string | null>;
@@ -412,8 +413,9 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   };
 
   /**
-   * Wait out a native close() queued before the first bind, which the lifecycle cannot see:
-   * its `close` event would otherwise cancel the bind while the port still opens.
+   * Wait out a native close() queued before the bind, which the lifecycle may not have seen
+   * (one from before the lifecycle, or a repeated close() on a stopped server): its `close`
+   * event would otherwise cancel the bind while the port still opens.
    */
   const settleNativeClose = (): Promise<void> =>
     new Promise<void>((resolve, reject) => {
@@ -434,7 +436,10 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
 
           if (isCancelled) {
             reject(new Error('[ssr-boost] the bind was cancelled by close().'));
-          } else if (!error && count > 0 && !server.listening) {
+          } else if (error && !server.listening) {
+            // An unknown count is not an empty server: a close() may still wait for connections.
+            reject(error);
+          } else if (count > 0 && !server.listening) {
             // Connections without a listening port: a close() still waits for them.
             reject(
               new Error('[ssr-boost] listen() was called before the previous close() finished.'),
@@ -523,10 +528,8 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
           fail(error);
         }
       });
-    // Only a server never seen bound can carry a close() from before the lifecycle.
-    const bound = (
-      hasListened || server.listening ? bind() : settleNativeClose().then(bind)
-    ).finally(() => {
+    // Any server that is not listening can carry a close() whose `close` event is still queued.
+    const bound = (server.listening ? bind() : settleNativeClose().then(bind)).finally(() => {
       isBinding = false;
       binding = undefined;
     });
