@@ -85,6 +85,16 @@ vi.mock('node:http', async () => {
   };
 });
 
+vi.mock('node:https', async () => {
+  const { default: http } = await import('node:http');
+
+  return {
+    default: {
+      createServer: vi.fn((_options: unknown, app: http.RequestListener) => http.createServer(app)),
+    },
+  };
+});
+
 /**
  * Minimal dev config for the express adapter.
  */
@@ -140,6 +150,9 @@ const flush = () => new Promise((resolve) => setImmediate(resolve));
 describe('node server', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks keeps queued once-values; reset them and restore the default dev Vite.
+    createViteServer.mockReset();
+    createViteServer.mockResolvedValue(createViteDouble('vite-middleware'));
   });
 
   it('should create dev server and print info on run', async () => {
@@ -509,6 +522,37 @@ describe('node server', () => {
     ).rejects.toThrow('setup failed');
     expect(supplied.close).not.toHaveBeenCalled();
     expect(createViteServer).not.toHaveBeenCalled();
+  });
+
+  it('should serve prod over HTTPS with the TLS options of the Vite the config holds', async () => {
+    const { default: https } = await import('node:https');
+    const tls = { key: 'key', cert: 'cert' };
+    const vite = { config: { server: { https: tls, host: '127.0.0.1' } } };
+    const config = {
+      isProd: true,
+      isHost: true,
+      mode: 'production',
+      getParams: () => ({
+        isSPA: true,
+        root: '/root',
+        publicDir: '/public',
+        port: 3000,
+        host: '0.0.0.0',
+      }),
+      setApp: vi.fn(),
+      getVite: () => vite,
+      getLogger: () => ({ error: vi.fn() }),
+    };
+
+    const result = await createServer(config as never);
+    const server = result.run({ isPrintInfo: false });
+
+    await flush();
+
+    expect(https.createServer).toHaveBeenCalledWith(tls, expect.anything());
+    expect(server.listen).toHaveBeenCalledWith(3000, '0.0.0.0', expect.any(Function));
+    // As in 8.6, prod leaves the Vite host alone.
+    expect(vite.config.server.host).toBe('127.0.0.1');
   });
 
   it('should register prod middlewares for spa mode', async () => {

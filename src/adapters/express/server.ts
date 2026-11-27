@@ -177,7 +177,9 @@ async function createServer(
      */
     run: ({ version, isPrintInfo = true } = {}): Server => {
       const { port, host } = config.getParams();
-      const isHTTPS = Boolean(mountedVite?.config?.server?.https);
+      // In prod the TLS options come from the Vite the config holds, as in 8.6.
+      const transportVite = config.isProd ? config.getVite() : mountedVite;
+      const isHTTPS = Boolean(transportVite?.config?.server?.https);
 
       /**
        * update resolved host for print network link
@@ -187,7 +189,7 @@ async function createServer(
       }
 
       const server = isHTTPS
-        ? https.createServer(mountedVite!.config.server.https!, app)
+        ? https.createServer(transportVite!.config.server.https!, app)
         : http.createServer(app);
 
       const { onClose } = lifecycleOptions;
