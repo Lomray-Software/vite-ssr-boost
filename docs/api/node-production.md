@@ -157,9 +157,10 @@ as `assets/logo-abcd1234.svg`, is listed too. Give your own `immutableFiles` whe
 that with stable content. Setting
 `maxAge`, `immutable` or `cacheControl: false` hands the policy for every file to you.
 
-In SSR builds the top-level names of the client directory are read once, when the middleware is
-created. A top-level file or folder added later goes to `next()` until the server restarts; files
-added under a name that already existed are served at once.
+With the default `fallthrough` and no `extensions`, SSR builds read the top-level names of the
+client directory once, when the middleware is created. A top-level file or folder added later
+goes to `next()` until the server restarts; files added under a name that already existed are
+served at once. With `fallthrough: false` or `extensions`, every request reaches the file server.
 
 With `isSPA`, the shell file is sent with `Cache-Control: no-cache`, the same policy as the route
 fallback, whether it is reached as `/` or by its own name. This differs from the managed Express
