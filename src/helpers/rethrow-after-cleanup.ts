@@ -1,4 +1,4 @@
-import type { Logger } from 'vite';
+import type { IErrorLogger } from '@node/server-kit';
 
 /**
  * Run the cleanup of a failed start, then throw the failure; a cleanup error is only logged.
@@ -6,14 +6,18 @@ import type { Logger } from 'vite';
 const rethrowAfterCleanup = async (
   failure: unknown,
   cleanup: () => unknown,
-  logger: Pick<Logger, 'error'>,
+  logger: IErrorLogger,
 ): Promise<never> => {
   try {
     await cleanup();
   } catch (error) {
-    logger.error(`Cleanup after a failed start failed: ${(error as Error)?.message}`, {
-      error: error as Error,
-    });
+    try {
+      logger.error(`Cleanup after a failed start failed: ${(error as Error)?.message}`, {
+        error: error as Error,
+      });
+    } catch {
+      // The start failure is what the caller must see, even when logging fails.
+    }
   }
 
   throw failure;

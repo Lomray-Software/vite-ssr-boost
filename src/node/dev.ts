@@ -9,6 +9,8 @@ import getRouteAssets from '@adapters/express/route-assets';
 import adapterNode from '@adapters/node';
 import type { IEntry, IEntryHost } from '@core/entry';
 import type { TSsrHandler } from '@core/types';
+import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
+import settleAll from '@helpers/settle-all';
 import createLifecycle from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions, TLifecycleServer } from '@node/lifecycle';
 import renderToStream from '@node/render-to-stream';
@@ -148,9 +150,7 @@ const prepareDev = async ({
   try {
     config.setVite(vite);
   } catch (error) {
-    await vite.close();
-
-    throw error;
+    return rethrowAfterCleanup(error, () => vite.close(), vite.config.logger);
   }
 
   const { isSPA } = config.getParams();
@@ -257,7 +257,10 @@ const createDevServer = async ({
      * Close Vite once the sockets drained, so a response still rendering completes.
      */
     onClose: async () => {
-      await Promise.all([app.close(), onClose?.()]);
+      await settleAll(
+        () => app.close(),
+        () => onClose?.(),
+      );
     },
   });
 

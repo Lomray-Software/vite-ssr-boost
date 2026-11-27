@@ -40,4 +40,18 @@ describe('rethrowAfterCleanup', () => {
     ).rejects.toBe(failure);
     expect(logger.error).toHaveBeenCalledOnce();
   });
+
+  it('should keep the failure when logging the cleanup error throws', async () => {
+    const failure = new Error('setup failed');
+    const logger = {
+      error: vi.fn(() => {
+        throw new Error('logger failed');
+      }),
+    };
+
+    await expect(
+      rethrowAfterCleanup(failure, () => Promise.reject(new Error('close failed')), logger),
+    ).rejects.toBe(failure);
+    expect(logger.error).toHaveBeenCalledOnce();
+  });
 });

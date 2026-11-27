@@ -397,6 +397,46 @@ describe('node server', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('should settle close only after vite closed when the onClose hook throws', async () => {
+    let release: (() => void) | undefined;
+    let isSettled = false;
+    const close = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const hookError = new Error('onClose failed');
+    const result = await createServer(createClosingDevConfig(close) as never, {
+      onClose: () => {
+        throw hookError;
+      },
+    });
+
+    result.run({ isPrintInfo: false });
+    await flush();
+
+    const closed = result
+      .getLifecycle()!
+      .close()
+      .then(
+        () => ({ isRejected: false, reason: undefined }),
+        (reason: unknown) => ({ isRejected: true, reason }),
+      );
+
+    void closed.then(() => {
+      isSettled = true;
+    });
+    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+    await flush();
+
+    expect(isSettled).toBe(false);
+
+    release!();
+
+    expect(await closed).toEqual({ isRejected: true, reason: hookError });
+  });
+
   it('should answer health probes before application middleware once running', async () => {
     const result = await createServer(createDevConfig() as never, { health: true });
     const [health] = appUse.mock.calls[0] as [

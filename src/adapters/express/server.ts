@@ -12,6 +12,7 @@ import staticFiles from '@adapters/express/static-files';
 import createDevVite from '@cli/helpers/create-dev-vite';
 import printServerInfo from '@helpers/print-server-info';
 import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
+import settleAll from '@helpers/settle-all';
 import createLifecycle, { trackNativeBind } from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions } from '@node/lifecycle';
 import ServerApi from '@services/server-api';
@@ -200,7 +201,10 @@ async function createServer(
         onClose: config.isProd
           ? onClose
           : async () => {
-              await Promise.all([mountedVite?.close(), onClose?.()]);
+              await settleAll(
+                () => mountedVite?.close(),
+                () => onClose?.(),
+              );
             },
       });
 

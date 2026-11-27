@@ -473,6 +473,92 @@ export default defineEntry(App, routes, {
     started = [first.app];
   });
 
+  it('keeps the setup error when closing Vite after it also fails', async () => {
+    writeProject();
+
+    const config = ServerConfig.init({ mode: 'development' });
+    const setupError = new Error('setVite failed');
+    const viteClose = vi.fn();
+
+    vi.spyOn(config, 'setVite').mockImplementation(() => {
+      throw setupError;
+    });
+    vi.spyOn(viteLogger, 'error');
+
+    await expect(
+      createDevServer({
+        logger,
+        config,
+        vite: viteConfig({
+          plugins: [
+            ViteSsrBoostPlugin({ tsconfigAliases: false }),
+            {
+              name: 'failing-close',
+
+              /**
+               * Close for real, then report a failure, as a broken watcher would.
+               */
+              configureServer: (vite) => {
+                const close = vite.close.bind(vite);
+
+                vite.close = async () => {
+                  viteClose();
+                  await close();
+
+                  throw new Error('close failed');
+                };
+              },
+            },
+          ],
+        }),
+      }),
+    ).rejects.toBe(setupError);
+    expect(viteClose).toHaveBeenCalledOnce();
+    expect(viteLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('close failed'),
+      expect.anything(),
+    );
+  });
+
+  it('settles close only after Vite closed when the onClose hook throws', async () => {
+    writeProject();
+
+    const hookError = new Error('onClose failed');
+    const { app } = await start({
+      onClose: () => {
+        throw hookError;
+      },
+    });
+    const viteClose = app.vite.close.bind(app.vite);
+    let release: (() => void) | undefined;
+    let isSettled = false;
+
+    vi.spyOn(app.vite, 'close').mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await viteClose();
+    });
+
+    const closed = app.close().then(
+      () => ({ isRejected: false, reason: undefined }),
+      (reason: unknown) => ({ isRejected: true, reason }),
+    );
+
+    void closed.then(() => {
+      isSettled = true;
+    });
+    await vi.waitFor(() => expect(release).toBeDefined());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(isSettled).toBe(false);
+
+    release!();
+
+    expect(await closed).toEqual({ isRejected: true, reason: hookError });
+    started = [];
+  });
+
   it('answers readiness 503 and keeps accepting during the readiness grace', async () => {
     writeProject();
 
