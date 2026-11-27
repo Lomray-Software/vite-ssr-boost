@@ -154,6 +154,25 @@ const getDevMode = (mode?: string, inlineConfig?: InlineConfig): string =>
   mode ?? inlineConfig?.mode ?? 'development';
 
 /**
+ * The inline config Vite runs on under the managed server, so the TLS check sees the same one.
+ */
+const getManagedViteConfig = async (
+  inlineConfig: InlineConfig,
+  mode: string,
+): Promise<InlineConfig> => {
+  const { mergeConfig } = await import('vite');
+
+  return mergeConfig(inlineConfig, {
+    mode,
+    appType: 'custom',
+    server: {
+      middlewareMode: true,
+      watch: { usePolling: true, interval: 100 },
+    },
+  });
+};
+
+/**
  * Run Vite in middleware mode on a parent server and render through a defineEntry() entry.
  */
 const prepareDev = async ({
@@ -171,13 +190,7 @@ const prepareDev = async ({
   const config = givenConfig ?? ServerConfig.init({ isHost, mode, entrypointName }, { port });
   const { createServer, mergeConfig, version } = await import('vite');
   const vite = await createServer(
-    mergeConfig(inlineConfig, {
-      mode,
-      appType: 'custom',
-      server: {
-        middlewareMode: true,
-        watch: { usePolling: true, interval: 100 },
-      },
+    mergeConfig(await getManagedViteConfig(inlineConfig, mode), {
       plugins: [parentHmrPlugin(version, server)],
     }),
   );
@@ -273,7 +286,11 @@ const createDevServer = async ({
   const { resolveConfig } = await import('vite');
   // TLS is chosen in the same mode Vite then runs in.
   const mode = getDevMode(prepareOptions.mode, prepareOptions.vite);
-  const resolved = await resolveConfig({ ...prepareOptions.vite, mode }, 'serve', mode);
+  const resolved = await resolveConfig(
+    await getManagedViteConfig(prepareOptions.vite ?? {}, mode),
+    'serve',
+    mode,
+  );
   const tls = await resolveTlsOptions(resolved.server.https);
   const server = tls ? https.createServer(tls) : http.createServer();
   const app = await prepareDev({ ...prepareOptions, mode, server });

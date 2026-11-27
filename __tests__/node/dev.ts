@@ -646,9 +646,10 @@ export default defineEntry(App, routes, {
     started = [];
   });
 
-  it.skipIf(!hasOpenssl)('serves HTTPS from the Vite config, HMR included', async () => {
-    writeProject();
-
+  /**
+   * Issue a one-day self-signed certificate inside the project.
+   */
+  const issueCertificate = (): { key: string; cert: string } => {
     const key = path.join(root, 'key.pem');
     const cert = path.join(root, 'cert.pem');
 
@@ -672,6 +673,13 @@ export default defineEntry(App, routes, {
       { stdio: 'ignore' },
     );
 
+    return { key, cert };
+  };
+
+  it.skipIf(!hasOpenssl)('serves HTTPS from the Vite config, HMR included', async () => {
+    writeProject();
+
+    const { key, cert } = issueCertificate();
     const { app, url } = await start({ vite: viteConfig({ server: { https: { key, cert } } }) });
     const response = await request(`${url}/`);
     const { socket, message } = await connectHmr(app, url);
@@ -680,6 +688,32 @@ export default defineEntry(App, routes, {
     expect(response.body).toContain('Home v1');
     expect(JSON.parse(message)).toMatchObject({ type: 'connected' });
     socket.destroy();
+  });
+
+  it.skipIf(!hasOpenssl)('chooses TLS from the config Vite runs on as middleware', async () => {
+    writeProject();
+
+    const tls = issueCertificate();
+    const { app, url } = await start({
+      vite: viteConfig({
+        plugins: [
+          ViteSsrBoostPlugin({ tsconfigAliases: false }),
+          {
+            name: 'https-in-middleware',
+
+            /**
+             * Turn TLS on only for the managed middleware setup.
+             */
+            config: (config) =>
+              config.server?.middlewareMode ? { server: { https: tls } } : undefined,
+          },
+        ],
+      }),
+    });
+
+    expect(app.server).toBeInstanceOf(https.Server);
+    expect(url.startsWith('https:')).toBe(true);
+    expect((await request(`${url}/`)).body).toContain('Home v1');
   });
 
   it('renders under a base path from the URL the browser sent', async () => {
