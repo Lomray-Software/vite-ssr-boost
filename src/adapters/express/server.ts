@@ -16,7 +16,7 @@ import createDevVite from '@cli/helpers/create-dev-vite';
 import printServerInfo from '@helpers/print-server-info';
 import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
 import settleAll from '@helpers/settle-all';
-import createLifecycle, { trackNativeBind } from '@node/lifecycle';
+import createLifecycle, { resolveHealthPaths, trackNativeBind } from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions } from '@node/lifecycle';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
@@ -40,6 +40,9 @@ async function createServer(
   lifecycleOptions: ILifecycleOptions = {},
   devVite?: ViteDevServer,
 ): Promise<ICreateServerResult> {
+  // Checked before the dev Vite starts: run() would throw it with that Vite left open.
+  resolveHealthPaths(lifecycleOptions.health);
+
   const app = express().disable('x-powered-by');
   let lifecycle: ILifecycle | undefined;
 

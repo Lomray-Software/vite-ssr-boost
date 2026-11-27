@@ -10,7 +10,7 @@ import type { TCompression } from '@adapters/compression';
 import adapterNode from '@adapters/node';
 import type { ICreateHandlerOptions, IHtmlShell } from '@core/handler';
 import type { TSsrHandler } from '@core/types';
-import createLifecycle from '@node/lifecycle';
+import createLifecycle, { resolveHealthPaths } from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions, TLifecycleServer } from '@node/lifecycle';
 import renderToStream from '@node/render-to-stream';
 import serveStatic from '@node/serve-static';
@@ -248,6 +248,8 @@ const createProductionServer = async ({
   onClose,
   ...prepareOptions
 }: ICreateProductionServerOptions = {}): Promise<IProductionServer> => {
+  resolveHealthPaths(health);
+
   const app = await prepareProduction(prepareOptions);
   const render = adapterNode(app.handler, { compression });
   const server = tls ? https.createServer(tls) : http.createServer();

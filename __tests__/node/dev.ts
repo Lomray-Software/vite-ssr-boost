@@ -637,6 +637,24 @@ export default defineEntry(App, routes, {
     expect(await closed).toEqual({ isRejected: true, reason: hookError });
   });
 
+  it('refuses one path for both health probes before it starts Vite', async () => {
+    const configureServer = vi.fn();
+
+    await expect(
+      createDevServer({
+        logger,
+        health: { readyPath: '/healthz' },
+        vite: viteConfig({
+          plugins: [
+            ViteSsrBoostPlugin({ tsconfigAliases: false }),
+            { name: 'started-probe', configureServer },
+          ],
+        }),
+      }),
+    ).rejects.toThrow('Health probes need two paths, got "/healthz" for both');
+    expect(configureServer).not.toHaveBeenCalled();
+  });
+
   it('answers readiness 503 and keeps accepting during the readiness grace', async () => {
     writeProject();
 

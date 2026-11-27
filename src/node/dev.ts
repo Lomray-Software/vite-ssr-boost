@@ -12,7 +12,7 @@ import type { TSsrHandler } from '@core/types';
 import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
 import settleAll from '@helpers/settle-all';
 import stripEntryAsync from '@helpers/strip-entry-async';
-import createLifecycle from '@node/lifecycle';
+import createLifecycle, { resolveHealthPaths } from '@node/lifecycle';
 import type { ILifecycle, ILifecycleOptions, TLifecycleServer } from '@node/lifecycle';
 import renderToStream from '@node/render-to-stream';
 import { createRequestListener, resolveTlsOptions, toEntry } from '@node/server-kit';
@@ -284,6 +284,8 @@ const createDevServer = async ({
   onClose,
   ...prepareOptions
 }: ICreateDevServerOptions = {}): Promise<IDevServer> => {
+  resolveHealthPaths(health);
+
   const { resolveConfig } = await import('vite');
   // TLS is chosen in the same mode Vite then runs in.
   const mode = getDevMode(prepareOptions.mode, prepareOptions.vite);

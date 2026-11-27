@@ -441,6 +441,13 @@ describe('node server', () => {
     expect(await closed).toEqual({ isRejected: true, reason: hookError });
   });
 
+  it('should refuse one path for both health probes before it starts its dev Vite', async () => {
+    await expect(
+      createServer(createStatefulDevConfig() as never, { health: { readyPath: '/healthz' } }),
+    ).rejects.toThrow('Health probes need two paths, got "/healthz" for both');
+    expect(createViteServer).not.toHaveBeenCalled();
+  });
+
   it('should answer health probes before application middleware once running', async () => {
     const result = await createServer(createDevConfig() as never, { health: true });
 

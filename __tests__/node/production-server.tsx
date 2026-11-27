@@ -202,6 +202,15 @@ describe('prepareProduction', () => {
     expect((await request(`${url}/robots.txt`)).status).toBe(404);
   });
 
+  it('refuses one path for both health probes before it loads the entry', async () => {
+    const loadEntry = vi.fn(entryModule());
+
+    await expect(
+      createProductionServer({ buildDir, logger, loadEntry, health: { livePath: '/readyz' } }),
+    ).rejects.toThrow('Health probes need two paths, got "/readyz" for both');
+    expect(loadEntry).not.toHaveBeenCalled();
+  });
+
   it('rejects a missing explicit build directory beside a valid conventional one', async () => {
     const originalCwd = process.cwd();
 

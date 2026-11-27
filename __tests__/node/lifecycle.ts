@@ -124,10 +124,36 @@ describe('createLifecycle', () => {
     [{ readyPath: '/healthz' }, '/healthz'],
     [{ livePath: '/readyz' }, '/readyz'],
     [{ livePath: '/probe', readyPath: '/probe' }, '/probe'],
+    [{ livePath: '/readyz', readyPath: undefined }, '/readyz'],
   ])('refuses one path for both health probes (%o)', (health, path) => {
     expect(() => createLifecycle(http.createServer(), { health })).toThrow(
       `Health probes need two paths, got "${path}" for both`,
     );
+  });
+
+  it('keeps the default of a probe path given as undefined', async () => {
+    let lifecycle!: ILifecycle;
+    const { url } = await listen(
+      (req, res) => lifecycle.health(req, res, () => res.end('app')),
+      (server) => {
+        lifecycle = createLifecycle(server, {
+          health: { livePath: undefined, readyPath: undefined },
+          readinessGraceMs: 2000,
+        });
+
+        return lifecycle;
+      },
+    );
+
+    lifecycle.setReady();
+    expect(await getText(`${url}/healthz`)).toEqual({ status: 200, body: 'ok' });
+    expect(await getText(`${url}/readyz`)).toEqual({ status: 200, body: 'ok' });
+
+    const closing = lifecycle.close();
+
+    expect(await getText(`${url}/readyz`)).toEqual({ status: 503, body: 'unavailable' });
+    await lifecycle.force();
+    await closing.catch(() => undefined);
   });
 
   it('passes every request through when health is not configured', async () => {

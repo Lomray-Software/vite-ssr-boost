@@ -238,21 +238,39 @@ const boundedStop = (
   });
 
 /**
+ * Resolve the health probe paths, or undefined when health is off. Server factories call it
+ * before they start anything, so invalid options leave nothing running.
+ */
+const resolveHealthPaths = (
+  health: ILifecycleOptions['health'],
+): Required<IHealthOptions> | undefined => {
+  if (!health) {
+    return undefined;
+  }
+
+  // Path by path, so an explicit undefined (an unset environment variable) keeps its default.
+  const paths =
+    health === true
+      ? DEFAULT_HEALTH
+      : {
+          livePath: health.livePath ?? DEFAULT_HEALTH.livePath,
+          readyPath: health.readyPath ?? DEFAULT_HEALTH.readyPath,
+        };
+
+  // One path for both probes would answer liveness on the readiness URL, 200 while draining.
+  if (paths.livePath === paths.readyPath) {
+    throw new TypeError(`Health probes need two paths, got "${paths.livePath}" for both`);
+  }
+
+  return paths;
+};
+
+/**
  * Own readiness, health probes, timeouts, binding and a bounded drain for one Node server.
  */
 const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = {}): ILifecycle => {
   const { drainTimeoutMs = 30000, readinessGraceMs = 0, onDrain, onClose } = options;
-  const paths =
-    options.health === true
-      ? DEFAULT_HEALTH
-      : options.health
-        ? { ...DEFAULT_HEALTH, ...options.health }
-        : undefined;
-
-  // One path for both probes would answer liveness on the readiness URL, 200 while draining.
-  if (paths && paths.livePath === paths.readyPath) {
-    throw new TypeError(`Health probes need two paths, got "${paths.livePath}" for both`);
-  }
+  const paths = resolveHealthPaths(options.health);
 
   let isPrepared = false;
   let isForced = false;
@@ -869,7 +887,7 @@ const trackNativeBind = (lifecycle: ILifecycle): void => {
   bindTrackers.get(lifecycle)?.();
 };
 
-export { trackNativeBind };
+export { resolveHealthPaths, trackNativeBind };
 
 export type { IHealthOptions, ILifecycle, ILifecycleOptions, ISignalOptions, TLifecycleServer };
 
