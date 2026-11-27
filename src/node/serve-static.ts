@@ -73,11 +73,22 @@ const getPathname = (url: string): string | undefined => {
 };
 
 /**
- * Lowercased resolved form of a pathname used to match the shell. A backslash counts as a
- * separator, as it does for send on Windows, so no spelling of the shell slips past.
+ * Windows form of one path segment: a name loses its trailing dots and spaces. A segment of only
+ * dots and spaces is kept, since Windows opens no file through it.
  */
-const getShellKey = (pathname: string): string =>
-  path.posix.normalize(pathname.replace(/\\/g, '/')).toLowerCase();
+const trimWindowsSegment = (segment: string): string => segment.replace(/[. ]+$/, '') || segment;
+
+/**
+ * Lowercased resolved form of a pathname used to match the shell. A backslash counts as a
+ * separator, as it does for send on Windows, so no spelling of the shell slips past. On Windows
+ * the segments are also trimmed as the file system trims them, so `/index.html.` matches.
+ */
+const getShellKey = (pathname: string, isWindows = process.platform === 'win32'): string => {
+  const slashed = pathname.replace(/\\/g, '/');
+  const resolved = isWindows ? slashed.split('/').map(trimWindowsSegment).join('/') : slashed;
+
+  return path.posix.normalize(resolved).toLowerCase();
+};
 
 export { getShellKey };
 

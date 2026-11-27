@@ -567,6 +567,13 @@ describe('node serveStatic', () => {
     expect(getShellKey('/nested/./x/../shell.html')).toBe('/nested/shell.html');
   });
 
+  it('trims trailing dots and spaces from each segment only on Windows', () => {
+    expect(getShellKey('/Index.HTML. ', true)).toBe('/index.html');
+    expect(getShellKey('/nested. /shell.html ', true)).toBe('/nested/shell.html');
+    expect(getShellKey('/assets/.../index.html', true)).toBe('/assets/.../index.html');
+    expect(getShellKey('/index.html.', false)).toBe('/index.html.');
+  });
+
   it('hides a well-known shell under both spellings unless access is granted', async () => {
     await writeFile(path.join(root, '.well-known', 'shell.json'), 'well-known-shell');
     let isAllowed = false;
