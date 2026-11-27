@@ -19,10 +19,11 @@ type TFileOptions = ServeStaticOptions<ServerResponse>;
 interface IShellGuard {
   /** Lowercased request path of the shell. */
   shellPath: string;
-  /** Lowercased extensionless path the file server would resolve to the shell. */
-  alias?: string;
-  /** File server for the alias that never appends the shell's extension. */
-  serveAlias?: TStaticMiddleware;
+  /**
+   * Lowercased extensionless paths the file server would resolve to the shell, each with a file
+   * server that never appends the extension leading there.
+   */
+  aliases: Map<string, TStaticMiddleware>;
 }
 
 /**
@@ -165,8 +166,8 @@ const createCachePolicy = (
 };
 
 /**
- * Guard for one file server: the shell's request path and, when the server may append the
- * shell's extension, the extensionless alias with a server that resolves it without that
+ * Guard for one file server: the shell's request path and, for every configured extension the
+ * shell's name ends with, the extensionless alias with a server that resolves it without that
  * extension. Lowercased, since case-insensitive disks match any spelling.
  */
 const createShellGuard = (
@@ -187,30 +188,48 @@ const createShellGuard = (
   }
 
   const shellPath = `/${relative.split(path.sep).join('/')}`.toLowerCase();
-  const extension = path.posix.extname(shellPath);
+  const aliases = new Map<string, TStaticMiddleware>();
   const { extensions } = options;
 
-  if (!extension || !Array.isArray(extensions)) {
-    return { shellPath };
+  if (!Array.isArray(extensions)) {
+    return { shellPath, aliases };
   }
 
-  const otherExtensions = extensions.filter(
-    (name) => `.${String(name).replace(/^\./, '').toLowerCase()}` !== extension,
-  );
+  /**
+   * Extension as send appends it, compared by its lowercased spelling.
+   */
+  const normalize = (name: unknown): string => String(name).replace(/^\./, '').toLowerCase();
 
-  if (otherExtensions.length === extensions.length) {
-    return { shellPath };
+  for (const name of new Set(extensions.map(normalize))) {
+    const alias = name ? shellPath.slice(0, -(name.length + 1)) : '';
+
+    // send appends an extension only to a missing path without one, such as `/page` for
+    // `page.en.html` under `en.html`.
+    if (
+      !name ||
+      !shellPath.endsWith(`.${name}`) ||
+      alias.endsWith('/') ||
+      path.posix.extname(alias) ||
+      aliases.has(alias)
+    ) {
+      continue;
+    }
+
+    const otherExtensions = extensions.filter((other) => normalize(other) !== name);
+
+    // send still serves a literal file, redirects a directory and tries the other extensions.
+    // A miss falls through to the router like the shell itself, also with `fallthrough: false`.
+    aliases.set(
+      alias,
+      createServeStatic(root, {
+        ...options,
+        extensions: otherExtensions.length ? otherExtensions : false,
+        fallthrough: true,
+      }) as TStaticMiddleware,
+    );
   }
 
-  // send still serves a literal file, redirects a directory and tries the other extensions.
-  return {
-    shellPath,
-    alias: shellPath.slice(0, -extension.length),
-    serveAlias: createServeStatic(root, {
-      ...options,
-      extensions: otherExtensions.length ? otherExtensions : false,
-    }) as TStaticMiddleware,
-  };
+  return { shellPath, aliases };
 };
 
 /**
@@ -337,18 +356,18 @@ const serveStatic = ({
     const guard = isWellKnown ? wellKnownShellGuard : shellGuard;
     const key = guard && pathname !== undefined ? getShellKey(pathname) : undefined;
     const isShell = key !== undefined && key === guard?.shellPath;
-    const isAlias = key !== undefined && key === guard?.alias;
+    const serveAlias = key === undefined ? undefined : guard?.aliases.get(key);
     let fileServer: TStaticMiddleware | undefined = isWellKnown ? serveWellKnown : serve;
 
     // The shell is matched by the file it resolves to, so no URL spelling reaches it.
-    if ((isShell || isAlias) && !hasAccessIndexHtml?.()) {
+    if ((isShell || serveAlias) && !hasAccessIndexHtml?.()) {
       if (isShell) {
         next();
 
         return;
       }
 
-      fileServer = guard?.serveAlias;
+      fileServer = serveAlias;
     }
 
     // serve-static builds directory redirects from originalUrl, so a client host never leaks in,

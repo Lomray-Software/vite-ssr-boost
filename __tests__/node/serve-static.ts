@@ -389,6 +389,40 @@ describe('node serveStatic', () => {
     expect(await (await fetch(`${node}/index`)).text()).toBe('SSR');
   });
 
+  it('hides the shell behind every multi-part extension its name ends with', async () => {
+    await writeFile(path.join(root, 'page.en.html'), 'localized-shell');
+    const shellFile = 'page.en.html';
+    const single = await startNode({ extensions: ['en.html'] }, false, { shellFile });
+
+    expect(await (await fetch(`${single}/page`)).text()).toBe('SSR');
+    expect(await (await fetch(`${single}/page.en.html`)).text()).toBe('SSR');
+
+    const both = await startNode({ extensions: ['html', 'EN.HTML'] }, false, { shellFile });
+
+    expect(await (await fetch(`${both}/page`)).text()).toBe('SSR');
+    expect(await (await fetch(`${both}/page.en`)).text()).toBe('SSR');
+    expect(await (await fetch(`${both}/about`)).text()).toBe('extension-fallback');
+
+    await writeFile(path.join(root, 'page.html'), 'plain-page');
+
+    expect(await (await fetch(`${both}/page`)).text()).toBe('plain-page');
+  });
+
+  it('sends a shell alias miss to the router under fallthrough false', async () => {
+    const node = await startNode({ extensions: ['html'], fallthrough: false }, false);
+    const alias = await fetch(`${node}/index`);
+
+    expect(alias.status).toBe(200);
+    expect(await alias.text()).toBe('SSR');
+    expect(await (await fetch(`${node}/index`, { method: 'POST' })).text()).toBe('SSR');
+    expect(await (await fetch(`${node}/about`)).text()).toBe('extension-fallback');
+    expect((await fetch(`${node}/missing`)).status).toBe(404);
+
+    await writeFile(path.join(root, 'index'), 'extensionless-index');
+
+    expect(await (await fetch(`${node}/index`)).text()).toBe('extensionless-index');
+  });
+
   it('redirects a directory that shares the extensionless name of the shell', async () => {
     await mkdir(path.join(root, 'index'));
     await writeFile(path.join(root, 'index', 'page.txt'), 'nested');
