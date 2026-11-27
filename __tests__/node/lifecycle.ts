@@ -157,11 +157,16 @@ describe('createLifecycle', () => {
       release = resolve;
     });
     const onClose = vi.fn();
+    let started!: () => void;
+    const begun = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     let lifecycle!: ILifecycle;
     const { server, url } = await listen(
       (req, res) => {
         if (req.url === '/stream') {
           res.write('first;');
+          started();
           void held.then(() => res.end('last'));
 
           return;
@@ -183,7 +188,7 @@ describe('createLifecycle', () => {
     const streamed = getText(`${url}/stream`);
 
     await vi.waitFor(() => expect(server.listening).toBe(true));
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await begun;
 
     const first = lifecycle.close();
     const second = lifecycle.close();
@@ -200,10 +205,15 @@ describe('createLifecycle', () => {
   });
 
   it('destroys streams still open at the drain timeout', async () => {
+    let started!: () => void;
+    const begun = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     let lifecycle!: ILifecycle;
     const { url } = await listen(
       (_req, res) => {
         res.write('stuck');
+        started();
       },
       (server) => {
         lifecycle = createLifecycle(server, { drainTimeoutMs: 50 });
@@ -213,7 +223,7 @@ describe('createLifecycle', () => {
     );
     const streamed = getText(url);
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await begun;
 
     const startedAt = Date.now();
 
@@ -552,10 +562,15 @@ describe('createLifecycle', () => {
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let started!: () => void;
+    const begun = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     let lifecycle!: ILifecycle;
     const { server, url } = await listen(
       (_req, res) => {
         res.write('first;');
+        started();
         void held.then(() => res.end('last'));
       },
       (instance) => {
@@ -574,7 +589,7 @@ describe('createLifecycle', () => {
     const client = await upgrade(server);
     const streamed = getText(url);
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await begun;
 
     const closed = lifecycle.close();
 
