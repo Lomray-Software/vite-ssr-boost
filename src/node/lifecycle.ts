@@ -610,13 +610,48 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
         () => onExit?.(1),
       );
     };
-    const listeners = signals.map((signal) => [signal, () => react(signal)] as const);
+    const listeners = new Map<string | symbol, () => void>(
+      signals.map((signal) => [signal, () => react(signal)]),
+    );
+
+    /**
+     * Move a listener of ours back to the front after another listener was prepended ahead of it.
+     */
+    const keepFirst = (event: string | symbol, added: unknown): void => {
+      const listener = listeners.get(event);
+
+      if (!listener || added === listener) {
+        return;
+      }
+
+      // Node adds the listener after this event, so the move waits for it; a signal is delivered
+      // on a later turn of the event loop.
+      queueMicrotask(() => {
+        if (
+          listeners.get(event) !== listener ||
+          process.listeners(event as TSignal)[0] === listener
+        ) {
+          return;
+        }
+
+        process.off(event, listener);
+        process.prependListener(event as TSignal, listener);
+      });
+    };
 
     // Ahead of earlier listeners, so shouldHandle still sees a process.once handler that Node
-    // removes before calling it.
-    listeners.forEach(([signal, listener]) => process.prependListener(signal, listener));
+    // removes before calling it; it stays first when a later listener is prepended as well.
+    listeners.forEach((listener, signal) => process.prependListener(signal as TSignal, listener));
 
-    return () => listeners.forEach(([signal, listener]) => process.off(signal, listener));
+    if (shouldHandle) {
+      process.on('newListener', keepFirst);
+    }
+
+    return () => {
+      process.off('newListener', keepFirst);
+      listeners.forEach((listener, signal) => process.off(signal, listener));
+      listeners.clear();
+    };
   };
 
   const lifecycle: ILifecycle = {

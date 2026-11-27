@@ -1,6 +1,8 @@
+import http from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
 import cliContext from '@constants/cli-context';
+import createNodeLifecycle from '@node/lifecycle';
 
 const { processStopMock } = vi.hoisted(() => ({ processStopMock: vi.fn() }));
 
@@ -243,6 +245,35 @@ describe('ownSignalsUnlessHandled', () => {
 
     expect(older.drained).not.toHaveBeenCalled();
     expect(newer.drained).not.toHaveBeenCalled();
+  });
+
+  it('leaves a signal to a listener the application prepends once later', async () => {
+    const server = http.createServer();
+    const appListener = vi.fn();
+
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+
+    const lifecycle = createNodeLifecycle(server);
+
+    try {
+      ownSignalsUnlessHandled(lifecycle);
+      process.prependOnceListener('SIGTERM', appListener);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      process.emit('SIGTERM');
+
+      expect(appListener).toHaveBeenCalledOnce();
+      expect(lifecycle.isDraining()).toBe(false);
+      expect(processStopMock).not.toHaveBeenCalled();
+
+      process.emit('SIGTERM');
+
+      expect(lifecycle.isDraining()).toBe(true);
+      await vi.waitFor(() => expect(processStopMock).toHaveBeenCalledWith(0));
+    } finally {
+      process.off('SIGTERM', appListener);
+      ownSignals();
+      await lifecycle.close();
+    }
   });
 
   it('releases an Express subscription when the node server takes signals directly', () => {
