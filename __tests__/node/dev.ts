@@ -413,6 +413,21 @@ export default defineEntry(App, routes, {
     expect((await request(`${explicit.url}/`)).body).toContain('Home v1');
   });
 
+  it('reads factory options inherited from a prototype', async () => {
+    writeProject();
+
+    const options = Object.create({
+      logger,
+      mode: 'staging',
+      vite: viteConfig(),
+    }) as ICreateDevServerOptions;
+    const app = await createDevServer(options);
+
+    started.push(app);
+
+    expect(app.vite.config.mode).toBe('staging');
+  });
+
   it('keeps HMR off the parent port when the project turned it off', async () => {
     writeProject();
 

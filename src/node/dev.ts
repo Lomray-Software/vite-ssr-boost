@@ -282,22 +282,38 @@ const createDevServer = async ({
   requestTimeoutMs,
   onDrain,
   onClose,
-  ...prepareOptions
+  mode: givenMode,
+  entrypointName,
+  isHost,
+  port,
+  vite: inlineConfig,
+  config,
+  loadEntry,
 }: ICreateDevServerOptions = {}): Promise<IDevServer> => {
   // Checked and copied before Vite starts, so a later change to the options never reaches it.
   const healthPaths = resolveHealthPaths(health);
 
   const { resolveConfig } = await import('vite');
   // TLS is chosen in the same mode Vite then runs in.
-  const mode = getDevMode(prepareOptions.mode, prepareOptions.vite);
+  const mode = getDevMode(givenMode, inlineConfig);
   const resolved = await resolveConfig(
-    await getManagedViteConfig(prepareOptions.vite ?? {}, mode),
+    await getManagedViteConfig(inlineConfig ?? {}, mode),
     'serve',
     mode,
   );
   const tls = await resolveTlsOptions(resolved.server.https);
   const server = tls ? https.createServer(tls) : http.createServer();
-  const app = await prepareDev({ ...prepareOptions, mode, server });
+  // Passed by name, so options the caller inherits from a prototype still count.
+  const app = await prepareDev({
+    server,
+    mode,
+    entrypointName,
+    isHost,
+    port,
+    vite: inlineConfig,
+    config,
+    loadEntry,
+  });
   const render = adapterNode(app.handler, { compression });
   const lifecycle = createLifecycle(server, {
     health: healthPaths,

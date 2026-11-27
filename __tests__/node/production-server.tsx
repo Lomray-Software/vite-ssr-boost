@@ -270,6 +270,46 @@ describe('prepareProduction', () => {
     ).rejects.toBeNull();
   });
 
+  it('reads factory options inherited from a prototype', async () => {
+    const loadEntry = vi.fn(entryModule());
+    const options = Object.create({
+      buildDir,
+      logger,
+      loadEntry,
+      static: false,
+    }) as ICreateProductionServerOptions;
+    const app = await createProductionServer(options);
+
+    started.push(app);
+
+    expect(loadEntry).toHaveBeenCalledWith(join(buildDir, 'server/server.js'));
+    expect(app.staticMiddleware).toBeUndefined();
+  });
+
+  it('reads static options inherited from a prototype', async () => {
+    const { staticMiddleware } = await prepareProduction({
+      buildDir,
+      loadEntry: entryModule(),
+      static: Object.create({ etag: false }) as { etag: boolean },
+    });
+    const server = http.createServer((req, res) => {
+      staticMiddleware!(req, res, () => res.end('SSR'));
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+    try {
+      const { port } = server.address() as AddressInfo;
+      const file = await request(`http://127.0.0.1:${port}/robots.txt`);
+
+      expect(file.body.toString()).toBe('User-agent: *');
+      expect(file.headers.etag).toBeUndefined();
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('leaves client files to the host when static serving is disabled', async () => {
     const { staticMiddleware } = await prepareProduction({
       buildDir,

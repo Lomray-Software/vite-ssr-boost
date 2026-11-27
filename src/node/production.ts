@@ -218,15 +218,17 @@ const prepareProduction = async ({
     staticMiddleware:
       staticOptions === false
         ? undefined
-        : serveStatic({
-            ...staticOptions,
-            immutableFiles: staticOptions.immutableFiles ?? loadFingerprintedFiles(paths.root),
-            root: paths.publicDir,
-            basename: new URL(paths.base, 'http://localhost').pathname,
-            isSPA,
-            shellFile: paths.indexFile,
-            hasAccessIndexHtml,
-          }),
+        : // Own options are copied and inherited ones stay reachable, so serveStatic reads both.
+          serveStatic(
+            Object.assign(Object.create(staticOptions) as IServeStaticOptions, staticOptions, {
+              immutableFiles: staticOptions.immutableFiles ?? loadFingerprintedFiles(paths.root),
+              root: paths.publicDir,
+              basename: new URL(paths.base, 'http://localhost').pathname,
+              isSPA,
+              shellFile: paths.indexFile,
+              hasAccessIndexHtml,
+            }),
+          ),
   };
 };
 
@@ -246,12 +248,25 @@ const createProductionServer = async ({
   requestTimeoutMs,
   onDrain,
   onClose,
-  ...prepareOptions
+  buildDir,
+  modulePreload,
+  isSPA,
+  static: staticOptions,
+  hasAccessIndexHtml,
+  loadEntry,
 }: ICreateProductionServerOptions = {}): Promise<IProductionServer> => {
   // Checked and copied before the entry loads, so a later change to the options never reaches it.
   const healthPaths = resolveHealthPaths(health);
 
-  const app = await prepareProduction(prepareOptions);
+  // Passed by name, so options the caller inherits from a prototype still count.
+  const app = await prepareProduction({
+    buildDir,
+    modulePreload,
+    isSPA,
+    static: staticOptions,
+    hasAccessIndexHtml,
+    loadEntry,
+  });
   const render = adapterNode(app.handler, { compression });
   const server = tls ? https.createServer(tls) : http.createServer();
   const lifecycle = createLifecycle(server, {
