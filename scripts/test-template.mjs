@@ -26,6 +26,7 @@ import {
   measureProductionColdStart,
   assertProductionBudgets,
 } from './helpers/production-budget.mjs';
+import countDiagnostics from './helpers/diagnostics.mjs';
 import measureProductionLoad from './helpers/production-load.mjs';
 
 const TEMPLATE_HOME_MARKER = 'SPA, SSR, Mobx, Consistent Suspense, Meta tags';
@@ -94,25 +95,15 @@ const getPort = async () => {
 };
 
 /**
- * Count one process's diagnostics. The template keeps Express-only hooks, so their
- * deprecation is expected, but each hook must be reported at most once per process.
+ * Add one process's diagnostics to the acceptance totals; a repeated deprecation fails the run.
  */
 const recordDiagnostics = (output) => {
-  const deprecations = new Set();
+  const counts = countDiagnostics(stripVTControlCharacters(output));
 
-  for (const [, code, detail] of stripVTControlCharacters(output).matchAll(
-    /\b(SSR_BOOST_[A-Z_]+)(?::|\])([^\n]*)/g,
-  )) {
-    if (code === 'SSR_BOOST_SSR_POLICY') {
-      acceptance.policyInfo += 1;
-    } else if (code === 'SSR_BOOST_DEPRECATED_EXPRESS_HOOK') {
-      assert.ok(!deprecations.has(detail), `Express hook deprecation repeated:${detail}`);
-      deprecations.add(detail);
-      acceptance.expressHookDeprecations += 1;
-    } else {
-      acceptance.diagnosticsWarnings += 1;
-    }
-  }
+  assert.deepEqual(counts.repeated, [], 'Express hook deprecation repeated within one process.');
+  acceptance.policyInfo += counts.policyInfo;
+  acceptance.expressHookDeprecations += counts.expressHookDeprecations;
+  acceptance.diagnosticsWarnings += counts.unexpected;
 };
 
 const start = (args, env = {}) => {
