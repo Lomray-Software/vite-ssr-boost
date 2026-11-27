@@ -178,7 +178,8 @@ async function createServer(
      */
     run: ({ version, isPrintInfo = true } = {}): Server => {
       const { port, host } = config.getParams();
-      // In prod the TLS options come from the Vite the config holds, as in 8.6.
+      // As in 8.6, prod takes TLS options only from a Vite the caller set on the config; the CLI
+      // sets none in prod, so its production server is plain HTTP.
       const transportVite = config.isProd ? config.getVite() : mountedVite;
       const isHTTPS = Boolean(transportVite?.config?.server?.https);
 

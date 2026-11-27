@@ -51,12 +51,14 @@ so production needs neither Vite nor Express. `--server node|express` overrides 
 builds without it start Express. An Express entry (`adapters/express/entry`) keeps running on
 `managedServer: 'express'`, and the node server refuses it with an error that says so.
 
-The CLI orders the node server as health probes, client files, then SSR. It drains on `SIGTERM` and
+The CLI orders the node server as client files, then SSR. It drains on `SIGTERM` and
 `SIGINT` for both servers; an Express application that subscribes to them itself keeps its own
 handling. To run the same server from your own process, use `createProductionServer`
 and `createDevServer`, or the lower-level `prepareProduction` and `prepareDev`; see
 [Node production](/api/node-production) and [Node development](/api/node-dev).
-`build-vercel` and `--serverless` keep the Express handler in this release.
+`build-vercel` and `--serverless` keep the Express handler in this release. The CLI does not turn
+on health probes; pass `health: true` to `createProductionServer` or `createDevServer` in your own
+launcher when a load balancer needs them.
 
 ## Existing Express applications
 

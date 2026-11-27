@@ -157,6 +157,10 @@ as `assets/logo-abcd1234.svg`, is listed too. Give your own `immutableFiles` whe
 that with stable content. Setting
 `maxAge`, `immutable` or `cacheControl: false` hands the policy for every file to you.
 
+In SSR builds the top-level names of the client directory are read once, when the middleware is
+created. A top-level file or folder added later goes to `next()` until the server restarts; files
+added under a name that already existed are served at once.
+
 With `isSPA`, the shell file is sent with `Cache-Control: no-cache`, the same policy as the route
 fallback, whether it is reached as `/` or by its own name. This differs from the managed Express
 server, which serves that file with serve-static's revalidating default.
@@ -230,6 +234,11 @@ start. The CLI uses it:
 process is exiting is skipped. With the Express server the CLI checks, when a signal arrives,
 whether the application subscribed its own handler for it and leaves that signal alone if so.
 Embedded and serverless hosts own their lifecycle and leave it uncalled.
+
+A listener the application adds later with `prependListener` or `prependOnceListener` is moved
+behind the lifecycle on the next microtask. A signal raised with `process.emit` in that same
+synchronous turn reaches the application's listener first; a signal from the operating system
+always arrives on a later turn.
 
 Timeouts stay at Node's defaults unless set. Behind a load balancer whose idle timeout is 60
 seconds, keep the server's keep-alive longer than the balancer's so the balancer closes first:
