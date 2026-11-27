@@ -418,7 +418,7 @@ describe('cli integration', () => {
     expect(pick.close).toHaveBeenCalledTimes(1);
   });
 
-  it('should close the Vite the Express server created when run throws under --server', async () => {
+  it('should close the Vite the adapter created when run throws', async () => {
     const own = devVite();
     const failure = new RangeError('bad port');
 

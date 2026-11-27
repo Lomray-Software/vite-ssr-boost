@@ -100,6 +100,30 @@ const createDevConfig = (vite: Record<string, unknown> = {}) => ({
 });
 
 /**
+ * Dev config whose getVite answers only what setVite stored, as ServerConfig does.
+ */
+const createStatefulDevConfig = () => {
+  let stored: unknown;
+
+  return {
+    ...createDevConfig(),
+    setVite: vi.fn((vite: unknown) => {
+      stored = vite;
+    }),
+    getVite: () => stored,
+  };
+};
+
+/**
+ * A dev Vite double with its own middlewares and close.
+ */
+const createViteDouble = (middlewares: string) => ({
+  middlewares,
+  config: { server: { https: false, host: '127.0.0.1' } },
+  close: vi.fn().mockResolvedValue(undefined),
+});
+
+/**
  * Wait for the queued listen callback.
  */
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -370,6 +394,79 @@ describe('node server', () => {
     expect(next).toHaveBeenCalledTimes(1);
     expect(res.writeHead).toHaveBeenCalledWith(200, expect.anything());
     expect(end).toHaveBeenCalledWith('ok');
+  });
+
+  it('should create its own dev Vite in middleware mode when none is supplied', async () => {
+    const own = createViteDouble('own-middleware');
+    const config = createStatefulDevConfig();
+
+    createViteServer.mockResolvedValueOnce(own);
+
+    await createServer(config as never);
+
+    expect(createViteServer).toHaveBeenCalledExactlyOnceWith({
+      server: { middlewareMode: true, watch: { usePolling: true, interval: 100 } },
+      appType: 'custom',
+      mode: 'development',
+    });
+    expect(config.setVite).toHaveBeenCalledExactlyOnceWith(own);
+    expect(appUse).toHaveBeenCalledWith('own-middleware');
+  });
+
+  it('should create a fresh dev Vite for a second start after a drain', async () => {
+    const first = createViteDouble('first-middleware');
+    const second = createViteDouble('second-middleware');
+    const config = createStatefulDevConfig();
+
+    createViteServer.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+
+    const started = await createServer(config as never);
+
+    started.run({ isPrintInfo: false });
+    await flush();
+    await started.getLifecycle()!.close();
+
+    expect(first.close).toHaveBeenCalledOnce();
+
+    await createServer(config as never);
+
+    expect(createViteServer).toHaveBeenCalledTimes(2);
+    expect(config.setVite).toHaveBeenLastCalledWith(second);
+    expect(config.getVite()).toBe(second);
+    expect(second.close).not.toHaveBeenCalled();
+  });
+
+  it('should mount a supplied dev Vite without creating another', async () => {
+    const supplied = createViteDouble('supplied-middleware');
+    const config = createStatefulDevConfig();
+
+    await createServer(config as never, {}, supplied as never);
+
+    expect(createViteServer).not.toHaveBeenCalled();
+    expect(appUse).toHaveBeenCalledWith('supplied-middleware');
+    expect(config.setVite).toHaveBeenCalledExactlyOnceWith(supplied);
+  });
+
+  it('should close its own dev Vite once when the app setup fails', async () => {
+    const own = createViteDouble('own-middleware');
+
+    createViteServer.mockResolvedValueOnce(own);
+    prepareServer.onAppCreated.mockRejectedValueOnce(new Error('setup failed'));
+
+    await expect(createServer(createStatefulDevConfig() as never)).rejects.toThrow('setup failed');
+    expect(own.close).toHaveBeenCalledOnce();
+  });
+
+  it('should leave a supplied dev Vite open when the app setup fails', async () => {
+    const supplied = createViteDouble('supplied-middleware');
+
+    prepareServer.onAppCreated.mockRejectedValueOnce(new Error('setup failed'));
+
+    await expect(
+      createServer(createStatefulDevConfig() as never, {}, supplied as never),
+    ).rejects.toThrow('setup failed');
+    expect(supplied.close).not.toHaveBeenCalled();
+    expect(createViteServer).not.toHaveBeenCalled();
   });
 
   it('should register prod middlewares for spa mode', async () => {
