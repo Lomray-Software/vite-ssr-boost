@@ -116,9 +116,6 @@ per start with the Express server and three times with the node server (the serv
 and the Vite server); with it, once and twice. Keep side effects in it (logging, writing files)
 safe to repeat.
 
-An explicit `--build-dir` (or `buildDir`) is now used as given. If the directory is missing, `start`
-and `preview` stop with an error instead of silently serving `./build` or `./dist`.
-
 ## Check the upgraded application
 
 Run development and production builds, then check hydration, lazy-route JS/CSS, redirects, unmatched-route 404s, error middleware and any HTML transform. If you use parsed request bodies, streaming or cancellation, exercise those paths too.

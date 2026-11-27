@@ -29,8 +29,16 @@ describe('ServerConfig', () => {
     });
   });
 
-  it('should keep an explicit build root even when a conventional one exists', () => {
+  it('should fall back from a missing build root to a conventional one as in 8.6', () => {
     vi.spyOn(fs, 'existsSync').mockImplementation((filepath) => filepath === './build');
+
+    const config = ServerConfig.init({ isProd: true }, { root: './missing' });
+
+    expect(config.getParams().root).toBe('./build');
+  });
+
+  it('should keep a missing build root when no conventional one exists', () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
     const config = ServerConfig.init({ isProd: true }, { root: './missing' });
 

@@ -141,8 +141,7 @@ Common flags:
 - `--module-preload`
 - `--server <node|express>`
 
-`--build-dir` is used as given: when the directory does not exist the command stops with an error
-instead of falling back to `./build` or `./dist`.
+When the `--build-dir` directory does not exist, the command falls back to `./build`, then `./dist`.
 
 ## `ssr-boost preview`
 

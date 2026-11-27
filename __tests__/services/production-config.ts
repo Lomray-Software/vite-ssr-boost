@@ -76,7 +76,7 @@ describe('production build configuration', () => {
     expect(() => loadProductionConfig(directory)).toThrow('Run ssr-boost build again.');
   });
 
-  it('uses an explicit build directory alone instead of a conventional one', () => {
+  it('falls back from a missing build directory to a conventional one as in 8.6', () => {
     const config = {
       version: 1,
       root: '..',
@@ -91,7 +91,11 @@ describe('production build configuration', () => {
     fs.writeFileSync(path.join(directory, 'build/server/ssr-boost.json'), JSON.stringify(config));
     process.chdir(directory);
 
-    expect(() => loadProductionConfig('missing')).toThrow(
+    expect(loadProductionConfig('missing')).toEqual({
+      ...config,
+      root: path.join(fs.realpathSync(directory), 'build'),
+    });
+    expect(() => loadProductionConfig('missing', true)).toThrow(
       `Build directory not found: ${path.join(fs.realpathSync(directory), 'missing')}`,
     );
     expect(loadProductionConfig()).toEqual({

@@ -134,11 +134,13 @@ class ServerConfig {
    * Lookup build folder
    */
   protected getBuildDir(root?: string): string {
-    if (root !== undefined) {
-      return root;
+    for (const dir of [root, ...this.defaultBuildRoots]) {
+      if (dir && fs.existsSync(dir)) {
+        return dir;
+      }
     }
 
-    return this.defaultBuildRoots.find((dir) => fs.existsSync(dir)) ?? this.defaultBuildRoots[0];
+    return root ?? this.defaultBuildRoots[0];
   }
 
   /**

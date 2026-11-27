@@ -120,10 +120,11 @@ const DEFAULT_PATHS: Omit<IProductionPaths, 'root'> = {
 
 /**
  * Resolve build paths from ssr-boost.json, falling back to the conventional layout.
+ * An explicit build directory is used alone and must exist.
  */
 const resolvePaths = (buildDir?: string): IProductionPaths => {
-  const config = loadProductionConfig(buildDir);
-  const root = config?.root ?? path.resolve(findBuildDir(buildDir) ?? DEFAULT_BUILD_DIRS[0]);
+  const config = loadProductionConfig(buildDir, true);
+  const root = config?.root ?? path.resolve(findBuildDir(buildDir, true) ?? DEFAULT_BUILD_DIRS[0]);
   const paths = config ?? DEFAULT_PATHS;
 
   return {

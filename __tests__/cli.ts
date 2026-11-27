@@ -28,7 +28,9 @@ const {
   createProductionServerMock,
   createDevServerMock,
   loadProductionConfigMock,
+  findBuildDirMock,
 } = vi.hoisted(() => ({
+  findBuildDirMock: vi.fn(),
   createProductionServerMock: vi.fn(),
   createDevServerMock: vi.fn(),
   loadProductionConfigMock: vi.fn(),
@@ -77,6 +79,7 @@ vi.mock('@node/dev', () => ({
 }));
 vi.mock('@services/production-config', () => ({
   default: loadProductionConfigMock,
+  findBuildDir: findBuildDirMock,
 }));
 
 /**
@@ -188,6 +191,29 @@ describe('cli integration', () => {
     expect(createProductionServerMock).toHaveBeenCalledTimes(2);
     expect(release).toHaveBeenCalledTimes(1);
     expect(createServerMock).not.toHaveBeenCalled();
+  });
+
+  it('should fall back from a missing build directory on the node server as in 8.6', async () => {
+    const { lifecycle } = createLifecycleMock();
+
+    createProductionServerMock.mockResolvedValue({
+      server: 'node-server',
+      lifecycle,
+      listen: vi.fn().mockResolvedValue(null),
+    });
+    findBuildDirMock.mockReturnValueOnce('./build');
+    await runProd({ version: '1', server: 'node', buildDir: 'missing', isPrintInfo: false });
+
+    expect(findBuildDirMock).toHaveBeenCalledWith('missing');
+    expect(createProductionServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ buildDir: './build' }),
+    );
+
+    await runProd({ version: '1', server: 'node', buildDir: 'missing', isPrintInfo: false });
+
+    expect(createProductionServerMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ buildDir: 'missing' }),
+    );
   });
 
   it('should let the flag override a persisted node selection', async () => {

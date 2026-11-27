@@ -8,7 +8,7 @@ import createFocusOnly from '@helpers/create-focus-only';
 import printServerInfo from '@helpers/print-server-info';
 import type { ILifecycle } from '@node/lifecycle';
 import type { IBuildParams } from '@services/build';
-import loadProductionConfig from '@services/production-config';
+import loadProductionConfig, { findBuildDir } from '@services/production-config';
 import type { TManagedServer } from '@services/production-config';
 import ServerConfig from '@services/server-config';
 
@@ -41,7 +41,8 @@ const runNodeServer = async (
   const { createProductionServer } = await import('@node/production');
   const { port, host, isSPA } = config.getParams();
   const { server, lifecycle, listen } = await createProductionServer({
-    buildDir,
+    // The CLI keeps the 8.6 lookup, so a missing --build-dir falls back here too.
+    buildDir: findBuildDir(buildDir) ?? buildDir,
     modulePreload: config.isModulePreload,
     isSPA,
     // Express compresses by default, so the managed node server does too.

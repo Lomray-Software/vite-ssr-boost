@@ -23,11 +23,14 @@ const DEFAULT_BUILD_DIRS = ['./build', './dist'];
 const FINGERPRINTED_FILES = 'server/fingerprinted-files.json';
 
 /**
- * Pick the build directory: an explicit one alone, otherwise the first conventional one present.
+ * Pick the build directory. The CLI keeps the 8.6 lookup: the first present of the given one,
+ * ./build and ./dist. A strict lookup uses an explicit directory alone and requires it to exist.
  */
-const findBuildDir = (buildDir?: string): string | undefined => {
-  if (buildDir === undefined) {
-    return DEFAULT_BUILD_DIRS.find((candidate) => fs.existsSync(candidate));
+const findBuildDir = (buildDir?: string, isStrict = false): string | undefined => {
+  if (buildDir === undefined || !isStrict) {
+    return [buildDir, ...DEFAULT_BUILD_DIRS].find(
+      (candidate) => candidate && fs.existsSync(candidate),
+    );
   }
 
   if (!fs.existsSync(buildDir)) {
@@ -40,8 +43,11 @@ const findBuildDir = (buildDir?: string): string | undefined => {
 /**
  * Read relocatable build settings while retaining conventional paths for older builds.
  */
-const loadProductionConfig = (buildDir?: string): IProductionConfig | undefined => {
-  const directory = findBuildDir(buildDir);
+const loadProductionConfig = (
+  buildDir?: string,
+  isStrict = false,
+): IProductionConfig | undefined => {
+  const directory = findBuildDir(buildDir, isStrict);
 
   if (!directory) {
     return;
