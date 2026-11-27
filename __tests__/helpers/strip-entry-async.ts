@@ -1,3 +1,5 @@
+import { parseFragment } from 'parse5';
+import type { DefaultTreeAdapterTypes } from 'parse5';
 import { describe, expect, it } from 'vitest';
 import stripEntryAsync from '@helpers/strip-entry-async';
 
@@ -225,6 +227,36 @@ describe('stripEntryAsync', () => {
     expect(stripEntryAsync(foreign, '/', 'client.ts')).toBe(
       `<script src="/client.ts"></script><base href="https://cdn.test/">${rooted}`,
     );
+  });
+
+  it('should resolve from the document URL when the base element is a data or script URL', () => {
+    for (const href of ['data:,x', 'javascript:void(0)']) {
+      const tail = '<base href="/docs/"><script src="client.ts"';
+
+      expect(
+        stripEntryAsync(
+          `<base href="${href}">${tail} async></script>`,
+          '/app/',
+          'client.ts',
+          '/app/page',
+        ),
+      ).toBe(`<base href="${href}">${tail}></script>`);
+    }
+  });
+
+  it('should resolve a script from the base the parser had reached, not the tree order', () => {
+    const html = '<table><script src="client.ts" async></script><base href="/docs/"></table>';
+
+    expect(stripEntryAsync(html, '/app/', 'client.ts', '/app/page')).toBe(
+      '<table><script src="client.ts"></script><base href="/docs/"></table>',
+    );
+  });
+
+  it('should keep the self-closing slash out of an unquoted src', () => {
+    const result = stripEntryAsync('<script src=/client.ts async/></script>', '/', 'client.ts');
+    const [script] = parseFragment(result).childNodes as DefaultTreeAdapterTypes.Element[];
+
+    expect(script.attrs).toEqual([{ name: 'src', value: '/client.ts' }]);
   });
 
   it('should keep async on a script inside SVG, which is not an HTML script', () => {

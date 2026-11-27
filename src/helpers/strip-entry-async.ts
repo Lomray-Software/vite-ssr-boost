@@ -72,63 +72,86 @@ const getSrcPath = (src: string, base: URL): string | undefined => {
 
 /**
  * Base a script after this base element resolves against: the document URL when the href does
- * not parse, as in the browser, or none when it names a scheme or a host, which sends every src
- * away from the entry.
+ * not parse or is a data or javascript URL, as in the browser, or none when it names another
+ * scheme or a host, which sends every src away from the entry.
  */
 const resolveBase = (href: string, documentBase: URL): URL | undefined => {
   const value = normalizeUrl(href);
   const url = parseUrl(value, documentBase);
 
-  if (!url) {
+  // Such a base never becomes the document base; the document URL stays in effect.
+  if (!url || /^(data|javascript):$/.test(url.protocol)) {
     return documentBase;
   }
 
   return hasSchemeOrHost(value) || url.origin !== documentBase.origin ? undefined : url;
 };
 
-interface IScanState {
-  /** The base the next script resolves against; undefined when no later script is the entry. */
-  base: URL | undefined;
-  /** Whether the first HTML base element with an href was reached. */
-  hasBase: boolean;
-}
+type TElement = DefaultTreeAdapterTypes.Element;
 
 /**
- * Collect, in document order, the source ranges of async attributes on HTML scripts whose src
- * is the entry. The browser fetches a script against the base in effect when the parser reaches
- * it: the document URL before the first HTML base element with an href, that base after it.
- * A base or a script inside SVG or MathML is foreign content and ignored.
+ * Collect the HTML base and script elements under a node. A base or a script inside SVG or
+ * MathML is foreign content, and template contents are inert, so neither is collected.
  */
-const collectAsyncRanges = (
-  node: TNode,
-  entryPath: string,
-  documentBase: URL,
-  state: IScanState,
-  ranges: [number, number][],
-): void => {
-  if ('tagName' in node && node.namespaceURI === htmlSpec.NS.HTML) {
-    const href = node.tagName === 'base' && node.attrs.find(({ name }) => name === 'href');
-
-    if (href && !state.hasBase) {
-      state.hasBase = true;
-      state.base = resolveBase(href.value, documentBase);
-    }
-
-    if (node.tagName === 'script' && state.base) {
-      const src = node.attrs.find(({ name }) => name === 'src');
-      const location = node.sourceCodeLocation?.attrs?.async;
-
-      if (src?.value && location && getSrcPath(src.value, state.base) === entryPath) {
-        ranges.push([location.startOffset, location.endOffset]);
-      }
-    }
+const collectElements = (node: TNode, elements: TElement[]): void => {
+  if (
+    'tagName' in node &&
+    node.namespaceURI === htmlSpec.NS.HTML &&
+    (node.tagName === 'base' || node.tagName === 'script')
+  ) {
+    elements.push(node);
   }
 
   if ('childNodes' in node) {
-    node.childNodes.forEach((child) =>
-      collectAsyncRanges(child, entryPath, documentBase, state, ranges),
-    );
+    node.childNodes.forEach((child) => collectElements(child, elements));
   }
+};
+
+/**
+ * Offset in the source where an element starts.
+ */
+const getStartOffset = (element: TElement): number => element.sourceCodeLocation?.startOffset ?? 0;
+
+/**
+ * Source ranges of async attributes on HTML scripts whose src is the entry. The browser fetches
+ * a script against the base in effect when the parser reaches it: the document URL before the
+ * first HTML base element with an href, that base after it. Elements are taken in source order,
+ * since the tree builder can move a base, out of a table for one, ahead of an earlier script.
+ */
+const collectAsyncRanges = (
+  document: DefaultTreeAdapterTypes.Document,
+  entryPath: string,
+  documentBase: URL,
+): [number, number][] => {
+  const elements: TElement[] = [];
+  const ranges: [number, number][] = [];
+  let base: URL | undefined = documentBase;
+  let hasBase = false;
+
+  collectElements(document, elements);
+  elements
+    .sort((left, right) => getStartOffset(left) - getStartOffset(right))
+    .forEach((element) => {
+      const href = element.tagName === 'base' && element.attrs.find(({ name }) => name === 'href');
+
+      if (href && !hasBase) {
+        hasBase = true;
+        base = resolveBase(href.value, documentBase);
+      }
+
+      if (element.tagName !== 'script' || !base) {
+        return;
+      }
+
+      const src = element.attrs.find(({ name }) => name === 'src');
+      const location = element.sourceCodeLocation?.attrs?.async;
+
+      if (src?.value && location && getSrcPath(src.value, base) === entryPath) {
+        ranges.push([location.startOffset, location.endOffset]);
+      }
+    });
+
+  return ranges;
 };
 
 /**
@@ -147,15 +170,7 @@ const stripEntryAsync = (
   // The request target is a path on this origin, even when it starts with two slashes.
   const documentBase =
     (documentUrl.startsWith('/') && parseUrl(`${ORIGIN}${documentUrl}`)) || new URL('/', ORIGIN);
-  const ranges: [number, number][] = [];
-
-  collectAsyncRanges(
-    document,
-    entryPath,
-    documentBase,
-    { base: documentBase, hasBase: false },
-    ranges,
-  );
+  const ranges = collectAsyncRanges(document, entryPath, documentBase);
 
   if (!ranges.length) {
     return html;
@@ -164,11 +179,14 @@ const stripEntryAsync = (
   // Cut by position from the end, together with the whitespace before each attribute.
   const result = ranges
     .sort(([left], [right]) => right - left)
-    .reduce(
+    .reduce((text, [start, end]) => {
+      const rest = text.slice(end);
       // Only HTML whitespace separates attributes; a no-break space belongs to the value before.
-      (text, [start, end]) => text.slice(0, start).replace(/[\t\n\f\r ]+$/, '') + text.slice(end),
-      html,
-    );
+      const head = text.slice(0, start).replace(/[\t\n\f\r ]+$/, '');
+
+      // A slash right after the cut would join an unquoted value before it, so one space stays.
+      return `${head}${rest.startsWith('/') ? ' ' : ''}${rest}`;
+    }, html);
 
   // The parser reports only the first of repeated attributes, so a repeated async needs a pass.
   return stripEntryAsync(result, base, clientFile, documentUrl);
