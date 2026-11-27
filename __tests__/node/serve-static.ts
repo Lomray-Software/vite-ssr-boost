@@ -388,13 +388,34 @@ describe('node serveStatic', () => {
 
     expect(status).toBe(301);
     expect(location).toBe('/base/assets/');
+  });
 
-    // At the root mount a raw target missed the shell key while serve-static found the file.
+  it('redirects an absolute-form directory target to its path inside an Express app', async () => {
+    const app = express();
+
+    app.use(serveStatic({ root, basename: '/base', isSPA: false }));
+    app.use((_req, res) => {
+      res.end('SSR');
+    });
+
+    const server = http.createServer(app);
+
+    servers.push(server);
+
+    const node = await listen(server);
+    const { status, location } = await observeTarget(node, 'http://other.example/base/assets');
+
+    expect(status).toBe(301);
+    expect(location).toBe('/base/assets/');
+  });
+
+  it('reads an absolute-form target at the root mount by its path', async () => {
+    // A raw target missed the shell key while serve-static found the file.
     for (const options of [{ extensions: ['html'] }, { fallthrough: false }]) {
-      const node = await startNode(options, false, { basename: '/' });
-      const { origin } = new URL(node);
+      const rootMounted = await startNode(options, false, { basename: '/' });
+      const { origin } = new URL(rootMounted);
 
-      expect((await observeTarget(node, `${origin}/index.html`)).body).toBe('SSR');
+      expect((await observeTarget(rootMounted, `${origin}/index.html`)).body).toBe('SSR');
     }
   });
 

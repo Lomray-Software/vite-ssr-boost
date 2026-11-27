@@ -312,8 +312,9 @@ const serveStatic = ({
       return;
     }
 
-    // serve-static builds directory redirects from originalUrl, so a client host never leaks in.
-    req.originalUrl = originalUrl ?? target;
+    // serve-static builds directory redirects from originalUrl, so a client host never leaks in,
+    // also when Express or Connect already copied an absolute-form target there.
+    req.originalUrl = originalUrl === undefined ? target : (getOriginForm(originalUrl) ?? target);
     req.url = mountedUrl;
 
     /**
