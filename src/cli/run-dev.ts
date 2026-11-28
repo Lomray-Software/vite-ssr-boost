@@ -4,6 +4,7 @@ import type { ViteDevServer } from 'vite';
 import createDevVite from '@cli/helpers/create-dev-vite';
 import ownSignals, { ownSignalsUnlessHandled } from '@cli/helpers/own-signals';
 import PLUGIN_NAME from '@constants/plugin-name';
+import lazyLogger from '@helpers/lazy-logger';
 import type { IPluginConfig } from '@helpers/plugin-config';
 import printServerInfo from '@helpers/print-server-info';
 import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
@@ -52,18 +53,23 @@ const runNodeServer = async ({
 }: IRunDevParams): Promise<IRunDevOut> => {
   const { createDevServer } = await import('@node/dev');
   const app = await createDevServer({ mode, entrypointName, isHost, port });
-  const { host, port: resolvedPort } = app.config.getParams();
-
-  if (isHost) {
-    // Print the network URL the same way the Express dev server does.
-    app.vite.config.server.host = host;
-  }
 
   try {
+    const { host, port: resolvedPort } = app.config.getParams();
+
+    if (isHost) {
+      // Print the network URL the same way the Express dev server does.
+      app.vite.config.server.host = host;
+    }
+
     await app.listen(resolvedPort, host);
   } catch (error) {
-    // a failed bind must not leave Vite watchers and HMR sockets behind
-    return rethrowAfterCleanup(error, app.close, app.config.getLogger());
+    // A failed start must not leave Vite watchers and HMR sockets behind.
+    return rethrowAfterCleanup(
+      error,
+      app.close,
+      lazyLogger(() => app.config.getLogger()),
+    );
   }
 
   if (isPrintInfo) {
@@ -109,7 +115,11 @@ async function runDev(params: IRunDevParams): Promise<IRunDevOut> {
   try {
     managedServer = pick && readManagedServer(pick);
   } catch (error) {
-    return rethrowAfterCleanup(error, () => pick?.close(), config.getLogger());
+    return rethrowAfterCleanup(
+      error,
+      () => pick?.close(),
+      lazyLogger(() => config.getLogger()),
+    );
   }
 
   if (pick && managedServer === 'node') {
@@ -131,7 +141,11 @@ async function runDev(params: IRunDevParams): Promise<IRunDevOut> {
     server = created.run({ version, isPrintInfo });
     lifecycle = created.getLifecycle();
   } catch (error) {
-    return rethrowAfterCleanup(error, () => vite?.close(), config.getLogger());
+    return rethrowAfterCleanup(
+      error,
+      () => vite?.close(),
+      lazyLogger(() => config.getLogger()),
+    );
   }
 
   ownSignalsUnlessHandled(lifecycle);

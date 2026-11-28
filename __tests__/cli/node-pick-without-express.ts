@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import runDev from '@cli/run-dev';
 import PLUGIN_NAME from '@constants/plugin-name';
+import ServerConfig from '@services/server-config';
 
 const { createDevViteMock, createDevServerMock } = vi.hoisted(() => ({
   createDevViteMock: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('@cli/helpers/create-dev-vite', () => ({ default: createDevViteMock }));
 vi.mock('@node/dev', () => ({ createDevServer: createDevServerMock }));
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -81,4 +83,37 @@ describe('ssr-boost dev node pick', () => {
     expect(close).toHaveBeenCalledOnce();
     expect(createDevServerMock).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['reading the server selection', true, /selection getter failed/],
+    ['loading Express', false, /express adapter loaded/],
+  ])(
+    'should keep the error of %s and close the picking Vite when the logger cannot be read',
+    async (_, isBrokenSelection, message) => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      const pluginOptions = {};
+
+      if (isBrokenSelection) {
+        Object.defineProperty(pluginOptions, 'managedServer', {
+          get: () => {
+            throw new Error('selection getter failed');
+          },
+        });
+      }
+      vi.spyOn(ServerConfig.prototype, 'getLogger').mockImplementation(() => {
+        throw new Error('logger failed');
+      });
+      createDevViteMock.mockResolvedValue({
+        config: { plugins: [{ name: PLUGIN_NAME, pluginOptions }] },
+        close,
+      });
+
+      const error = (await runDev({ version: '1', isPrintInfo: false, mode: 'development' }).catch(
+        (reason: unknown) => reason,
+      )) as Error & { cause?: Error };
+
+      expect((error.cause ?? error).message).toMatch(message);
+      expect(close).toHaveBeenCalledOnce();
+    },
+  );
 });
