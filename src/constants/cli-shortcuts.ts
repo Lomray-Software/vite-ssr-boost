@@ -5,23 +5,53 @@ import processStop from '@helpers/process-stop';
 import type { IPluginOptions } from '../plugin';
 
 /**
- * Report a failed stop as a best effort, so a failing logger cannot replace the failed result
+ * How long each phase of a stop without a lifecycle may take, as the lifecycle drain per phase
  */
-const reportStopFailure = (config: ICliContext['config'], error: unknown): void => {
-  const message = `failed to stop dev server: ${describeError(error)}`;
-
-  logSafely(() => config?.getLogger()?.info(chalk.red(message)), message);
-};
+const STOP_PHASE_TIMEOUT_MS = 30000;
 
 /**
- * Write a shortcut status line as a best effort: the logger is read at the time of the write
+ * Write a shortcut status line as a best effort: the logger is read at the time of the write and
+ * the console takes the line when there is no logger or it fails
  */
 const reportStatus = (
   config: ICliContext['config'],
   message: string,
   paint: (text: string) => string,
 ): void => {
-  logSafely(() => config?.getLogger()?.info(paint(message)), message);
+  logSafely(() => {
+    const logger = config?.getLogger();
+
+    if (!logger) {
+      return false;
+    }
+
+    logger.info(paint(message));
+
+    return true;
+  }, message);
+};
+
+/**
+ * Report a failed stop as a best effort, so a failing logger cannot replace the failed result
+ */
+const reportStopFailure = (config: ICliContext['config'], error: unknown): void => {
+  reportStatus(config, `failed to stop dev server: ${describeError(error)}`, chalk.red);
+};
+
+/**
+ * Settle a stop phase within its deadline: a phase that outlives it counts as a failed stop, and
+ * the timer is cleared once the phase settles so it never holds the process
+ */
+const settleWithin = <T>(phase: () => Promise<T>, name: string): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${name} timed out after ${STOP_PHASE_TIMEOUT_MS} ms`)),
+      STOP_PHASE_TIMEOUT_MS,
+    );
+  });
+
+  return Promise.race([Promise.resolve().then(phase), deadline]).finally(() => clearTimeout(timer));
 };
 
 /**
@@ -44,12 +74,17 @@ const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<b
   // the first failure wins; kept apart from its value so even a thrown undefined counts
   let failure: { error: unknown } | undefined;
 
-  // stop express server: a close that throws or reports an error still lets vite close
+  // stop express server: a close that throws, reports an error or outlives its deadline still
+  // lets vite close
   if (server) {
     try {
-      const serverError = await new Promise((resolve) => {
-        server.close(resolve);
-      });
+      const serverError = await settleWithin(
+        () =>
+          new Promise((resolve) => {
+            server.close(resolve);
+          }),
+        'server close',
+      );
 
       if (serverError) {
         failure = { error: serverError };
@@ -59,9 +94,9 @@ const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<b
     }
   }
 
-  // stop vite server, also after a failed server close
+  // stop vite server, also after a failed server close, within its own deadline
   try {
-    await config?.getVite()?.close();
+    await settleWithin(async () => config?.getVite()?.close(), 'vite close');
   } catch (error) {
     if (!failure) {
       failure = { error };

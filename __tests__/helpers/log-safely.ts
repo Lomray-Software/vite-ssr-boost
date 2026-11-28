@@ -47,6 +47,22 @@ describe('logSafely', () => {
     expect(consoleError).toHaveBeenCalledExactlyOnceWith('fallback');
   });
 
+  it('should fall back to the console when the write had no logger', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    logSafely(() => false, 'fallback');
+
+    expect(consoleError).toHaveBeenCalledExactlyOnceWith('fallback');
+  });
+
+  it('should not fall back when the write reports it was written', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    logSafely(() => true, 'fallback');
+
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
   it('should not throw when the console fails as well', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {
       throw new Error('no console');

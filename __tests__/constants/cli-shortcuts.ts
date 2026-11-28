@@ -327,4 +327,97 @@ describe('cli-shortcuts', () => {
     expect(stubs.reboot.calledOnceWithExactly(false)).toBe(true);
     expect(stubs.info.lastCall.args[0]).toContain('server restarted successful');
   });
+
+  it('should close vite and exit on "q" when the server close never settles', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const shortcut = shortcuts.find(({ key }) => key === 'q')!;
+      const { context, stubs } = createContext();
+
+      stubs.serverClose.callsFake(() => undefined);
+      stubs.close.returns(new Promise(() => undefined));
+
+      const action = shortcut.action(context);
+
+      await vi.advanceTimersByTimeAsync(30000);
+
+      expect(stubs.close.calledOnce).toBe(true);
+      expect(processStopMock).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(30000);
+      await action;
+
+      expect(stubs.info.lastCall.args[0]).toContain(
+        'failed to stop dev server: server close timed out after 30000 ms',
+      );
+      expect(processStopMock).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should not restart on "r" when the vite close never settles', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const shortcut = shortcuts.find(({ key }) => key === 'r')!;
+      const { context, stubs } = createContext();
+
+      stubs.close.returns(new Promise(() => undefined));
+
+      const action = shortcut.action(context);
+
+      await vi.advanceTimersByTimeAsync(30000);
+      await action;
+
+      expect(stubs.serverClose.calledOnce).toBe(true);
+      expect(stubs.reboot.called).toBe(false);
+      expect(stubs.info.lastCall.args[0]).toContain(
+        'failed to stop dev server: vite close timed out after 30000 ms',
+      );
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should print a failed stop on the console once when there is no logger', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'q')!;
+    const { context, stubs } = createContext('boom');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    context.config = {
+      getLogger: () => undefined,
+      getVite: () => ({ close: stubs.close }),
+    } as never;
+
+    await shortcut.action(context);
+
+    expect(stubs.close.calledOnce).toBe(true);
+    expect(consoleError).toHaveBeenCalledExactlyOnceWith('failed to stop dev server: boom');
+    expect(processStopMock).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+  });
+
+  it('should print the restart status lines on the console when there is no logger', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'r')!;
+    const { context, stubs } = createContext();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    context.config = {
+      getLogger: () => undefined,
+      getVite: () => ({ close: stubs.close }),
+    } as never;
+
+    await shortcut.action(context);
+
+    expect(stubs.reboot.calledOnceWithExactly(false)).toBe(true);
+    expect(consoleError.mock.calls.map(([line]) => line)).toEqual([
+      '\nrestarting server...',
+      'server restarted successful.',
+    ]);
+    consoleError.mockRestore();
+  });
 });

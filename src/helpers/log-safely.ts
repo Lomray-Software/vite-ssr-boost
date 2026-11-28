@@ -20,18 +20,32 @@ const describeError = (error: unknown): string => {
 };
 
 /**
- * Write a diagnostic as a best effort: a failing logger falls back to the console and never
- * replaces the result of the work the diagnostic reports on.
+ * Write the fallback to the console without throwing.
  */
-const logSafely = (write: () => void, fallback: string): void => {
+const writeFallback = (fallback: string): void => {
   try {
-    write();
+    console.error(fallback);
   } catch {
-    try {
-      console.error(fallback);
-    } catch {
-      // both outputs failed, so the diagnostic has nowhere left to go
-    }
+    // both outputs failed, so the diagnostic has nowhere left to go
+  }
+};
+
+/**
+ * Write a diagnostic as a best effort: a failing or absent logger falls back to the console and
+ * never replaces the result of the work the diagnostic reports on. A write returns false when it
+ * had no logger to write to.
+ */
+const logSafely = (write: () => boolean | void, fallback: string): void => {
+  let isWritten: boolean | void;
+
+  try {
+    isWritten = write();
+  } catch {
+    isWritten = false;
+  }
+
+  if (isWritten === false) {
+    writeFallback(fallback);
   }
 };
 
