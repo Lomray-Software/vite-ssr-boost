@@ -1,8 +1,9 @@
 const diagnosticCode = /\b(SSR_BOOST_[A-Z_]+)(?=:|\])/g;
+const hookName = /^:\s*([\w.]+)/;
 
 /**
  * Classify every SSR_BOOST_ code in one process's output: policy lines are informational,
- * an Express hook deprecation is expected once per distinct line, and the rest are unexpected.
+ * an Express hook deprecation is expected once per hook, and the rest are unexpected.
  */
 const countDiagnostics = (output) => {
   const counts = { policyInfo: 0, expressHookDeprecations: 0, unexpected: 0, repeated: [] };
@@ -16,9 +17,11 @@ const countDiagnostics = (output) => {
         counts.policyInfo += 1;
       } else if (code === 'SSR_BOOST_DEPRECATED_EXPRESS_HOOK') {
         const detail = line.slice(match.index + marker.length);
+        // Key by the hook, so text printed after the message on the same line cannot hide a repeat.
+        const hook = hookName.exec(detail)?.[1] ?? detail;
 
-        if (deprecations.has(detail)) counts.repeated.push(detail);
-        deprecations.add(detail);
+        if (deprecations.has(hook)) counts.repeated.push(hook);
+        deprecations.add(hook);
         counts.expressHookDeprecations += 1;
       } else {
         counts.unexpected += 1;

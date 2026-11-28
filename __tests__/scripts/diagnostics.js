@@ -44,7 +44,21 @@ describe('template diagnostics count', () => {
     const counts = countDiagnostics([hook, created, hook].join('\n'));
 
     expect(counts.expressHookDeprecations).toBe(3);
-    expect(counts.repeated).toEqual([': onRequest(req, res) receives Express.']);
+    expect(counts.repeated).toEqual(['onRequest']);
+  });
+
+  /**
+   * Verify text after a repeated deprecation on the same line does not hide the repeat.
+   */
+  it('reports a repeat followed by another code on its line', () => {
+    const counts = countDiagnostics([hook, `${hook} ${policy}`].join('\n'));
+
+    expect(counts).toEqual({
+      policyInfo: 1,
+      expressHookDeprecations: 2,
+      unexpected: 0,
+      repeated: ['onRequest'],
+    });
   });
 
   /**
