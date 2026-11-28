@@ -796,6 +796,49 @@ export default defineEntry(App, routes, {
     }
   });
 
+  it('closes its Vite once when a setup step after prepareDev throws', async () => {
+    writeProject();
+
+    const config = ServerConfig.init({ mode: 'development' });
+    const setupError = new Error('getLogger failed');
+    const viteClose = vi.fn();
+    const setVite = config.setVite.bind(config);
+
+    vi.spyOn(config, 'setVite').mockImplementation((vite) => {
+      setVite(vite);
+      vi.spyOn(config, 'getLogger').mockImplementation(() => {
+        throw setupError;
+      });
+    });
+
+    await expect(
+      createDevServer({
+        config,
+        vite: viteConfig({
+          plugins: [
+            ViteSsrBoostPlugin({ tsconfigAliases: false }),
+            {
+              name: 'counting-close',
+
+              /**
+               * Count every close of this Vite.
+               */
+              configureServer: (vite) => {
+                const close = vite.close.bind(vite);
+
+                vite.close = async () => {
+                  viteClose();
+                  await close();
+                };
+              },
+            },
+          ],
+        }),
+      }),
+    ).rejects.toBe(setupError);
+    expect(viteClose).toHaveBeenCalledOnce();
+  });
+
   it('settles close only after Vite closed when the onClose hook throws', async () => {
     writeProject();
 

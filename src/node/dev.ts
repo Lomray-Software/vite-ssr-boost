@@ -341,57 +341,62 @@ const createDevServer = async ({
     config,
     loadEntry,
   });
-  const render = adapterNode(app.handler, { compression });
-  const lifecycle = createLifecycle(server, {
-    health: healthPaths,
-    drainTimeoutMs,
-    readinessGraceMs,
-    keepAliveTimeoutMs,
-    headersTimeoutMs,
-    requestTimeoutMs,
-    onDrain,
-    /**
-     * Close Vite once the sockets drained, so a response still rendering completes.
-     */
-    onClose: async () => {
-      await settleAll(
-        () => app.close(),
-        () => onClose?.(),
-      );
-    },
-  });
+  // The caller holds no close until the return, so a failing setup step closes this Vite.
+  try {
+    const render = adapterNode(app.handler, { compression });
+    const lifecycle = createLifecycle(server, {
+      health: healthPaths,
+      drainTimeoutMs,
+      readinessGraceMs,
+      keepAliveTimeoutMs,
+      headersTimeoutMs,
+      requestTimeoutMs,
+      onDrain,
+      /**
+       * Close Vite once the sockets drained, so a response still rendering completes.
+       */
+      onClose: async () => {
+        await settleAll(
+          () => app.close(),
+          () => onClose?.(),
+        );
+      },
+    });
 
-  server.on(
-    'request',
-    createRequestListener(
-      [
-        lifecycle.health,
+    server.on(
+      'request',
+      createRequestListener(
+        [
+          lifecycle.health,
 
-        /**
-         * Hand the request to whichever Vite stack is current, so restarts keep working.
-         */
-        (req, res, next) => app.viteMiddleware(req, res, next),
+          /**
+           * Hand the request to whichever Vite stack is current, so restarts keep working.
+           */
+          (req, res, next) => app.viteMiddleware(req, res, next),
 
-        /**
-         * Render whatever Vite passed on, from the URL the browser sent.
-         */
-        (req, res, next) => {
-          req.url = (req as Connect.IncomingMessage).originalUrl ?? req.url;
-          void render(req, res, next);
-        },
-      ],
-      logger ?? app.config.getLogger(),
-    ),
-  );
+          /**
+           * Render whatever Vite passed on, from the URL the browser sent.
+           */
+          (req, res, next) => {
+            req.url = (req as Connect.IncomingMessage).originalUrl ?? req.url;
+            void render(req, res, next);
+          },
+        ],
+        logger ?? app.config.getLogger(),
+      ),
+    );
 
-  lifecycle.setReady();
+    lifecycle.setReady();
 
-  return {
-    ...app,
-    lifecycle,
-    close: lifecycle.close,
-    listen: lifecycle.listen,
-  };
+    return {
+      ...app,
+      lifecycle,
+      close: lifecycle.close,
+      listen: lifecycle.listen,
+    };
+  } catch (error) {
+    return rethrowAfterCleanup(error, () => app.close(), logger ?? getCleanupLogger(app.vite));
+  }
 };
 
 export { createDevServer, hasOwnHmr, prepareDev };
