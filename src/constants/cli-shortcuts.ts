@@ -18,17 +18,11 @@ const reportStatus = (
   message: string,
   paint: (text: string) => string,
 ): void => {
-  logSafely(() => {
-    const logger = config?.getLogger();
-
-    if (!logger) {
-      return false;
-    }
-
-    logger.info(paint(message));
-
-    return true;
-  }, message);
+  logSafely(
+    () => config?.getLogger(),
+    (logger) => logger.info(paint(message)),
+    message,
+  );
 };
 
 /**

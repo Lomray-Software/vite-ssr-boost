@@ -157,6 +157,34 @@ describe('printServerInfo', () => {
     expect(error.mock.calls[0][0]).toContain('print failed');
   });
 
+  it('reports a failed banner once when the logger write returns false', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    const resolveServerUrls = (await import('@helpers/resolve-server-urls')).default;
+    vi.mocked(resolveServerUrls).mockResolvedValue({ local: [], network: [] });
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const error = vi.fn(() => false);
+    const config = {
+      mode: 'development',
+      getPluginConfig: () => ({ action: CliActions.dev }),
+      getParams: () => ({ isProd: false, host: 'localhost', root: '/root', isSPA: false }),
+      getLogger: () => ({ info: vi.fn(), error, hasWarned: false }),
+      getVite: () => ({
+        config: { server: { https: false }, mode: 'development', rawBase: '/' },
+        printUrls: () => {
+          throw new Error('print failed');
+        },
+      }),
+    };
+
+    await expect(
+      printServerInfo(config as never, { server: {} as never }),
+    ).resolves.toBeUndefined();
+    expect(error).toHaveBeenCalledOnce();
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   it('falls back to the console when the logger itself cannot be read', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const config = {

@@ -10,7 +10,11 @@ const message = '\n  Running preview mode... \n';
  */
 const announcePreview = (config: ServerConfig): void => {
   setTimeout(() => {
-    logSafely(() => config.getLogger().info(chalk.yellow(message)), message);
+    logSafely(
+      () => config.getLogger(),
+      (logger) => logger.info(chalk.yellow(message)),
+      message,
+    );
   }, 0);
 };
 

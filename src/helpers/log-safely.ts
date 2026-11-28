@@ -31,22 +31,29 @@ const writeFallback = (fallback: string): void => {
 };
 
 /**
- * Write a diagnostic as a best effort: a failing or absent logger falls back to the console and
- * never replaces the result of the work the diagnostic reports on. A write returns false when it
- * had no logger to write to.
+ * Write a diagnostic as a best effort: the logger is read at the time of the write, and a failing
+ * or absent logger falls back to the console. Whatever the write returns is ignored, so a logger
+ * method that returns a value is never taken for a missing logger. The diagnostic never replaces
+ * the result of the work it reports on.
  */
-const logSafely = (write: () => boolean | void, fallback: string): void => {
-  let isWritten: boolean | void;
-
+const logSafely = <TLogger>(
+  readLogger: () => TLogger | null | undefined,
+  write: (logger: TLogger) => unknown,
+  fallback: string,
+): void => {
   try {
-    isWritten = write();
+    const logger = readLogger();
+
+    if (logger) {
+      write(logger);
+
+      return;
+    }
   } catch {
-    isWritten = false;
+    // a logger that cannot be read or written leaves the console to take the line
   }
 
-  if (isWritten === false) {
-    writeFallback(fallback);
-  }
+  writeFallback(fallback);
 };
 
 export { describeError, logSafely };

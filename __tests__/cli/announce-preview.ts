@@ -22,6 +22,17 @@ describe('cli/helpers/announce-preview', () => {
     expect(info.mock.calls[0][0]).toContain('Running preview mode');
   });
 
+  it('should announce once when the logger write returns false', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const info = vi.fn(() => false);
+
+    announcePreview({ getLogger: () => ({ info }) } as never);
+    vi.runAllTimers();
+
+    expect(info).toHaveBeenCalledOnce();
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
   it('should keep the preview running when the logger cannot be read', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 

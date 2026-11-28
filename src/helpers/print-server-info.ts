@@ -83,7 +83,11 @@ async function printInfo(
 function reportPrintFailure(config: ServerConfig, error: unknown): void {
   const message = `failed to print server info: ${describeError(error)}`;
 
-  logSafely(() => config.getLogger().error(chalk.red(message)), message);
+  logSafely(
+    () => config.getLogger(),
+    (logger) => logger.error(chalk.red(message)),
+    message,
+  );
 }
 
 /**

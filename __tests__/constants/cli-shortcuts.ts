@@ -420,4 +420,19 @@ describe('cli-shortcuts', () => {
     ]);
     consoleError.mockRestore();
   });
+
+  it('should report a failed stop once when the logger write returns false', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'q')!;
+    const { context, stubs } = createContext('boom');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    stubs.info.returns(false);
+
+    await shortcut.action(context);
+
+    expect(stubs.info.lastCall.args[0]).toContain('failed to stop dev server: boom');
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(processStopMock).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+  });
 });

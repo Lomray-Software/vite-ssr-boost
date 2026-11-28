@@ -28,39 +28,71 @@ describe('logSafely', () => {
   });
 
   it('should write through the logger when it works', () => {
+    const info = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    logSafely(
+      () => ({ info }),
+      (logger) => logger.info('line'),
+      'fallback',
+    );
+
+    expect(info).toHaveBeenCalledExactlyOnceWith('line');
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('should not fall back when the logger write returns false', () => {
+    const info = vi.fn<(line: string) => boolean>(() => false);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    logSafely(
+      () => ({ info }),
+      (logger) => logger.info('line'),
+      'fallback',
+    );
+
+    expect(info).toHaveBeenCalledOnce();
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('should fall back to the console when there is no logger', () => {
     const write = vi.fn();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    logSafely(write, 'fallback');
+    logSafely(() => undefined, write, 'fallback');
 
-    expect(write).toHaveBeenCalledOnce();
-    expect(consoleError).not.toHaveBeenCalled();
-  });
-
-  it('should fall back to the console when the logger throws', () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    logSafely(() => {
-      throw new Error('no logger');
-    }, 'fallback');
-
+    expect(write).not.toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalledExactlyOnceWith('fallback');
   });
 
-  it('should fall back to the console when the write had no logger', () => {
+  it('should fall back to the console when the logger cannot be read', () => {
+    const write = vi.fn();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    logSafely(() => false, 'fallback');
+    logSafely(
+      () => {
+        throw new Error('no logger');
+      },
+      write,
+      'fallback',
+    );
 
+    expect(write).not.toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalledExactlyOnceWith('fallback');
   });
 
-  it('should not fall back when the write reports it was written', () => {
+  it('should fall back to the console when the logger write throws', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    logSafely(() => true, 'fallback');
+    logSafely(
+      () => ({}),
+      () => {
+        throw new Error('write failed');
+      },
+      'fallback',
+    );
 
-    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledExactlyOnceWith('fallback');
   });
 
   it('should not throw when the console fails as well', () => {
@@ -68,10 +100,6 @@ describe('logSafely', () => {
       throw new Error('no console');
     });
 
-    expect(() =>
-      logSafely(() => {
-        throw new Error('no logger');
-      }, 'fallback'),
-    ).not.toThrow();
+    expect(() => logSafely(() => undefined, vi.fn(), 'fallback')).not.toThrow();
   });
 });
