@@ -7,8 +7,6 @@ import type { IPluginOptions } from '../plugin';
  * Stop server
  */
 const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<boolean> => {
-  const Logger = config?.getLogger();
-
   // drain through the lifecycle: it closes the server and the dev Vite instance
   if (lifecycle) {
     try {
@@ -16,7 +14,8 @@ const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<b
 
       return true;
     } catch (error) {
-      Logger?.info(chalk.red(`failed to stop dev server: ${error as string}`));
+      // the logger is read only to report, so a failing read cannot block the drain
+      config?.getLogger()?.info(chalk.red(`failed to stop dev server: ${error as string}`));
 
       return false;
     }
@@ -31,7 +30,7 @@ const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<b
   await config?.getVite()?.close();
 
   if (err) {
-    Logger?.info(chalk.red(`failed to stop dev server: ${err as string}`));
+    config?.getLogger()?.info(chalk.red(`failed to stop dev server: ${err as string}`));
 
     return false;
   }

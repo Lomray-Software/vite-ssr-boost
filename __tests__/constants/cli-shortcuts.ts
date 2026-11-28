@@ -147,4 +147,22 @@ describe('cli-shortcuts', () => {
     expect(stubs.close.calledOnce).toBe(true);
     expect(processStopMock).toHaveBeenCalledOnce();
   });
+
+  it('should drain on "q" even when the logger cannot be read', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'q')!;
+    const close = sandbox.stub().resolves();
+    const context = {
+      config: {
+        getLogger: () => {
+          throw new Error('no logger');
+        },
+      },
+      lifecycle: { close },
+    } as unknown as ICliContext;
+
+    await shortcut.action(context);
+
+    expect(close.calledOnce).toBe(true);
+    expect(processStopMock).toHaveBeenCalledOnce();
+  });
 });
