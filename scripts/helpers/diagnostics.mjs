@@ -1,5 +1,6 @@
-const diagnosticCode = /\b(SSR_BOOST_[A-Z_]+)(?=:|\])/g;
-const hookName = /^:\s*([\w.]+)/;
+const diagnosticCode = /\b(SSR_BOOST_[A-Z0-9_]+)(?=:|\])/g;
+// The hook follows the code after either delimiter: `CODE: hook` or `[CODE] hook`.
+const hookName = /^[:\]]\s*([\w.]+)/;
 
 /**
  * Classify every SSR_BOOST_ code in one process's output: policy lines are informational,

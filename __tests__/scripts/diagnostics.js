@@ -62,6 +62,31 @@ describe('template diagnostics count', () => {
   });
 
   /**
+   * Verify a code holding a digit is counted, not skipped.
+   */
+  it('counts a code with a digit', () => {
+    expect(countDiagnostics(`${policy} SSR_BOOST_HTTP2: refused`)).toMatchObject({
+      policyInfo: 1,
+      unexpected: 1,
+    });
+  });
+
+  /**
+   * Verify a repeat in the bracket form is keyed by its hook, so trailing text cannot hide it.
+   */
+  it('reports a bracket-form repeat followed by other text', () => {
+    const bracket = '[SSR_BOOST_DEPRECATED_EXPRESS_HOOK] onRequest(req, res) receives Express.';
+    const counts = countDiagnostics([bracket, `${bracket} ${policy}`].join('\n'));
+
+    expect(counts).toEqual({
+      policyInfo: 1,
+      expressHookDeprecations: 2,
+      unexpected: 0,
+      repeated: ['onRequest'],
+    });
+  });
+
+  /**
    * Verify output without codes counts nothing.
    */
   it('counts nothing in plain output', () => {
