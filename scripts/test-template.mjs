@@ -98,7 +98,7 @@ const getPort = async () => {
  * Add one process's diagnostics to the acceptance totals; a repeated deprecation fails the run.
  */
 const recordDiagnostics = (output) => {
-  const counts = countDiagnostics(stripVTControlCharacters(output));
+  const counts = countDiagnostics(output);
 
   assert.deepEqual(counts.repeated, [], 'Express hook deprecation repeated within one process.');
   acceptance.policyInfo += counts.policyInfo;

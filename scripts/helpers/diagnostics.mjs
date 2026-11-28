@@ -1,3 +1,5 @@
+import { stripVTControlCharacters } from 'node:util';
+
 const diagnosticCode = /\b(SSR_BOOST_[A-Z0-9_]+)(?=:|\])/g;
 // The hook follows the code after either delimiter: `CODE: hook` or `[CODE] hook`.
 const hookName = /^[:\]]\s*([\w.]+)/;
@@ -10,7 +12,8 @@ const countDiagnostics = (output) => {
   const counts = { policyInfo: 0, expressHookDeprecations: 0, unexpected: 0, repeated: [] };
   const deprecations = new Set();
 
-  for (const line of output.split('\n')) {
+  // A color code ends in a word character, which would defeat the boundary before a code.
+  for (const line of stripVTControlCharacters(output).split('\n')) {
     for (const match of line.matchAll(diagnosticCode)) {
       const [marker, code] = match;
 

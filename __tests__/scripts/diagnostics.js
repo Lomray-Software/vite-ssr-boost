@@ -87,6 +87,27 @@ describe('template diagnostics count', () => {
   });
 
   /**
+   * Verify terminal colors around a code or a hook neither hide the code nor the repeat.
+   */
+  it('counts colored codes and keys a colored hook', () => {
+    const colored = '\x1b[33m[SSR_BOOST_DEPRECATED_EXPRESS_HOOK]\x1b[0m \x1b[1monRequest\x1b[22m';
+    const counts = countDiagnostics(
+      [
+        `\x1b[33mSSR_BOOST_HTTP2: refused\x1b[0m`,
+        `${colored} first`,
+        `${colored} second`,
+      ].join('\n'),
+    );
+
+    expect(counts).toEqual({
+      policyInfo: 0,
+      expressHookDeprecations: 2,
+      unexpected: 1,
+      repeated: ['onRequest'],
+    });
+  });
+
+  /**
    * Verify output without codes counts nothing.
    */
   it('counts nothing in plain output', () => {
