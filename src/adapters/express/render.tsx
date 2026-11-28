@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import React from 'react';
 import type { RouterState, StaticHandlerContext, StaticHandler } from 'react-router';
+import type { ViteDevServer } from 'vite';
 import createFetchRequest from '@adapters/express/create-request';
 import type { TApp, IEntrypointOptions } from '@adapters/express/entry';
 import getRouteAssets from '@adapters/express/route-assets';
@@ -67,6 +68,8 @@ export interface IRenderOptions<TAppProps = Record<string, any>> extends Pick<
   onSkip?: () => void;
   /** Defer template loading until after request validation. */
   getHtml?: () => IHtmlShell | Promise<IHtmlShell>;
+  /** The dev Vite the server mounted: route assets come from its graph, by default the config's. */
+  vite?: ViteDevServer;
   hydration?: 'early' | 'footer';
   nonce?: string;
   bootstrapScriptContent?: string;
@@ -228,6 +231,7 @@ async function render(
     onRequest,
     onSkip,
     getHtml,
+    vite,
     onRouterReady,
     onShellReady,
     onResponse,
@@ -425,7 +429,7 @@ async function render(
          */
         prepare: async ({ executionContext }) => {
           const { matches, isSpa, hasEarlyHints } = context;
-          const manifest = await getRouteAssets(config, matches, isSpa);
+          const manifest = await getRouteAssets(config, matches, isSpa, vite);
           const hints = manifest.injectAssets(context, Boolean(hasEarlyHints));
 
           if (hasEarlyHints) {

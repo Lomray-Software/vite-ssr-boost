@@ -174,6 +174,30 @@ describe('PrepareServer', () => {
     expect(footer).toContain('<footer');
   });
 
+  it('loads and transforms through the Vite it was given, not the config one', async () => {
+    const config = createConfig(false);
+    const shell = '<script src="/app/client.ts" async></script><!--ssr-outlet--><footer />';
+    const render = vi.fn();
+    const own = {
+      ssrLoadModule: vi.fn().mockResolvedValue({ default: { render, routes: [] } }),
+      transformIndexHtml: vi.fn().mockResolvedValue(shell),
+      config: { base: '/app/' },
+    };
+
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(shell as never);
+
+    const service = PrepareServer.init(config as never, undefined, own as never);
+    const result = await service.loadEntrypoint();
+    const [header] = await service.loadHtml({ originalUrl: '/' } as never);
+
+    expect(result.render).toBe(render);
+    expect(own.ssrLoadModule).toHaveBeenCalledOnce();
+    expect(own.transformIndexHtml).toHaveBeenCalledWith('/', shell, '/index.html');
+    expect(header).toContain('<script src="/app/client.ts"></script>');
+    expect(config.getVite().ssrLoadModule).not.toHaveBeenCalled();
+    expect(config.getVite().transformIndexHtml).not.toHaveBeenCalled();
+  });
+
   it('reuses the production shell while keeping returned tuples isolated', async () => {
     const config = createConfig(true);
     const read = vi.spyOn(fs, 'readFileSync').mockReturnValue('header<!--ssr-outlet-->footer');

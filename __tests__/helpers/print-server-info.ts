@@ -48,6 +48,36 @@ describe('printServerInfo', () => {
     expect(printUrls).toHaveBeenCalledOnce();
   });
 
+  it('prints the urls of the given dev Vite over the config one', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    const resolveServerUrls = (await import('@helpers/resolve-server-urls')).default;
+    const urls = { local: ['http://localhost:3001'], network: [] };
+    vi.mocked(resolveServerUrls).mockResolvedValue(urls);
+    vi.stubGlobal('viteBoostStartTime', 1);
+
+    const createVite = () => ({
+      config: { server: { https: false }, mode: 'development', rawBase: '/' },
+      printUrls: vi.fn(),
+      resolvedUrls: null as unknown,
+    });
+    const own = createVite();
+    const held = createVite();
+    const config = {
+      mode: 'development',
+      getPluginConfig: () => ({ action: CliActions.dev }),
+      getParams: () => ({ isProd: false, host: 'localhost', root: '/root', isSPA: false }),
+      getLogger: () => ({ info: vi.fn(), hasWarned: false }),
+      getVite: () => held,
+    };
+
+    await printServerInfo(config as never, { server: {} as never, vite: own as never });
+
+    expect(own.printUrls).toHaveBeenCalledOnce();
+    expect(own.resolvedUrls).toBe(urls);
+    expect(held.printUrls).not.toHaveBeenCalled();
+    expect(held.resolvedUrls).toBeNull();
+  });
+
   it('should print prod info and use printServerUrls when urls resolved', async () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);
     const resolveServerUrls = (await import('@helpers/resolve-server-urls')).default;

@@ -66,7 +66,8 @@ async function createServer(
 
   config.setApp(app);
 
-  const prepareServer = PrepareServer.init(config, serverApi);
+  // Created once the dev Vite is mounted, so this server loads through its own Vite.
+  let prepareServer: PrepareServer;
 
   // A Vite this call created is closed here if the setup fails; a supplied one stays its caller's.
   let ownVite: ViteDevServer | undefined;
@@ -90,6 +91,8 @@ async function createServer(
 
       config.setVite(vite);
     }
+
+    prepareServer = PrepareServer.init(config, serverApi, mountedVite);
 
     if (!config.getParams().isSPA) {
       await prepareServer.onAppCreated();
@@ -152,6 +155,7 @@ async function createServer(
               ...renderParams,
               onRequest,
               onSkip: next,
+              vite: mountedVite,
               /** Load and transform the template only after the Fetch guard allows it. */
               getHtml: async () => {
                 const [header, footer] = await prepareServer.loadHtml(req);
@@ -302,7 +306,7 @@ async function createServer(
           return;
         }
 
-        void printServerInfo(config, { version, server });
+        void printServerInfo(config, { version, server, vite: transportVite });
       };
 
       // Node binds and reports errors itself: a bad port throws here, a bind error goes to the

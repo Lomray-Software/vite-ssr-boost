@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import type { Server } from 'node:net';
 import { performance } from 'node:perf_hooks';
 import chalk from 'chalk';
-import type { ResolvedConfig } from 'vite';
+import type { ResolvedConfig, ViteDevServer } from 'vite';
 import CliActions from '@constants/cli-actions';
 import cliName from '@constants/cli-name';
 import { getMarkerFile } from '@helpers/dev-marker';
@@ -13,6 +13,8 @@ import type ServerConfig from '@services/server-config';
 interface IPrintServerInfoParams {
   version?: string;
   server?: Server;
+  /** The Vite of the server printed, by default the one the config holds. */
+  vite?: ViteDevServer;
 }
 
 /**
@@ -20,7 +22,7 @@ interface IPrintServerInfoParams {
  */
 async function printServerInfo(
   config: ServerConfig,
-  { server, version = 'unknown' }: IPrintServerInfoParams = {},
+  { server, version = 'unknown', vite = config.getVite() }: IPrintServerInfoParams = {},
 ): Promise<void> {
   const { action } = config.getPluginConfig() ?? {};
   const { isProd, host, root, isSPA, base } = config.getParams();
@@ -39,7 +41,7 @@ async function printServerInfo(
     { clear: !Logger.hasWarned },
   );
 
-  const viteConfig: (ResolvedConfig & { rawBase?: string }) | undefined = config.getVite()?.config;
+  const viteConfig: (ResolvedConfig & { rawBase?: string }) | undefined = vite?.config;
   const isProdBuild = !viteConfig?.mode && !fs.existsSync(devMarker);
   const resolvedUrls = server
     ? await resolveServerUrls(server, {
@@ -58,10 +60,8 @@ async function printServerInfo(
   Logger.info(chalk.dim(chalk.green('  ➜')) + chalk.dim('  Type:    ') + chalk.blue(type));
 
   if (!isProd) {
-    const vite = config.getVite()!;
-
-    vite.resolvedUrls = resolvedUrls;
-    vite.printUrls();
+    vite!.resolvedUrls = resolvedUrls;
+    vite!.printUrls();
   } else if (resolvedUrls) {
     printServerUrls(resolvedUrls, (msg) => Logger.info(msg));
   }

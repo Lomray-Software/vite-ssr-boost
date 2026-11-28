@@ -633,6 +633,46 @@ describe('node server', () => {
     expect(second.close).not.toHaveBeenCalled();
   });
 
+  it('should render and print each dev server through the Vite its own start mounted', async () => {
+    const { default: PrepareServer } = await import('@adapters/express/prepare-server');
+    const first = createViteDouble('first-middleware');
+    const second = createViteDouble('second-middleware');
+    const config = createStatefulDevConfig();
+    const render = vi.fn().mockResolvedValue(undefined);
+
+    createViteServer.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    prepareServer.loadEntrypoint.mockResolvedValueOnce({ render });
+
+    const started = await createServer(config as never);
+    const ssrUses = appUse.mock.calls.filter(([route]) => route instanceof RegExp);
+
+    await createServer(config as never);
+
+    expect(vi.mocked(PrepareServer.init).mock.calls.map(([, , vite]) => vite)).toEqual([
+      first,
+      second,
+    ]);
+
+    const [, ssr] = ssrUses[0] as [RegExp, (...args: unknown[]) => void];
+
+    ssr({ originalUrl: '/' }, {}, vi.fn());
+    await flush();
+
+    expect(render).toHaveBeenCalledWith(
+      config,
+      expect.anything(),
+      expect.objectContaining({ vite: first }),
+    );
+
+    started.run({ version: '1.0.0' });
+    await flush();
+
+    expect(printServerInfoMock).toHaveBeenCalledWith(
+      config,
+      expect.objectContaining({ vite: first }),
+    );
+  });
+
   it('should keep the dev Vite open until the last server started on it drains', async () => {
     const vite = createViteDouble('shared-middleware');
 

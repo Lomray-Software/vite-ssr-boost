@@ -4,6 +4,7 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import chalk from 'chalk';
 import type { Express, Request } from 'express';
+import type { ViteDevServer } from 'vite';
 import type { IEntrypointOptions, IPrepareRenderOut } from '@adapters/express/entry';
 import type { TRender } from '@adapters/express/render';
 import stripEntryAsync from '@helpers/strip-entry-async';
@@ -43,6 +44,11 @@ class PrepareServer {
   protected readonly serverApi: ServerApi;
 
   /**
+   * The dev Vite the server mounted, which a later start on the same config may not replace
+   */
+  protected readonly vite?: ViteDevServer;
+
+  /**
    * Entrypoint resolved params
    */
   protected entrypoint?: IPrepareServerEntrypointLoadOut;
@@ -70,16 +76,28 @@ class PrepareServer {
   /**
    * Retain runtime configuration and reuse the existing server API.
    */
-  protected constructor(config: ServerConfig, serverApi?: ServerApi) {
+  protected constructor(config: ServerConfig, serverApi?: ServerApi, vite?: ViteDevServer) {
     this.config = config;
     this.serverApi = serverApi ?? new ServerApi();
+    this.vite = vite;
   }
 
   /**
-   * Init service
+   * Init service; in development it loads through the given Vite, by default the config's.
    */
-  public static init(config: ServerConfig, serverApi?: ServerApi): PrepareServer {
-    return new PrepareServer(config, serverApi);
+  public static init(
+    config: ServerConfig,
+    serverApi?: ServerApi,
+    vite?: ViteDevServer,
+  ): PrepareServer {
+    return new PrepareServer(config, serverApi, vite);
+  }
+
+  /**
+   * The dev Vite this server loads and transforms through.
+   */
+  protected getVite(): ViteDevServer | undefined {
+    return this.vite ?? this.config.getVite();
   }
 
   /**
@@ -101,7 +119,7 @@ class PrepareServer {
     try {
       if (!isProd) {
         resolvedEntrypoint = (
-          await this.config.getVite()!.ssrLoadModule(entrypointPath, {
+          await this.getVite()!.ssrLoadModule(entrypointPath, {
             fixStacktrace: true,
           })
         ).default as IPrepareRenderOut;
@@ -209,9 +227,11 @@ class PrepareServer {
       /**
        * Apply Vite transforms and remove async from the entry to preserve plugin preambles.
        */
+      const vite = this.getVite()!;
+
       modifiedHtml = stripEntryAsync(
-        await this.config.getVite()!.transformIndexHtml(req.originalUrl, this.html, indexFile),
-        this.config.getVite()?.config.base,
+        await vite.transformIndexHtml(req.originalUrl, this.html, indexFile),
+        vite.config.base,
         clientFile,
         req.originalUrl,
       );

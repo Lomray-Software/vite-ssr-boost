@@ -106,6 +106,24 @@ describe('legacy Express render adapter', () => {
     vi.unstubAllEnvs();
   });
 
+  it('collects dev route assets through the Vite the server mounted', async () => {
+    const { default: SsrManifest } = await import('@services/ssr-manifest');
+    const { config, context } = createContext();
+    const vite = { config: { base: '/' } };
+
+    coreRenderMock.mockImplementation(async (_, coreContext, options) => {
+      await options.prepare({ context: coreContext });
+
+      return new Response('rendered');
+    });
+
+    await render({ App, handler: {} as never }, config as never, context as never, {
+      vite: vite as never,
+    });
+
+    expect(SsrManifest.get).toHaveBeenCalledExactlyOnceWith(config, {}, vite);
+  });
+
   it.each(['req', 'res'] as const)(
     'emits SSR_BOOST_DEPRECATED_REQ_RES once per process when a hook reads context.%s',
     async (field) => {
