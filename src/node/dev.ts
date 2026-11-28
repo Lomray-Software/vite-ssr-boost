@@ -209,13 +209,16 @@ const prepareDev = async ({
     }),
   );
 
+  let isSPA: boolean;
+
+  // Every config read before the return can throw, and the caller holds no close until then.
   try {
     config.setVite(vite);
+    ({ isSPA } = config.getParams());
   } catch (error) {
     return rethrowAfterCleanup(error, () => vite.close(), vite.config.logger);
   }
 
-  const { isSPA } = config.getParams();
   const prepare = createDevPreparer(config, vite);
 
   let mounted: { entry: IEntry; handler: TSsrHandler } | undefined;

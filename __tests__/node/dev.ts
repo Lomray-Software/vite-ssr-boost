@@ -11,7 +11,7 @@ import type { InlineConfig, Logger } from 'vite';
 import { createLogger, version as viteVersion } from 'vite';
 import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDevServer, hasOwnHmr } from '@node/dev';
+import { createDevServer, hasOwnHmr, prepareDev } from '@node/dev';
 import type { ICreateDevServerOptions, IDevServer } from '@node/dev';
 import ServerConfig from '@services/server-config';
 import ViteSsrBoostPlugin from '../../src/plugin';
@@ -655,6 +655,58 @@ export default defineEntry(App, routes, {
       expect.stringContaining('close failed'),
       expect.anything(),
     );
+  });
+
+  it('closes its Vite once when reading the params after setVite throws', async () => {
+    writeProject();
+
+    const config = ServerConfig.init({ mode: 'development' });
+    const readError = new Error('getParams failed');
+    const viteClose = vi.fn();
+    const server = http.createServer();
+    const setVite = config.setVite.bind(config);
+
+    vi.spyOn(config, 'setVite').mockImplementation((vite) => {
+      setVite(vite);
+      vi.spyOn(config, 'getParams').mockImplementation(() => {
+        throw readError;
+      });
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+
+    try {
+      await expect(
+        prepareDev({
+          server,
+          config,
+          vite: viteConfig({
+            plugins: [
+              ViteSsrBoostPlugin({ tsconfigAliases: false }),
+              {
+                name: 'counting-close',
+
+                /**
+                 * Count every close of this Vite.
+                 */
+                configureServer: (vite) => {
+                  const close = vite.close.bind(vite);
+
+                  vite.close = async () => {
+                    viteClose();
+                    await close();
+                  };
+                },
+              },
+            ],
+          }),
+        }),
+      ).rejects.toBe(readError);
+      expect(viteClose).toHaveBeenCalledOnce();
+      expect(server.listening).toBe(true);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   it('settles close only after Vite closed when the onClose hook throws', async () => {
