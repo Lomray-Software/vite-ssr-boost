@@ -1,7 +1,17 @@
 import chalk from 'chalk';
 import type { ICliContext } from '@constants/cli-context';
+import { describeError, logSafely } from '@helpers/log-safely';
 import processStop from '@helpers/process-stop';
 import type { IPluginOptions } from '../plugin';
+
+/**
+ * Report a failed stop as a best effort, so a failing logger cannot replace the failed result
+ */
+const reportStopFailure = (config: ICliContext['config'], error: unknown): void => {
+  const message = `failed to stop dev server: ${describeError(error)}`;
+
+  logSafely(() => config?.getLogger()?.info(chalk.red(message)), message);
+};
 
 /**
  * Stop server
@@ -14,8 +24,7 @@ const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<b
 
       return true;
     } catch (error) {
-      // the logger is read only to report, so a failing read cannot block the drain
-      config?.getLogger()?.info(chalk.red(`failed to stop dev server: ${error as string}`));
+      reportStopFailure(config, error);
 
       return false;
     }
@@ -30,7 +39,7 @@ const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<b
   await config?.getVite()?.close();
 
   if (err) {
-    config?.getLogger()?.info(chalk.red(`failed to stop dev server: ${err as string}`));
+    reportStopFailure(config, err);
 
     return false;
   }

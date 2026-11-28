@@ -6,6 +6,7 @@ import type { ResolvedConfig, ViteDevServer } from 'vite';
 import CliActions from '@constants/cli-actions';
 import cliName from '@constants/cli-name';
 import { getMarkerFile } from '@helpers/dev-marker';
+import { describeError, logSafely } from '@helpers/log-safely';
 import printServerUrls from '@helpers/print-server-urls';
 import resolveServerUrls from '@helpers/resolve-server-urls';
 import type ServerConfig from '@services/server-config';
@@ -80,13 +81,9 @@ async function printInfo(
  * Report a failed banner without throwing: the server is already listening and must keep running.
  */
 function reportPrintFailure(config: ServerConfig, error: unknown): void {
-  const message = `failed to print server info: ${(error as Error)?.message ?? String(error)}`;
+  const message = `failed to print server info: ${describeError(error)}`;
 
-  try {
-    config.getLogger().error(chalk.red(message));
-  } catch {
-    console.error(message);
-  }
+  logSafely(() => config.getLogger().error(chalk.red(message)), message);
 }
 
 /**

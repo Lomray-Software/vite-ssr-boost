@@ -165,4 +165,59 @@ describe('cli-shortcuts', () => {
     expect(close.calledOnce).toBe(true);
     expect(processStopMock).toHaveBeenCalledOnce();
   });
+
+  it('should stop the restart when the drain fails and the logger cannot be read', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'r')!;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const info = sandbox.stub();
+    let reads = 0;
+    const reboot = sandbox.stub().resolves();
+    const close = sandbox.stub().rejects(new Error('drain failed'));
+    const context = {
+      reboot,
+      config: {
+        // the first read prints the restarting line, the failure report reads again
+        getLogger: () => {
+          reads += 1;
+
+          if (reads > 1) {
+            throw new Error('no logger');
+          }
+
+          return { info };
+        },
+      },
+      lifecycle: { close },
+    } as unknown as ICliContext;
+
+    await expect(shortcut.action(context)).resolves.toBeUndefined();
+
+    expect(close.calledOnce).toBe(true);
+    expect(reboot.called).toBe(false);
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(consoleError.mock.calls[0][0]).toContain('failed to stop dev server: drain failed');
+    consoleError.mockRestore();
+  });
+
+  it('should exit on "q" when the server close fails and the logger cannot be read', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'q')!;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const context = {
+      server: {
+        close: (resolve: (err?: unknown) => void) => resolve(new Error('close failed')),
+      },
+      config: {
+        getLogger: () => {
+          throw new Error('no logger');
+        },
+        getVite: () => undefined,
+      },
+    } as unknown as ICliContext;
+
+    await expect(shortcut.action(context)).resolves.toBeUndefined();
+
+    expect(processStopMock).toHaveBeenCalledOnce();
+    expect(consoleError.mock.calls[0][0]).toContain('failed to stop dev server: close failed');
+    consoleError.mockRestore();
+  });
 });

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import chalk from 'chalk';
 import { Command, Option } from 'commander';
 import type { IDoctorOptions } from '@cli/doctor';
+import announcePreview from '@cli/helpers/announce-preview';
 import enableShortcuts from '@cli/helpers/enable-shortcuts';
 import onListening from '@cli/helpers/on-listening';
 import serverOption from '@cli/helpers/server-option';
@@ -213,15 +214,8 @@ program
         server,
       });
 
-      /** Keep the preview message after the normal readiness output. */
-      const announce = (): void => {
-        setTimeout(() => {
-          prod.config.getLogger().info(chalk.yellow('\n  Running preview mode... \n'));
-        }, 0);
-      };
-
       // The node server resolves after it listens; Express is still binding here.
-      onListening(prod.server, announce);
+      onListening(prod.server, () => announcePreview(prod.config));
 
       cliContext.server = prod.server;
       cliContext.config = prod.config;
