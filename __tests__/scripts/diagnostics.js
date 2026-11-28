@@ -227,6 +227,9 @@ describe('template diagnostics count', () => {
       '\x1bM',
       '\x1b8',
       '\x1bc',
+      '\x1b#8',
+      '\x1b[r',
+      '\x1b[2;20r',
       ...['A', 'B', 'C', 'D', 'E', 'F', 'G', 'I', 'Z', '`', 'a', 'd', 'e', 'u'].map(
         (final) => `\x1b[2${final}`,
       ),
@@ -248,7 +251,16 @@ describe('template diagnostics count', () => {
    * Verify a control that keeps the cursor in place, or a private sequence, joins the text.
    */
   it('keeps text joined around controls that do not move the cursor', () => {
-    const joined = ['\x1b[1m', '\x1b[2K', '\x1b[?25h', '\x1b[ A', '\x1b#8', '\x07'];
+    const joined = [
+      '\x1b[1m',
+      '\x1b[2K',
+      '\x1b[?25h',
+      '\x1b[?1;2r',
+      '\x1b[ A',
+      '\x1b#3',
+      '\x1b(#8',
+      '\x07',
+    ];
     const lines = joined.map((control) => `ready${control}SSR_BOOST_OTHER: refused`);
 
     expect(countDiagnostics(lines.join('\n'))).toMatchObject({ unexpected: 0 });

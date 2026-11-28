@@ -15,12 +15,14 @@ const stringIntroducers = new Set([0x90, 0x98, 0x9e, 0x9f]);
 const escapeStringIntroducers = new Set([0x50, 0x58, 0x5e, 0x5f]);
 
 // Controls that move the cursor to another line: VT and FF; IND, NEL and RI; their ESC forms
-// `D`, `E` and `M`, cursor restore `ESC 8` and reset `ESC c`; and the control
-// sequences that move up, down or to a position (CUU, CUD, CNL, CPL, CUP, HVP, VPA, VPR, SCORC).
+// `D`, `E` and `M`, cursor restore `ESC 8`, reset `ESC c` and screen alignment `ESC # 8`; and the
+// control sequences that move up, down or to a position (CUU, CUD, CNL, CPL, CUP, HVP, VPA, VPR,
+// SCORC) or home the cursor as they set the scrolling margins (DECSTBM).
 const lineControls = new Set([0x0b, 0x0c]);
 const c1LineControls = new Set([0x84, 0x85, 0x8d]);
 const escapeLineFinals = new Set([0x44, 0x45, 0x4d, 0x38, 0x63]);
-const sequenceLineFinals = new Set([...'ABEFHdefu'].map((final) => final.charCodeAt(0)));
+const escapeAlignment = '#8';
+const sequenceLineFinals = new Set([...'ABEFHdefru'].map((final) => final.charCodeAt(0)));
 // Controls that move the cursor along the line: BS, and CUF, CUB, CHA, CHT, CBT, HPA and HPR.
 const sequenceColumnFinals = new Set([...'CDGIZ`a'].map((final) => final.charCodeAt(0)));
 
@@ -83,6 +85,8 @@ const stripTerminalControls = (output) => {
   let state = GROUND;
   // Whether the current control sequence has no private or intermediate bytes yet.
   let plainSequence = true;
+  // The intermediate bytes of the current escape sequence.
+  let intermediates = '';
 
   for (const char of output) {
     const code = char.codePointAt(0);
@@ -93,6 +97,7 @@ const stripTerminalControls = (output) => {
     } else if (code === 0x1b) {
       state = ESCAPE;
       plainSequence = true;
+      intermediates = '';
     } else if (code >= 0x80 && code <= 0x9f) {
       state = enterC1(code);
       plainSequence = true;
@@ -107,8 +112,14 @@ const stripTerminalControls = (output) => {
       state = code <= 0x7e ? afterEscape(code) : GROUND;
       if (code > 0x7e) text += char;
       if (escapeLineFinals.has(code)) text += '\n';
+      if (state === ESCAPE_INTERMEDIATE) intermediates = char;
     } else if (state === ESCAPE_INTERMEDIATE) {
-      if (code >= 0x30) state = GROUND;
+      if (code < 0x30) {
+        intermediates += char;
+      } else {
+        state = GROUND;
+        if (intermediates + char === escapeAlignment) text += '\n';
+      }
       if (code > 0x7e) text += char;
     } else if (state === CONTROL_SEQUENCE) {
       // Parameters and intermediates stay in the sequence; a final byte ends it.
