@@ -272,4 +272,59 @@ describe('cli-shortcuts', () => {
     ]);
     consoleError.mockRestore();
   });
+
+  it('should close vite and exit on "q" when the server close throws', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'q')!;
+    const { context, stubs } = createContext();
+
+    stubs.serverClose.throws(new Error('close threw'));
+
+    await expect(shortcut.action(context)).resolves.toBeUndefined();
+
+    expect(stubs.close.calledOnce).toBe(true);
+    expect(stubs.info.lastCall.args[0]).toContain('failed to stop dev server: close threw');
+    expect(processStopMock).toHaveBeenCalledOnce();
+  });
+
+  it('should count a server close that throws undefined as a failed stop', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'r')!;
+    const { context, stubs } = createContext();
+
+    context.server = {
+      close: () => {
+        throw undefined;
+      },
+    } as never;
+
+    await expect(shortcut.action(context)).resolves.toBeUndefined();
+
+    expect(stubs.close.calledOnce).toBe(true);
+    expect(stubs.reboot.called).toBe(false);
+    expect(stubs.info.lastCall.args[0]).toContain('failed to stop dev server: undefined');
+  });
+
+  it('should close vite and exit on "q" without a server', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'q')!;
+    const { context, stubs } = createContext();
+
+    delete context.server;
+
+    await expect(shortcut.action(context)).resolves.toBeUndefined();
+
+    expect(stubs.close.calledOnce).toBe(true);
+    expect(processStopMock).toHaveBeenCalledOnce();
+  });
+
+  it('should close vite and restart once on "r" without a server', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'r')!;
+    const { context, stubs } = createContext();
+
+    delete context.server;
+
+    await expect(shortcut.action(context)).resolves.toBeUndefined();
+
+    expect(stubs.close.calledOnce).toBe(true);
+    expect(stubs.reboot.calledOnceWithExactly(false)).toBe(true);
+    expect(stubs.info.lastCall.args[0]).toContain('server restarted successful');
+  });
 });

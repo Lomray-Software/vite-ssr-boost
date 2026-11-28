@@ -41,24 +41,35 @@ const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<b
     }
   }
 
-  // stop express server
-  const serverError = await new Promise((resolve) => {
-    server?.close(resolve);
-  });
+  // the first failure wins; kept apart from its value so even a thrown undefined counts
+  let failure: { error: unknown } | undefined;
+
+  // stop express server: a close that throws or reports an error still lets vite close
+  if (server) {
+    try {
+      const serverError = await new Promise((resolve) => {
+        server.close(resolve);
+      });
+
+      if (serverError) {
+        failure = { error: serverError };
+      }
+    } catch (error) {
+      failure = { error };
+    }
+  }
 
   // stop vite server, also after a failed server close
-  let viteError: unknown;
-
   try {
     await config?.getVite()?.close();
   } catch (error) {
-    viteError = error || new Error('vite close failed');
+    if (!failure) {
+      failure = { error };
+    }
   }
 
-  const failure = serverError || viteError;
-
   if (failure) {
-    reportStopFailure(config, failure);
+    reportStopFailure(config, failure.error);
 
     return false;
   }
