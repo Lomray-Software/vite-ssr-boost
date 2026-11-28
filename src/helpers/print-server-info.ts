@@ -18,9 +18,9 @@ interface IPrintServerInfoParams {
 }
 
 /**
- * Print server info
+ * Print server info, failing when the logger, the URL lookup or Vite fails
  */
-async function printServerInfo(
+async function printInfo(
   config: ServerConfig,
   { server, version = 'unknown', vite = config.getVite() }: IPrintServerInfoParams = {},
 ): Promise<void> {
@@ -73,6 +73,34 @@ async function printServerInfo(
         chalk.bold('h') +
         chalk.dim(' to show help'),
     );
+  }
+}
+
+/**
+ * Report a failed banner without throwing: the server is already listening and must keep running.
+ */
+function reportPrintFailure(config: ServerConfig, error: unknown): void {
+  const message = `failed to print server info: ${(error as Error)?.message ?? String(error)}`;
+
+  try {
+    config.getLogger().error(chalk.red(message));
+  } catch {
+    console.error(message);
+  }
+}
+
+/**
+ * Print server info. It never rejects, so a caller may start it without awaiting: a failure is
+ * logged and the started server keeps running.
+ */
+async function printServerInfo(
+  config: ServerConfig,
+  params: IPrintServerInfoParams = {},
+): Promise<void> {
+  try {
+    await printInfo(config, params);
+  } catch (error) {
+    reportPrintFailure(config, error);
   }
 }
 
