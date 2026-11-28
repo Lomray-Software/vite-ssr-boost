@@ -42,6 +42,28 @@ describe('ssr-boost dev node pick', () => {
     expect(createDevServerMock).toHaveBeenCalledOnce();
   });
 
+  it('should close the picking Vite once when reading the server selection throws', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    const failure = new Error('selection getter failed');
+    const pluginOptions = {};
+
+    Object.defineProperty(pluginOptions, 'managedServer', {
+      get: () => {
+        throw failure;
+      },
+    });
+    createDevViteMock.mockResolvedValue({
+      config: { plugins: [{ name: PLUGIN_NAME, pluginOptions }] },
+      close,
+    });
+
+    await expect(runDev({ version: '1', isPrintInfo: false, mode: 'development' })).rejects.toBe(
+      failure,
+    );
+    expect(close).toHaveBeenCalledOnce();
+    expect(createDevServerMock).not.toHaveBeenCalled();
+  });
+
   it('should fail an Express pick on the missing Express and close the picking Vite', async () => {
     const close = vi.fn().mockResolvedValue(undefined);
 

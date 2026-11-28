@@ -104,8 +104,15 @@ async function runDev(params: IRunDevParams): Promise<IRunDevOut> {
   // Without the flag the plugin options decide. The Express server mounts this Vite, so the
   // default start evaluates the config once; Express loads only once it is picked.
   const pick = params.server ? undefined : await createDevVite(config.mode);
+  let managedServer: TManagedServer | undefined;
 
-  if (pick && readManagedServer(pick) === 'node') {
+  try {
+    managedServer = pick && readManagedServer(pick);
+  } catch (error) {
+    return rethrowAfterCleanup(error, () => pick?.close(), config.getLogger());
+  }
+
+  if (pick && managedServer === 'node') {
     await pick.close();
 
     return startNodeServer(params);
