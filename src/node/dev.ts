@@ -162,6 +162,14 @@ const createDevPreparer =
   };
 
 /**
+ * A logger that reads the Vite logger only when it writes, so a failing read stays inside the
+ * guarded cleanup log instead of escaping the failure path.
+ */
+const getCleanupLogger = (vite: ViteDevServer): IErrorLogger => ({
+  error: (message, options) => vite.config.logger.error(message, options),
+});
+
+/**
  * The mode one dev start runs in: the explicit option, then the inline Vite config.
  */
 const getDevMode = (mode?: string, inlineConfig?: InlineConfig): string =>
@@ -210,13 +218,16 @@ const prepareDev = async ({
   );
 
   let isSPA: boolean;
+  let viteMiddleware: Connect.Server;
 
-  // Every config read before the return can throw, and the caller holds no close until then.
+  // Every read before the return can throw, and the caller holds no close until then.
   try {
     config.setVite(vite);
     ({ isSPA } = config.getParams());
+    // Vite keeps this object across restarts and swaps only its stack.
+    viteMiddleware = vite.middlewares;
   } catch (error) {
-    return rethrowAfterCleanup(error, () => vite.close(), vite.config.logger);
+    return rethrowAfterCleanup(error, () => vite.close(), getCleanupLogger(vite));
   }
 
   const prepare = createDevPreparer(config, vite);
@@ -271,7 +282,7 @@ const prepareDev = async ({
     );
 
   return {
-    viteMiddleware: vite.middlewares,
+    viteMiddleware,
     handler: isSPA ? spaHandler : ssrHandler,
     config,
     vite,

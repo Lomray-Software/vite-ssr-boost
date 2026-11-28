@@ -7,7 +7,7 @@ import net from 'node:net';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
-import type { InlineConfig, Logger } from 'vite';
+import type { InlineConfig, Logger, ViteDevServer } from 'vite';
 import { createLogger, version as viteVersion } from 'vite';
 import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -671,6 +671,93 @@ export default defineEntry(App, routes, {
       vi.spyOn(config, 'getParams').mockImplementation(() => {
         throw readError;
       });
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+
+    try {
+      await expect(
+        prepareDev({
+          server,
+          config,
+          vite: viteConfig({
+            plugins: [
+              ViteSsrBoostPlugin({ tsconfigAliases: false }),
+              {
+                name: 'counting-close',
+
+                /**
+                 * Count every close of this Vite.
+                 */
+                configureServer: (vite) => {
+                  const close = vite.close.bind(vite);
+
+                  vite.close = async () => {
+                    viteClose();
+                    await close();
+                  };
+                },
+              },
+            ],
+          }),
+        }),
+      ).rejects.toBe(readError);
+      expect(viteClose).toHaveBeenCalledOnce();
+      expect(server.listening).toBe(true);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  /**
+   * Make a property of the started Vite throw on read.
+   */
+  const failRead = (target: object, key: string, error: Error): void => {
+    Object.defineProperty(target, key, {
+      configurable: true,
+
+      /**
+       * Throw the given error on every read.
+       */
+      get: () => {
+        throw error;
+      },
+    });
+  };
+
+  it.each([
+    {
+      name: 'reading the middlewares after setVite throws',
+      /**
+       * Fail the middlewares read the start makes after setVite.
+       */
+      breakVite: (vite: ViteDevServer, _config: ServerConfig, error: Error) =>
+        failRead(vite, 'middlewares', error),
+    },
+    {
+      name: 'the Vite logger cannot be read after a failed start',
+      /**
+       * Fail the params read, and every later read of the Vite logger.
+       */
+      breakVite: (vite: ViteDevServer, config: ServerConfig, error: Error) => {
+        vi.spyOn(config, 'getParams').mockImplementation(() => {
+          throw error;
+        });
+        failRead(vite.config, 'logger', new Error('logger failed'));
+      },
+    },
+  ])('closes its Vite once when $name', async ({ breakVite }) => {
+    writeProject();
+
+    const config = ServerConfig.init({ mode: 'development' });
+    const readError = new Error('read failed');
+    const viteClose = vi.fn();
+    const server = http.createServer();
+    const setVite = config.setVite.bind(config);
+
+    vi.spyOn(config, 'setVite').mockImplementation((vite) => {
+      setVite(vite);
+      breakVite(vite, config, readError);
     });
 
     await new Promise<void>((resolve) => server.listen(0, resolve));
