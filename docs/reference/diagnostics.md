@@ -38,11 +38,31 @@ or reading `context.request` does not warn.
 Use `context.request` for the Fetch request's URL, headers, method and signal. Before the shell
 is sent, set `context.response.headers` and `context.response.status` for response metadata;
 use React Router's HTTP helpers such as `redirect()` in loaders/actions. The earlier managed
-`onRequest(req, res)` arguments and Express middleware are not deprecated by this diagnostic.
+`onRequest(req, res)` arguments and Express middleware are not deprecated by this diagnostic;
+Express-only entry hooks are covered by
+[`SSR_BOOST_DEPRECATED_EXPRESS_HOOK`](#ssr_boost_deprecated_express_hook).
 
 Accessors are installed only in managed development with diagnostics enabled, using `loggerDev`.
 `SSR_BOOST_DIAGNOSTICS=0` disables them. Production keeps plain properties with no accessor or
 warning overhead, even when other diagnostics are enabled with `SSR_BOOST_DIAGNOSTICS=1`.
+
+## SSR_BOOST_DEPRECATED_EXPRESS_HOOK {#ssr_boost_deprecated_express_hook}
+
+The Express entry configures a hook that only the Express server can run. Each hook warns once
+per process, when the entry loads (or, for `shouldSkip`, the first time a request is skipped).
+The hooks keep working through 8.x; removal is planned for **9.0**, subject to the
+[support policy](/reference/support) notice periods.
+
+| Hook | Replacement |
+| --- | --- |
+| `onRequest(req, res)` | `defineEntry` `onRequest({ request })` returning `{ appProps, headers, status }` or a `Response` |
+| `shouldSkip` (calls `next()`) | Return a `Response` from `onRequest`, or mount your own route before the SSR handler |
+| `onServerCreated` | Register routes and middleware on your own server before mounting the handler |
+| `onServerStarted` | Await `listen()` from `createProductionServer`, or use the server's `listening` event |
+| `middlewares.expressStatic` | The `static` option of `prepareProduction` / `createProductionServer` when you run your own launcher |
+
+See [Runtime adapters](/guide/runtime-adapters) for the managed node:http server.
+`SSR_BOOST_DIAGNOSTICS=0` silences these warnings.
 
 ## SSR_BOOST_SSR_POLICY {#ssr_boost_ssr_policy}
 

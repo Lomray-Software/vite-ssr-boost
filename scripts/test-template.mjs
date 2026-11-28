@@ -26,6 +26,7 @@ import {
   measureProductionColdStart,
   assertProductionBudgets,
 } from './helpers/production-budget.mjs';
+import countDiagnostics from './helpers/diagnostics.mjs';
 import measureProductionLoad from './helpers/production-load.mjs';
 
 const TEMPLATE_HOME_MARKER = 'SPA, SSR, Mobx, Consistent Suspense, Meta tags';
@@ -63,6 +64,7 @@ const acceptance = {
   chunks: [],
   deferred: [],
   policyInfo: 0,
+  expressHookDeprecations: 0,
   diagnosticsWarnings: 0,
 };
 const cli = join(directory, 'node_modules', '@lomray', 'vite-ssr-boost', 'cli.js');
@@ -92,13 +94,16 @@ const getPort = async () => {
   return address.port;
 };
 
+/**
+ * Add one process's diagnostics to the acceptance totals; a repeated deprecation fails the run.
+ */
 const recordDiagnostics = (output) => {
-  for (const [, code] of stripVTControlCharacters(output).matchAll(
-    /\b(SSR_BOOST_[A-Z_]+)(?=:|\])/g,
-  )) {
-    if (code === 'SSR_BOOST_SSR_POLICY') acceptance.policyInfo += 1;
-    else acceptance.diagnosticsWarnings += 1;
-  }
+  const counts = countDiagnostics(output);
+
+  assert.deepEqual(counts.repeated, [], 'Express hook deprecation repeated within one process.');
+  acceptance.policyInfo += counts.policyInfo;
+  acceptance.expressHookDeprecations += counts.expressHookDeprecations;
+  acceptance.diagnosticsWarnings += counts.unexpected;
 };
 
 const start = (args, env = {}) => {
@@ -133,9 +138,14 @@ const run = async (args) => {
 
 const hasExited = (child) => child.exitCode !== null || child.signalCode !== null;
 
-const stop = async (child) => {
+/**
+ * Stop a CLI process with SIGTERM, then SIGKILL after three seconds.
+ * With `drains`, the process must have drained and exited with code 0 on SIGTERM alone.
+ */
+const stop = async (child, { drains = false } = {}) => {
   if (hasExited(child)) {
     await child.closed;
+    assert.ok(!drains, 'The managed server exited before SIGTERM.');
     return;
   }
 
@@ -150,6 +160,8 @@ const stop = async (child) => {
     }),
   ]);
 
+  const drained = hasExited(child) && child.exitCode === 0;
+
   if (!hasExited(child)) {
     const killed = once(child, 'exit');
 
@@ -157,6 +169,10 @@ const stop = async (child) => {
     await killed;
   }
   await child.closed;
+
+  if (drains) {
+    assert.ok(drained, 'The managed Express server did not drain and exit 0 on SIGTERM.');
+  }
 };
 
 const waitUntilReady = async (origin, child) => {
@@ -444,6 +460,7 @@ const reportAcceptance = async () => {
         `| ${mode} deferred settle delay (first HTML to resolve frame) | ${milliseconds(settleMs)} | > 100 ms |`,
     ),
     `| SSR_BOOST_SSR_POLICY info lines | ${acceptance.policyInfo} | informational |`,
+    `| SSR_BOOST_DEPRECATED_EXPRESS_HOOK lines | ${acceptance.expressHookDeprecations} | once per hook and process |`,
     `| Other SSR_BOOST_ diagnostics | ${acceptance.diagnosticsWarnings} | 0 |`,
     '',
   ].join('\n');
@@ -555,9 +572,10 @@ const verifyColdStart = async () => {
   } finally {
     await stop(child);
     await closed;
+    // The helper strips every terminal control itself; the util helper leaves some behind.
+    recordDiagnostics(output);
     output = stripVTControlCharacters(output);
     console.info(output);
-    recordDiagnostics(output);
   }
 
   assert.doesNotMatch(
@@ -985,7 +1003,8 @@ try {
       `Advisory: streamed shell ratio: ${(candidateTtfb.deferred / candidateTtfb.home).toFixed(3)}x / 1.5x target`,
     );
   } finally {
-    await stop(prod);
+    // The template keeps the default managed Express server, so this pins its SIGTERM drain.
+    await stop(prod, { drains: true });
     await dispose();
   }
 

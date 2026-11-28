@@ -7,10 +7,13 @@ describe('PrepareServer', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    (globalThis as Record<symbol, Set<string> | undefined>)[
+      Symbol.for('@lomray/vite-ssr-boost/diagnostics')
+    ]?.clear();
   });
 
   const createConfig = (isProd = false) => {
-    const logger = { error: vi.fn(), info: vi.fn() };
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
     const vite = {
       ssrLoadModule: vi.fn(),
       transformIndexHtml: vi.fn(),
@@ -65,6 +68,78 @@ describe('PrepareServer', () => {
     });
   });
 
+  it('warns once per configured Express-only hook across entry reloads', async () => {
+    const config = createConfig(false);
+    config.getVite().ssrLoadModule.mockResolvedValue({
+      default: {
+        render: vi.fn(),
+        init: vi.fn().mockResolvedValue({
+          onRequest: vi.fn(),
+          onServerCreated: vi.fn(),
+          onServerStarted: vi.fn(),
+        }),
+        routes: [],
+        middlewares: { expressStatic: { maxAge: 0 } },
+      },
+    });
+
+    const service = PrepareServer.init(config as never);
+
+    await service.loadEntrypoint();
+    await service.loadEntrypoint();
+
+    const messages = config.getLogger().warn.mock.calls.map(([message]) => message as string);
+
+    expect(messages).toHaveLength(4);
+    expect(messages.every((message) => message.includes('SSR_BOOST_DEPRECATED_EXPRESS_HOOK'))).toBe(
+      true,
+    );
+    expect(messages.every((message) => message.includes('9.0'))).toBe(true);
+
+    for (const hook of [
+      'onRequest(req, res)',
+      'onServerCreated',
+      'onServerStarted',
+      'middlewares.expressStatic',
+    ]) {
+      expect(
+        messages.some((message) => message.startsWith(`[ssr-boost]`) && message.includes(hook)),
+      ).toBe(true);
+    }
+  });
+
+  it('does not warn for entries without Express-only hooks', async () => {
+    const config = createConfig(false);
+    config.getVite().ssrLoadModule.mockResolvedValue({
+      default: {
+        render: vi.fn(),
+        init: vi.fn().mockResolvedValue({ onResponse: vi.fn() }),
+        routes: [],
+        middlewares: { compression: false },
+      },
+    });
+
+    await PrepareServer.init(config as never).loadEntrypoint();
+
+    expect(config.getLogger().warn).not.toHaveBeenCalled();
+  });
+
+  it('keeps Express-only hooks silent with SSR_BOOST_DIAGNOSTICS=0', async () => {
+    vi.stubEnv('SSR_BOOST_DIAGNOSTICS', '0');
+    const config = createConfig(false);
+    config.getVite().ssrLoadModule.mockResolvedValue({
+      default: {
+        render: vi.fn(),
+        init: vi.fn().mockResolvedValue({ onServerCreated: vi.fn() }),
+        routes: [],
+      },
+    });
+
+    await PrepareServer.init(config as never).loadEntrypoint();
+
+    expect(config.getLogger().warn).not.toHaveBeenCalled();
+  });
+
   it('should remove init when shouldInit is false', async () => {
     const config = createConfig(false);
     config.getVite().ssrLoadModule.mockResolvedValue({
@@ -99,6 +174,30 @@ describe('PrepareServer', () => {
     expect(footer).toContain('<footer');
   });
 
+  it('loads and transforms through the Vite it was given, not the config one', async () => {
+    const config = createConfig(false);
+    const shell = '<script src="/app/client.ts" async></script><!--ssr-outlet--><footer />';
+    const render = vi.fn();
+    const own = {
+      ssrLoadModule: vi.fn().mockResolvedValue({ default: { render, routes: [] } }),
+      transformIndexHtml: vi.fn().mockResolvedValue(shell),
+      config: { base: '/app/' },
+    };
+
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(shell as never);
+
+    const service = PrepareServer.init(config as never, undefined, own as never);
+    const result = await service.loadEntrypoint();
+    const [header] = await service.loadHtml({ originalUrl: '/' } as never);
+
+    expect(result.render).toBe(render);
+    expect(own.ssrLoadModule).toHaveBeenCalledOnce();
+    expect(own.transformIndexHtml).toHaveBeenCalledWith('/', shell, '/index.html');
+    expect(header).toContain('<script src="/app/client.ts"></script>');
+    expect(config.getVite().ssrLoadModule).not.toHaveBeenCalled();
+    expect(config.getVite().transformIndexHtml).not.toHaveBeenCalled();
+  });
+
   it('reuses the production shell while keeping returned tuples isolated', async () => {
     const config = createConfig(true);
     const read = vi.spyOn(fs, 'readFileSync').mockReturnValue('header<!--ssr-outlet-->footer');
@@ -106,7 +205,10 @@ describe('PrepareServer', () => {
     const first = await service.loadHtml({ originalUrl: '/' } as never);
     first[0] = 'request-specific';
 
-    expect(await service.loadHtml({ originalUrl: '/items' } as never)).toEqual(['header', 'footer']);
+    expect(await service.loadHtml({ originalUrl: '/items' } as never)).toEqual([
+      'header',
+      'footer',
+    ]);
     expect(read).toHaveBeenCalledTimes(1);
   });
 

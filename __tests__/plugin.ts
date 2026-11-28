@@ -50,6 +50,21 @@ describe('ViteSsrBoostPlugin', () => {
     expect(mainPlugin).toBeDefined();
   });
 
+  it('should keep express as the managed server unless node is selected', () => {
+    /**
+     * Read the options the main plugin stores for the CLI.
+     */
+    const managedServer = (plugins: ReturnType<typeof ViteSsrBoostPlugin>) =>
+      (
+        plugins.find((plugin) => plugin.name === PLUGIN_NAME) as unknown as {
+          pluginOptions: IPluginOptions;
+        }
+      ).pluginOptions.managedServer;
+
+    expect(managedServer(ViteSsrBoostPlugin())).toBe('express');
+    expect(managedServer(ViteSsrBoostPlugin({ managedServer: 'node' }))).toBe('node');
+  });
+
   it('should include ViteNormalizeRouterPlugin', () => {
     const plugins = ViteSsrBoostPlugin();
     const mainPlugin = plugins.find((plugin) => plugin.name === normalizePluginName);

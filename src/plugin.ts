@@ -38,6 +38,8 @@ export interface IPluginOptions {
   }[];
   // Additional entry points for build
   entrypoint?: IBuildEntrypoint[];
+  // Server started by the CLI (dev, start, preview). default: express
+  managedServer?: 'node' | 'express';
 }
 
 const defaultOptions: IPluginOptions = {
@@ -46,6 +48,7 @@ const defaultOptions: IPluginOptions = {
   clientFile: 'client.ts',
   tsconfigAliases: true,
   spaIndex: false,
+  managedServer: 'express',
 };
 
 /**

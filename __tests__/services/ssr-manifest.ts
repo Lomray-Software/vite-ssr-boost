@@ -44,6 +44,44 @@ describe('SsrManifest', () => {
     expect(SsrManifest.get(config)).toBe(SsrManifest.get(config));
   });
 
+  it('should replace the instance when a restarted server brings a new config', () => {
+    const first = SsrManifest.get(createConfig());
+    const config = createConfig();
+    const second = SsrManifest.get(config);
+
+    expect(second).not.toBe(first);
+    expect(SsrManifest.get(config)).toBe(second);
+  });
+
+  it('should replace the instance when a restart puts a new Vite on the same config', () => {
+    let vite: unknown = { config: { resolve: { alias: [] } } };
+    const config = {
+      isModulePreload: true,
+      getParams: () => ({ root: '/root' }),
+      getPluginConfig: () => ({ clientFile: 'client.ts' }),
+      getVite: () => vite,
+    } as never;
+    const first = SsrManifest.get(config);
+
+    expect(SsrManifest.get(config)).toBe(first);
+
+    vite = { config: { resolve: { alias: [] } } };
+    const second = SsrManifest.get(config);
+
+    expect(second).not.toBe(first);
+    expect(SsrManifest.get(config)).toBe(second);
+  });
+
+  it('should key the instance on a given Vite instead of the one the config holds', () => {
+    const config = createConfig();
+    const own = { config: { resolve: { alias: [] } } };
+    const manifest = SsrManifest.get(config, {}, own as never);
+
+    expect(SsrManifest.get(config, {}, own as never)).toBe(manifest);
+    expect(SsrManifest.get(config)).not.toBe(manifest);
+    expect((manifest as unknown as { vite: unknown }).vite).toBe(own);
+  });
+
   it('should load and cleanup client manifest', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(
@@ -133,10 +171,17 @@ describe('SsrManifest', () => {
         imports: ['dep'],
         isEntry: true,
       },
-      dep: {
+      'src/styles.css': {
         assets: [],
-        css: ['dep.css'],
-        file: 'dep.js',
+        css: [],
+        file: 'assets/styles-Mn0pQr1s.css',
+        imports: [],
+        isEntry: true,
+      },
+      dep: {
+        assets: ['assets/logo-Ab12Cd34.svg'],
+        css: ['assets/dep-Xy_9-8Zq.css'],
+        file: 'assets/dep-Q1w2E3r4.js',
         imports: [],
       },
     });
@@ -147,7 +192,13 @@ describe('SsrManifest', () => {
     );
 
     expect(Object.keys(assets)).toEqual(
-      expect.arrayContaining(['img.png', 'style.css', 'route.js', 'dep.css', 'dep.js']),
+      expect.arrayContaining([
+        'img.png',
+        'style.css',
+        'route.js',
+        'assets/dep-Xy_9-8Zq.css',
+        'assets/dep-Q1w2E3r4.js',
+      ]),
     );
 
     manifest.buildRoutesManifest();
@@ -160,6 +211,137 @@ describe('SsrManifest', () => {
     expect(writeFileSync).toHaveBeenCalledWith(
       '/root/dist/client/assets-manifest.json',
       writeFileSync.mock.calls[0][1],
+      { encoding: 'utf-8' },
+    );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      '/root/dist/server/fingerprinted-files.json',
+      `${JSON.stringify(
+        [
+          'assets/dep-Q1w2E3r4.js',
+          'assets/dep-Xy_9-8Zq.css',
+          'assets/logo-Ab12Cd34.svg',
+          'assets/styles-Mn0pQr1s.css',
+        ],
+        null,
+        2,
+      )}\n`,
+      { encoding: 'utf-8' },
+    );
+  });
+
+  it('matches a js asset record against assetFileNames, not chunkFileNames', () => {
+    const writeFileSync = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+    const manifest = SsrManifest.get(createConfig(), {
+      buildDir: 'dist',
+      buildOutput: { rollupOptions: { output: { assetFileNames: 'assets/[name][extname]' } } },
+    }) as unknown as TSsrManifestPrivate;
+    manifest.pathNormalize.getImportPostfix = vi.fn(() => ['', '.ts']);
+    manifest.pathNormalize.getAppPath = vi.fn((val: string) => val);
+    parseMock.mockReturnValue([]);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(manifest, 'loadClientManifest').mockReturnValue({
+      // Vite writes `src` without `name` for an `?url` import of a script.
+      'src/sw-register.js': { file: 'assets/sw-register.js', src: 'src/sw-register.js' },
+      // An entry asset carries `names` beside `name`.
+      'src/theme.js': {
+        file: 'assets/register.js',
+        src: 'src/theme.js',
+        isEntry: true,
+        name: 'register',
+        names: ['register.js'],
+      },
+      'src/lazy.js': { file: 'assets/lazy-DauyBWxg.js', name: 'lazy', src: 'src/lazy.js' },
+    });
+
+    manifest.buildRoutesManifest();
+
+    expect(writeFileSync).toHaveBeenCalledWith(
+      '/root/dist/server/fingerprinted-files.json',
+      `${JSON.stringify(['assets/lazy-DauyBWxg.js'], null, 2)}\n`,
+      { encoding: 'utf-8' },
+    );
+  });
+
+  it('keeps a non-js record with a chunk name out of the immutable files', () => {
+    const writeFileSync = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+    const manifest = SsrManifest.get(createConfig(), {
+      buildDir: 'dist',
+      buildOutput: {
+        rollupOptions: {
+          output: {
+            entryFileNames: 'assets/[name]-[hash].bundle',
+            assetFileNames: 'assets/[name]-[hash][extname]',
+          },
+        },
+      },
+    }) as unknown as TSsrManifestPrivate;
+    manifest.pathNormalize.getImportPostfix = vi.fn(() => ['', '.ts']);
+    manifest.pathNormalize.getAppPath = vi.fn((val: string) => val);
+    parseMock.mockReturnValue([]);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(manifest, 'loadClientManifest').mockReturnValue({
+      // A chunk from a pattern without `.js` cannot be told apart from an asset.
+      'src/app.ts': {
+        file: 'assets/app-DauyBWxg.bundle',
+        src: 'src/app.ts',
+        isEntry: true,
+        name: 'app',
+      },
+      'src/logo.svg': {
+        file: 'assets/logo-B2xQ9kLm.svg',
+        src: 'src/logo.svg',
+        name: 'logo',
+        names: ['logo.svg'],
+      },
+    });
+
+    manifest.buildRoutesManifest();
+
+    expect(writeFileSync).toHaveBeenCalledWith(
+      '/root/dist/server/fingerprinted-files.json',
+      `${JSON.stringify(['assets/logo-B2xQ9kLm.svg'], null, 2)}\n`,
+      { encoding: 'utf-8' },
+    );
+  });
+
+  it('keeps an entry from a pattern without a hash out of the immutable files', () => {
+    const writeFileSync = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+    const manifest = SsrManifest.get(createConfig(), {
+      buildDir: 'dist',
+      buildOutput: {
+        rollupOptions: {
+          output: {
+            entryFileNames: 'assets/[name]-facebook.js',
+            assetFileNames: 'assets/[name]-[hash][extname]',
+          },
+        },
+      },
+    }) as unknown as TSsrManifestPrivate;
+    manifest.pathNormalize.getImportPostfix = vi.fn(() => ['', '.ts']);
+    manifest.pathNormalize.getAppPath = vi.fn((val: string) => val);
+    parseMock.mockReturnValue([]);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(manifest, 'loadClientManifest').mockReturnValue({
+      // An eight-letter suffix from a fixed pattern is no content hash.
+      'src/app.ts': {
+        file: 'assets/app-facebook.js',
+        src: 'src/app.ts',
+        isEntry: true,
+        name: 'app',
+      },
+      'src/logo.svg': {
+        file: 'assets/logo-B2xQ9kLm.svg',
+        src: 'src/logo.svg',
+        name: 'logo',
+        names: ['logo.svg'],
+      },
+    });
+
+    manifest.buildRoutesManifest();
+
+    expect(writeFileSync).toHaveBeenCalledWith(
+      '/root/dist/server/fingerprinted-files.json',
+      `${JSON.stringify(['assets/logo-B2xQ9kLm.svg'], null, 2)}\n`,
       { encoding: 'utf-8' },
     );
   });

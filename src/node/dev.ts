@@ -1,0 +1,405 @@
+import { readFile } from 'node:fs/promises';
+import http from 'node:http';
+import https from 'node:https';
+import type { AddressInfo } from 'node:net';
+import path from 'node:path';
+import type { Connect, InlineConfig, Plugin, ViteDevServer } from 'vite';
+import type { TCompression } from '@adapters/compression';
+import getRouteAssets from '@adapters/express/route-assets';
+import adapterNode from '@adapters/node';
+import type { IEntry, IEntryHost } from '@core/entry';
+import type { TSsrHandler } from '@core/types';
+import lazyLogger from '@helpers/lazy-logger';
+import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
+import settleAll from '@helpers/settle-all';
+import stripEntryAsync from '@helpers/strip-entry-async';
+import createLifecycle, { resolveHealthPaths } from '@node/lifecycle';
+import type { ILifecycle, ILifecycleOptions, TLifecycleServer } from '@node/lifecycle';
+import renderToStream from '@node/render-to-stream';
+import { createRequestListener, resolveTlsOptions, toEntry } from '@node/server-kit';
+import type { IErrorLogger } from '@node/server-kit';
+import { splitHtmlShell } from '@services/diagnostics';
+import ServerConfig from '@services/server-config';
+
+interface IPrepareDevOptions {
+  /** Parent HTTP(S) server; Vite attaches HMR to it instead of opening its own port. */
+  server: TLifecycleServer;
+  /** Vite mode; wins over `vite.mode`, which wins over `development`. */
+  mode?: string;
+  entrypointName?: string;
+  isHost?: boolean;
+  port?: number;
+  /** Inline Vite config merged under the managed dev settings. */
+  vite?: InlineConfig;
+  /** An initialized config; created from the options above when omitted. */
+  config?: ServerConfig;
+  /** Load the server entry through Vite; tests can supply their own loader. */
+  loadEntry?: (vite: ViteDevServer, file: string) => Promise<unknown>;
+}
+
+interface IDevApp {
+  /** Vite's Connect stack; mount it before the handler. */
+  viteMiddleware: Connect.Server;
+  /** Fetch handler for documents, reloading the entry on every request. */
+  handler: TSsrHandler;
+  config: ServerConfig;
+  vite: ViteDevServer;
+  server: TLifecycleServer;
+  /** Close Vite, its watcher and HMR clients; the parent server stays open. */
+  close: () => Promise<void>;
+}
+
+interface ICreateDevServerOptions extends Omit<IPrepareDevOptions, 'server'>, ILifecycleOptions {
+  compression?: TCompression;
+  logger?: IErrorLogger;
+}
+
+interface IDevServer extends IDevApp {
+  lifecycle: ILifecycle;
+  listen: (port?: number, host?: string) => Promise<AddressInfo | string | null>;
+}
+
+/**
+ * Whether this Vite reads HMR server options from server.ws: Vite 8.1 moved them from server.hmr.
+ */
+const readsWsOptions = (version: string): boolean => {
+  const [major, minor] = version.split('.').map(Number);
+
+  return major > 8 || (major === 8 && minor >= 1);
+};
+
+/**
+ * Vite 8.1 moved the custom HMR server from server.hmr to server.ws and warns on the old key.
+ */
+const hmrOption = (version: string, server: TLifecycleServer): InlineConfig['server'] => {
+  // Vite 6 and 7 types know neither server.ws nor WsOptions, so the key is chosen untyped.
+  const key = readsWsOptions(version) ? 'ws' : 'hmr';
+  const option: Record<string, unknown> = { [key]: { server } };
+
+  return option;
+};
+
+/**
+ * Whether the project set this HMR key itself: off, on a server of its own or on its own port.
+ * The client connects to a configured port even when a server is injected, so a port stays Vite's.
+ */
+const isOwnHmr = (option: unknown): boolean =>
+  option === false ||
+  (typeof option === 'object' &&
+    option !== null &&
+    (('server' in option && Boolean(option.server)) ||
+      ('port' in option && option.port !== undefined)));
+
+/**
+ * Whether the project set its own HMR: before Vite 8.1 server.ws only turns the websocket off,
+ * so an object there is ignored by Vite and leaves HMR to the parent server.
+ */
+const hasOwnHmr = (version: string, options?: Record<string, unknown>): boolean =>
+  isOwnHmr(options?.hmr) ||
+  (readsWsOptions(version) ? isOwnHmr(options?.ws) : options?.ws === false);
+
+/**
+ * Put HMR on the parent server unless the project turned it off or gave it a server of its own:
+ * the hook reads the config file and inline config merged, under both `server.hmr` and `server.ws`.
+ */
+const parentHmrPlugin = (version: string, server: TLifecycleServer): Plugin => ({
+  name: 'vite-ssr-boost:parent-hmr',
+  enforce: 'post',
+  config: (userConfig) =>
+    hasOwnHmr(version, userConfig.server as Record<string, unknown> | undefined)
+      ? undefined
+      : { server: hmrOption(version, server) },
+});
+
+/**
+ * Vite's own SSR loader with mapped stack traces.
+ */
+const viteLoadEntry = (vite: ViteDevServer, file: string): Promise<unknown> =>
+  vite.ssrLoadModule(file, { fixStacktrace: true });
+
+/**
+ * Original URL as the browser sent it; Vite strips the base from req.url in middleware mode.
+ */
+const originalUrl = (request: Request): string => {
+  const { pathname, search } = new URL(request.url);
+
+  return `${pathname}${search}`;
+};
+
+/**
+ * Transform the dev document per request, dropping async from the client entry so plugin preambles run first.
+ */
+const loadDevHtml = async (
+  config: ServerConfig,
+  vite: ViteDevServer,
+  url: string,
+): Promise<[string, string]> => {
+  const { root, indexFile, clientFile } = config.getParams();
+  const file = path.resolve(`${root}/${indexFile}`);
+  const html = await readFile(file, 'utf8');
+  const transformed = stripEntryAsync(
+    await vite.transformIndexHtml(url, html, indexFile),
+    vite.config.base,
+    clientFile,
+    url,
+  );
+
+  return splitHtmlShell(transformed, file);
+};
+
+/**
+ * Inject the route assets of this start's dev graph, never those of a Vite a later start put on
+ * the shared config; the manifest changes with every edit.
+ */
+const createDevPreparer =
+  (config: ServerConfig, vite: ViteDevServer): NonNullable<IEntryHost['prepare']> =>
+  async ({ context, executionContext }) => {
+    const assets = await getRouteAssets(config, context.matches, context.isSpa, vite);
+    const hints = assets.injectAssets(context, Boolean(executionContext?.onEarlyHints));
+
+    if (hints.has('Link')) {
+      await executionContext?.onEarlyHints?.(hints);
+    }
+  };
+
+/**
+ * The mode one dev start runs in: the explicit option, then the inline Vite config.
+ */
+const getDevMode = (mode?: string, inlineConfig?: InlineConfig): string =>
+  mode ?? inlineConfig?.mode ?? 'development';
+
+/**
+ * The inline config Vite runs on under the managed server, so the TLS check sees the same one.
+ */
+const getManagedViteConfig = async (
+  inlineConfig: InlineConfig,
+  mode: string,
+): Promise<InlineConfig> => {
+  const { mergeConfig } = await import('vite');
+
+  return mergeConfig(inlineConfig, {
+    mode,
+    appType: 'custom',
+    server: {
+      middlewareMode: true,
+      watch: { usePolling: true, interval: 100 },
+    },
+  });
+};
+
+/**
+ * Run Vite in middleware mode on a parent server and render through a defineEntry() entry.
+ */
+const prepareDev = async ({
+  server,
+  mode: givenMode,
+  entrypointName,
+  isHost = false,
+  port,
+  vite: inlineConfig = {},
+  config: givenConfig,
+  loadEntry = viteLoadEntry,
+}: IPrepareDevOptions): Promise<IDevApp> => {
+  const mode = getDevMode(givenMode, inlineConfig);
+  // The config exists before Vite starts, so only setVite can leave a server to close.
+  const config = givenConfig ?? ServerConfig.init({ isHost, mode, entrypointName }, { port });
+  const { createServer, mergeConfig, version } = await import('vite');
+  const vite = await createServer(
+    mergeConfig(await getManagedViteConfig(inlineConfig, mode), {
+      plugins: [parentHmrPlugin(version, server)],
+    }),
+  );
+
+  let isSPA: boolean;
+  let viteMiddleware: Connect.Server;
+
+  // Every read before the return can throw, and the caller holds no close until then.
+  try {
+    config.setVite(vite);
+    ({ isSPA } = config.getParams());
+    // Vite keeps this object across restarts and swaps only its stack.
+    viteMiddleware = vite.middlewares;
+  } catch (error) {
+    return rethrowAfterCleanup(
+      error,
+      () => vite.close(),
+      lazyLogger(() => vite.config.logger),
+    );
+  }
+
+  const prepare = createDevPreparer(config, vite);
+
+  let mounted: { entry: IEntry; handler: TSsrHandler } | undefined;
+
+  /**
+   * Mount an entry once per loaded module, so its runtime state lives until server code changes.
+   */
+  const mount = (entry: IEntry): TSsrHandler => {
+    if (mounted?.entry === entry) {
+      return mounted.handler;
+    }
+
+    const handler = entry({
+      /**
+       * Transform the document only when the entry renders, never for an onRequest bypass.
+       */
+      getHtml: async (renderRequest) => {
+        const [header, footer] = await loadDevHtml(config, vite, originalUrl(renderRequest));
+
+        return { header, footer };
+      },
+      prepare,
+      renderToStream,
+    });
+
+    mounted = { entry, handler };
+
+    return handler;
+  };
+
+  /**
+   * Re-import the entry so edits to server code apply on the next request.
+   */
+  const ssrHandler: TSsrHandler = async (request, executionContext) => {
+    const { root, serverFile } = config.getParams();
+    const file = path.resolve(`${root}/${serverFile}`);
+
+    return mount(toEntry(file, await loadEntry(vite, file)))(request, executionContext);
+  };
+
+  /**
+   * Client-only entrypoints get the transformed document on every route.
+   */
+  const spaHandler: TSsrHandler = async (request) =>
+    new Response(
+      request.method === 'HEAD'
+        ? null
+        : (await loadDevHtml(config, vite, originalUrl(request))).join(''),
+      { headers: { 'Cache-Control': 'no-cache', 'Content-Type': 'text/html; charset=utf-8' } },
+    );
+
+  return {
+    viteMiddleware,
+    handler: isSPA ? spaHandler : ssrHandler,
+    config,
+    vite,
+    server,
+
+    /**
+     * Close the Vite this call started; a restart keeps the instance, a later call has its own.
+     */
+    close: () => vite.close(),
+  };
+};
+
+/**
+ * A node:http dev server: health probes, Vite middlewares, then SSR for what Vite passed on.
+ */
+const createDevServer = async ({
+  compression = false,
+  logger,
+  health,
+  drainTimeoutMs,
+  readinessGraceMs,
+  keepAliveTimeoutMs,
+  headersTimeoutMs,
+  requestTimeoutMs,
+  onDrain,
+  onClose,
+  mode: givenMode,
+  entrypointName,
+  isHost,
+  port,
+  vite: inlineConfig,
+  config,
+  loadEntry,
+}: ICreateDevServerOptions = {}): Promise<IDevServer> => {
+  // Checked and copied before Vite starts, so a later change to the options never reaches it.
+  const healthPaths = resolveHealthPaths(health);
+
+  const { resolveConfig } = await import('vite');
+  // TLS is chosen in the same mode Vite then runs in.
+  const mode = getDevMode(givenMode, inlineConfig);
+  const resolved = await resolveConfig(
+    await getManagedViteConfig(inlineConfig ?? {}, mode),
+    'serve',
+    mode,
+  );
+  const tls = await resolveTlsOptions(resolved.server.https);
+  const server = tls ? https.createServer(tls) : http.createServer();
+  // Passed by name, so options the caller inherits from a prototype still count.
+  const app = await prepareDev({
+    server,
+    mode,
+    entrypointName,
+    isHost,
+    port,
+    vite: inlineConfig,
+    config,
+    loadEntry,
+  });
+  // The caller holds no close until the return, so a failing setup step closes this Vite.
+  try {
+    const render = adapterNode(app.handler, { compression });
+    const lifecycle = createLifecycle(server, {
+      health: healthPaths,
+      drainTimeoutMs,
+      readinessGraceMs,
+      keepAliveTimeoutMs,
+      headersTimeoutMs,
+      requestTimeoutMs,
+      onDrain,
+      /**
+       * Close Vite once the sockets drained, so a response still rendering completes.
+       */
+      onClose: async () => {
+        await settleAll(
+          () => app.close(),
+          () => onClose?.(),
+        );
+      },
+    });
+
+    server.on(
+      'request',
+      createRequestListener(
+        [
+          lifecycle.health,
+
+          /**
+           * Hand the request to whichever Vite stack is current, so restarts keep working.
+           */
+          (req, res, next) => app.viteMiddleware(req, res, next),
+
+          /**
+           * Render whatever Vite passed on, from the URL the browser sent.
+           */
+          (req, res, next) => {
+            req.url = (req as Connect.IncomingMessage).originalUrl ?? req.url;
+            void render(req, res, next);
+          },
+        ],
+        logger ?? app.config.getLogger(),
+      ),
+    );
+
+    lifecycle.setReady();
+
+    return {
+      ...app,
+      lifecycle,
+      close: lifecycle.close,
+      listen: lifecycle.listen,
+    };
+  } catch (error) {
+    return rethrowAfterCleanup(
+      error,
+      () => app.close(),
+      logger ?? lazyLogger(() => app.vite.config.logger),
+    );
+  }
+};
+
+export { createDevServer, hasOwnHmr, prepareDev };
+
+export type { ICreateDevServerOptions, IDevApp, IDevServer, IPrepareDevOptions };

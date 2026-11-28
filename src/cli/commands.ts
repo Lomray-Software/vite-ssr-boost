@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import chalk from 'chalk';
 import { Command, Option } from 'commander';
 import type { IDoctorOptions } from '@cli/doctor';
+import announcePreview from '@cli/helpers/announce-preview';
 import enableShortcuts from '@cli/helpers/enable-shortcuts';
+import onListening from '@cli/helpers/on-listening';
+import serverOption from '@cli/helpers/server-option';
 import type { IInitOptions } from '@cli/init';
 import type {
   IBuildActionParams,
@@ -67,9 +70,10 @@ program
   .addOption(new Option('--reset-cache', 'Clear vite cache before run.').default(false))
   .addOption(new Option('--mode [mode]', 'Env mode.').env('VITE_ENV_MODE').default('development'))
   .addOption(new Option('--entrypoint [entrypoint]', 'Run only entrypoint by name.'))
+  .addOption(serverOption)
 
   /** Load development services only when the development command runs. */
-  .action(async ({ host, port, resetCache, mode, entrypoint }: IDevActionParams) => {
+  .action(async ({ host, port, resetCache, mode, entrypoint, server }: IDevActionParams) => {
     if (resetCache) {
       const { default: viteResetCache } = await import('@cli/helpers/vite-reset-cache');
 
@@ -81,17 +85,19 @@ program
       console.info(chalk.cyan('Starting the development server...'));
 
       const { default: runDev } = await import('@cli/run-dev');
-      const { server, config } = await runDev({
+      const dev = await runDev({
         version,
         isHost: host,
         isPrintInfo,
         port,
         mode,
         entrypointName: entrypoint,
+        server,
       });
 
-      cliContext.server = server;
-      cliContext.config = config;
+      cliContext.server = dev.server;
+      cliContext.config = dev.config;
+      cliContext.lifecycle = dev.lifecycle;
     };
 
     cliContext.reboot = command;
@@ -178,6 +184,7 @@ program
   .addOption(
     new Option('--module-preload', 'Add module preload scripts to server output.').default(false),
   )
+  .addOption(serverOption)
   .action(runStart);
 
 program
@@ -188,33 +195,31 @@ program
   .addOption(portOption)
   .addOption(envModeOption)
   .addOption(buildDirOption)
+  .addOption(serverOption)
 
   /** Start the managed production server after each preview build completes. */
-  .action(async ({ host, port, focusOnly, mode, buildDir }: IPreviewActionParams) => {
+  .action(async ({ host, port, focusOnly, mode, buildDir, server }: IPreviewActionParams) => {
     global.viteBoostStartTime = performance.now();
 
     /** Restart the selected managed server with its original CLI options. */
     const command = async (isPrintInfo?: boolean): Promise<void> => {
       const { default: runProd } = await import('@cli/run-prod');
-      const { server, config } = await runProd({
+      const prod = await runProd({
         version,
         isHost: host,
         isPrintInfo,
         port,
         focusOnly,
         buildDir,
+        server,
       });
 
-      /** Announce preview mode after the managed listener is ready. */
-      server.on('listening', () => {
-        /** Keep the preview message after the normal readiness output. */
-        setTimeout(() => {
-          config.getLogger().info(chalk.yellow('\n  Running preview mode... \n'));
-        }, 0);
-      });
+      // The node server resolves after it listens; Express is still binding here.
+      onListening(prod.server, () => announcePreview(prod.config));
 
-      cliContext.server = server;
-      cliContext.config = config;
+      cliContext.server = prod.server;
+      cliContext.config = prod.config;
+      cliContext.lifecycle = prod.lifecycle;
     };
 
     cliContext.reboot = command;

@@ -29,6 +29,22 @@ describe('ServerConfig', () => {
     });
   });
 
+  it('should fall back from a missing build root to a conventional one as in 8.6', () => {
+    vi.spyOn(fs, 'existsSync').mockImplementation((filepath) => filepath === './build');
+
+    const config = ServerConfig.init({ isProd: true }, { root: './missing' });
+
+    expect(config.getParams().root).toBe('./build');
+  });
+
+  it('should keep a missing build root when no conventional one exists', () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    const config = ServerConfig.init({ isProd: true }, { root: './missing' });
+
+    expect(config.getParams().root).toBe('./missing');
+  });
+
   it('should apply vite plugin config and entrypoint overrides', async () => {
     const getPluginConfig = (await import('@helpers/plugin-config')).default;
     vi.mocked(getPluginConfig).mockReturnValue({

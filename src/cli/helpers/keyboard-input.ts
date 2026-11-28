@@ -5,6 +5,7 @@ import getPluginConfig from '@helpers/plugin-config';
 import processStop from '@helpers/process-stop';
 
 let isActionRunning = false;
+const exitScheduled = new WeakSet<object>();
 
 /**
  * Handle keyboard press buttons
@@ -19,6 +20,27 @@ function onKeyPress(input: string): void {
 async function runAction(input: string): Promise<void> {
   // ctrl+c or ctrl+d
   if (input === '\x03' || input === '\x04') {
+    const { lifecycle } = cliContext;
+
+    if (lifecycle) {
+      cliContext.isExiting = true;
+
+      // a second press, or one during a restart drain, skips the remaining deadline
+      if (lifecycle.isDraining()) {
+        lifecycle.force();
+      }
+
+      if (!exitScheduled.has(lifecycle)) {
+        exitScheduled.add(lifecycle);
+        lifecycle.close().then(
+          () => processStop(0),
+          () => processStop(1),
+        );
+      }
+
+      return;
+    }
+
     if (!cliContext.server?.close((e) => processStop(e ? 1 : 0))) {
       processStop();
     }

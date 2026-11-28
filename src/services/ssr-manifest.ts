@@ -3,10 +3,13 @@ import path from 'node:path';
 import chalk from 'chalk';
 import type { RouterState } from 'react-router';
 import type { Alias, ModuleNode, RenderBuiltAssetUrl } from 'vite';
+import createFingerprintMatcher from '@helpers/fingerprint-matcher';
+import type { IBuildOutputConfig, TOutputKind } from '@helpers/fingerprint-matcher';
 import type { IAsyncRoute } from '@helpers/import-route';
 import type { TRoutesTree } from '@services/parse-routes';
 import ParseRoutes from '@services/parse-routes';
 import PathNormalize from '@services/path-normalize';
+import { FINGERPRINTED_FILES } from '@services/production-config';
 import type { IAsset, TAssets } from '@services/route-assets';
 import RouteAssets, { AssetType } from '@services/route-assets';
 import type ServerConfig from '@services/server-config';
@@ -16,6 +19,7 @@ interface ISsrManifestParams {
   viteAliases?: Alias[];
   basename?: string;
   renderBuiltUrl?: RenderBuiltAssetUrl;
+  buildOutput?: IBuildOutputConfig;
 }
 
 interface IManifest {
@@ -25,8 +29,31 @@ interface IManifest {
     file: string;
     isEntry?: boolean;
     imports: string[];
+    name?: string;
+    names?: string[];
   };
 }
+
+/**
+ * Name which output pattern produced a manifest record's own file, or undefined when
+ * the record does not tell. Vite writes `name` without `names` only for chunks, so a `.js`
+ * asset record (an `?url` import) is matched against assetFileNames. A record with `name`
+ * and without `names` whose file is not `.js` may be a chunk from a pattern without that
+ * extension, so it is left unnamed and never marked immutable.
+ */
+const getOutputKind = (record: IManifest[string]): TOutputKind | undefined => {
+  const { file, isEntry, name, names } = record;
+
+  if (name === undefined || names !== undefined) {
+    return 'asset';
+  }
+
+  if (!/\.[cm]?js$/.test(file)) {
+    return undefined;
+  }
+
+  return isEntry ? 'entry' : 'chunk';
+};
 
 /**
  * Working with SSR Manifest file
@@ -41,6 +68,11 @@ class SsrManifest extends RouteAssets {
    * Server config
    */
   protected readonly config: ServerConfig;
+
+  /**
+   * Vite server the instance was created with, if any
+   */
+  protected readonly vite?: ReturnType<ServerConfig['getVite']>;
 
   /**
    * Path normalize service
@@ -78,30 +110,48 @@ class SsrManifest extends RouteAssets {
   protected readonly renderBuiltUrl?: RenderBuiltAssetUrl;
 
   /**
+   * Client build output settings that decide which emitted names carry a content hash
+   */
+  protected readonly buildOutput?: IBuildOutputConfig;
+
+  /**
    * @constructor
    */
   protected constructor(
     config: ServerConfig,
-    { buildDir, viteAliases, basename, renderBuiltUrl }: ISsrManifestParams = {},
+    { buildDir, viteAliases, basename, renderBuiltUrl, buildOutput }: ISsrManifestParams = {},
+    vite = config.getVite(),
   ) {
     super(path.resolve(config.getParams().root, buildDir || ''), config.isModulePreload);
 
     this.config = config;
+    this.vite = vite;
     this.root = config.getParams().root;
     this.buildDir = buildDir;
-    this.viteAliases = viteAliases ?? config.getVite()?.config?.resolve.alias;
-    this.pathNormalize = new PathNormalize(config, viteAliases);
+    this.viteAliases = viteAliases ?? vite?.config?.resolve.alias;
+    this.pathNormalize = new PathNormalize(config, this.viteAliases);
     this.basename = basename;
     this.renderBuiltUrl = renderBuiltUrl;
+    this.buildOutput = buildOutput;
   }
 
   /**
-   * Get singleton instance
+   * Get the instance for a config and the Vite it reads, by default the one the config holds.
    */
-  public static get(config: ServerConfig, params: ISsrManifestParams = {}): SsrManifest {
-    if (SsrManifest.instance === null) {
-      SsrManifest.instance = new SsrManifest(config, params);
+  public static get(
+    config: ServerConfig,
+    params: ISsrManifestParams = {},
+    vite = config.getVite(),
+  ): SsrManifest {
+    const { instance } = SsrManifest;
+
+    // A dev restart brings a new Vite, on a new config or the same one, and the old instance
+    // holds the closed one.
+    if (instance && instance.config === config && instance.vite === vite) {
+      return instance;
     }
+
+    SsrManifest.instance = new SsrManifest(config, params, vite);
 
     return SsrManifest.instance;
   }
@@ -110,14 +160,14 @@ class SsrManifest extends RouteAssets {
    * Use inline styles while the managed Vite server is running.
    */
   protected get isDev(): boolean {
-    return Boolean(this.config.getVite());
+    return Boolean(this.vite);
   }
 
   /**
    * Compile SSR graph styles before the browser has populated the client graph.
    */
   public async prepareDevAssets(routes?: RouterState['matches'], isSpa = false): Promise<void> {
-    const vite = this.config.getVite();
+    const { vite } = this;
 
     if (!vite) {
       return;
@@ -336,6 +386,35 @@ class SsrManifest extends RouteAssets {
     if (fs.existsSync(clientDir)) {
       fs.writeFileSync(path.join(clientDir, 'assets-manifest.json'), json, { encoding: 'utf-8' });
     }
+
+    // A server-only build keeps the list the last client build wrote.
+    if (Object.keys(manifest).length) {
+      fs.writeFileSync(
+        path.join(this.getOutDir(), FINGERPRINTED_FILES),
+        `${JSON.stringify(this.getEmittedFiles(manifest), null, 2)}\n`,
+        { encoding: 'utf-8' },
+      );
+    }
+  }
+
+  /**
+   * Client files whose names come from an output pattern with a content hash.
+   * A stable name such as `assets/app.js` stays out, so it is never cached as immutable.
+   */
+  protected getEmittedFiles(manifest: IManifest): string[] {
+    const isFingerprinted = createFingerprintMatcher(this.buildOutput);
+    const files = Object.values(manifest).flatMap((record) => {
+      const { file, css = [], assets = [] } = record;
+      const kind = getOutputKind(record);
+
+      return [
+        // A manifest record for a stylesheet or an imported asset names a file from assetFileNames.
+        ...(file && kind && isFingerprinted(file, kind) ? [file] : []),
+        ...[...css, ...assets].filter((asset) => isFingerprinted(asset, 'asset')),
+      ];
+    });
+
+    return [...new Set(files)].sort((a, b) => a.localeCompare(b));
   }
 
   /**
@@ -372,7 +451,7 @@ class SsrManifest extends RouteAssets {
 
     [...rootIds, ...routeIds].forEach((moduleId) => {
       for (const ext of postfixes) {
-        const module = this.config.getVite()?.moduleGraph.getModuleById(`${moduleId}${ext}`);
+        const module = this.vite?.moduleGraph.getModuleById(`${moduleId}${ext}`);
 
         if (module) {
           modules.push(module);
@@ -400,7 +479,7 @@ class SsrManifest extends RouteAssets {
       ? this.getDevRouteIds(routes).flatMap((id) => {
           const module = this.pathNormalize
             .getImportPostfix()
-            .map((ext) => this.config.getVite()?.moduleGraph.getModuleById(`${id}${ext}`))
+            .map((ext) => this.vite?.moduleGraph.getModuleById(`${id}${ext}`))
             .find(Boolean);
 
           return module

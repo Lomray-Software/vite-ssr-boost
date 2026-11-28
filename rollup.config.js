@@ -48,6 +48,7 @@ export default {
     'node:http',
     'node:module',
     'node:https',
+    'node:events',
     '@babel/types',
   ],
   plugins: [

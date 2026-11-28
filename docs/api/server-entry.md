@@ -1,5 +1,12 @@
 # Server Entry
 
+This page covers the Express entry used by `managedServer: 'express'`, the default. The managed
+node server and custom hosts mount `defineEntry(App, routes, options)` from
+`@lomray/vite-ssr-boost/core/entry` instead; see
+[Managed node server](/guide/runtime-adapters#managed-node-server). Live `req`/`res`, `next()`,
+`onServerCreated`, `onServerStarted` and `middlewares.expressStatic` are Express-only, deprecated
+in 8.x and warn once ([SSR_BOOST_DEPRECATED_EXPRESS_HOOK](/reference/diagnostics#ssr_boost_deprecated_express_hook)).
+
 ## Import
 
 ```ts

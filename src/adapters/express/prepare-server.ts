@@ -4,10 +4,12 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import chalk from 'chalk';
 import type { Express, Request } from 'express';
+import type { ViteDevServer } from 'vite';
 import type { IEntrypointOptions, IPrepareRenderOut } from '@adapters/express/entry';
 import type { TRender } from '@adapters/express/render';
 import type { TRouteObject } from '@interfaces/route-object';
-import { splitHtmlShell } from '@services/diagnostics';
+import Diagnostics, { isDiagnosticsEnabled, splitHtmlShell } from '@services/diagnostics';
+import type { TExpressHook } from '@services/diagnostics';
 import ServerApi from '@services/server-api';
 import type ServerConfig from '@services/server-config';
 
@@ -41,6 +43,11 @@ class PrepareServer {
   protected readonly serverApi: ServerApi;
 
   /**
+   * The dev Vite the server mounted, which a later start on the same config may not replace
+   */
+  protected readonly vite?: ViteDevServer;
+
+  /**
    * Entrypoint resolved params
    */
   protected entrypoint?: IPrepareServerEntrypointLoadOut;
@@ -68,16 +75,28 @@ class PrepareServer {
   /**
    * Retain runtime configuration and reuse the existing server API.
    */
-  protected constructor(config: ServerConfig, serverApi?: ServerApi) {
+  protected constructor(config: ServerConfig, serverApi?: ServerApi, vite?: ViteDevServer) {
     this.config = config;
     this.serverApi = serverApi ?? new ServerApi();
+    this.vite = vite;
   }
 
   /**
-   * Init service
+   * Init service; in development it loads through the given Vite, by default the config's.
    */
-  public static init(config: ServerConfig, serverApi?: ServerApi): PrepareServer {
-    return new PrepareServer(config, serverApi);
+  public static init(
+    config: ServerConfig,
+    serverApi?: ServerApi,
+    vite?: ViteDevServer,
+  ): PrepareServer {
+    return new PrepareServer(config, serverApi, vite);
+  }
+
+  /**
+   * The dev Vite this server loads and transforms through.
+   */
+  protected getVite(): ViteDevServer | undefined {
+    return this.vite ?? this.config.getVite();
   }
 
   /**
@@ -99,7 +118,7 @@ class PrepareServer {
     try {
       if (!isProd) {
         resolvedEntrypoint = (
-          await this.config.getVite()!.ssrLoadModule(entrypointPath, {
+          await this.getVite()!.ssrLoadModule(entrypointPath, {
             fixStacktrace: true,
           })
         ).default as IPrepareRenderOut;
@@ -160,8 +179,31 @@ class PrepareServer {
     };
     this.onServerCreated = onServerCreated;
     this.onServerStarted = onServerStarted;
+    this.warnExpressHooks({
+      onRequest: renderParams.onRequest,
+      onServerCreated,
+      onServerStarted,
+      'middlewares.expressStatic': middlewares?.expressStatic,
+    });
 
     return this.entrypoint;
+  }
+
+  /**
+   * Point configured Express-only hooks at their managed replacements; SSR_BOOST_DIAGNOSTICS=0 silences them.
+   */
+  protected warnExpressHooks(hooks: Partial<Record<TExpressHook, unknown>>): void {
+    if (!isDiagnosticsEnabled(true)) {
+      return;
+    }
+
+    const diagnostics = new Diagnostics('', this.config.getLogger());
+
+    for (const [hook, value] of Object.entries(hooks) as [TExpressHook, unknown][]) {
+      if (value !== undefined) {
+        diagnostics.deprecatedExpressHook(hook);
+      }
+    }
   }
 
   /**
@@ -181,21 +223,18 @@ class PrepareServer {
     let modifiedHtml = this.html;
 
     if (!isProd) {
-      const clientFileEntry = path.posix.normalize(
-        `${this.config.getVite()?.config.base}/${clientFile}`,
-      );
-
       /**
        * Apply Vite transforms and remove async from the entry to preserve plugin preambles.
        */
-      modifiedHtml = (
-        await this.config.getVite()!.transformIndexHtml(req.originalUrl, this.html, indexFile)
-      ).replace(
-        new RegExp(
-          String.raw`<script[^>]*?\bsrc=["']/?${clientFileEntry}([^"']*)["'][^>]*?\sasync\b`,
-          'g',
-        ),
-        (match) => match.replace(/\sasync\b/, ''),
+      const vite = this.getVite()!;
+      // The HTML parser behind the strip is dev tooling, so a production start never loads it.
+      const { default: stripEntryAsync } = await import('@helpers/strip-entry-async');
+
+      modifiedHtml = stripEntryAsync(
+        await vite.transformIndexHtml(req.originalUrl, this.html, indexFile),
+        vite.config.base,
+        clientFile,
+        req.originalUrl,
       );
     }
 

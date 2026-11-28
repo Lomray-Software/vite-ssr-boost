@@ -30,7 +30,7 @@ npm install
 npx ssr-boost doctor
 ```
 
-`@lomray/vite-ssr-boost` adds server rendering to your Vite project while keeping your route objects and components. Build SSR and SPA output from the same app, and choose a managed Express server or a Fetch handler for your own transport.
+`@lomray/vite-ssr-boost` adds server rendering to your Vite project while keeping your route objects and components. Build SSR and SPA output from the same app, and choose a managed server (Express or `node:http`) or a Fetch handler for your own transport.
 
 The [migration guide](./docs/guide/migrate-existing-spa.md) walks through the five-file change:
 
@@ -82,7 +82,7 @@ Deferred router data needs no additional state library. Keep footer hydration by
 
 ## Choose your server
 
-**Managed CLI (default).** Use `ssr-boost dev` for Express with Vite development and HMR, then `ssr-boost build` and `ssr-boost start` for production assets and SSR. The server entry is `@lomray/vite-ssr-boost/adapters/express/entry`, with hooks for requests, rendering and responses.
+**Managed CLI (default).** Use `ssr-boost dev` for Vite development and HMR, then `ssr-boost build` and `ssr-boost start` for production assets and SSR. It runs Express with the server entry `@lomray/vite-ssr-boost/adapters/express/entry`, or `node:http` with `managedServer: 'node'` and a `defineEntry` entry from `@lomray/vite-ssr-boost/core/entry`.
 
 **Request protection.** The default-on [request guard](./docs/api/request-guard.md) validates document methods and targets before hooks, with configurable 404 modes and optional SSR concurrency limits.
 

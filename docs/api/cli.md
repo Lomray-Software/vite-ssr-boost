@@ -111,6 +111,7 @@ Common flags:
 - `--reset-cache`
 - `--mode`
 - `--entrypoint`
+- `--server <node|express>`
 
 ## `ssr-boost build`
 
@@ -138,6 +139,9 @@ Common flags:
 - `--focus-only`
 - `--build-dir`
 - `--module-preload`
+- `--server <node|express>`
+
+When the `--build-dir` directory does not exist, the command falls back to `./build`, then `./dist`.
 
 ## `ssr-boost preview`
 
@@ -150,6 +154,7 @@ Common flags:
 - `--port`
 - `--mode`
 - `--build-dir`
+- `--server <node|express>`
 
 ## Deployment helpers
 

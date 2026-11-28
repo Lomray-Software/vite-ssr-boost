@@ -57,7 +57,8 @@ Run `npx ssr-boost doctor --json` after dependency, entry, route, config or scri
 | `SSR_BOOST_DUPLICATE_OUTPUT` | Emit each retained chunk once; inject head contents into the existing head. |
 | `SSR_BOOST_ONRESPONSE_INVALID_RETURN` | Make the hook synchronous; return string, `undefined` (keep) or `''` (withhold), never a promise. |
 | `SSR_BOOST_STREAM_PROMISE_ABORTED` | Bound/cancel loader I/O, handle rejection UI, and review `abortDelay` for legitimately slow work. |
-| `SSR_BOOST_DEPRECATED_REQ_RES` | Use `context.request` and `context.response` in render hooks; early Express `onRequest(req, res)` is unchanged. |
+| `SSR_BOOST_DEPRECATED_REQ_RES` | Use `context.request` and `context.response` in render hooks; early Express `onRequest(req, res)` is reported separately. |
+| `SSR_BOOST_DEPRECATED_EXPRESS_HOOK` | Move Express-only hooks (`onRequest(req, res)`, `shouldSkip`, `onServerCreated`, `onServerStarted`, `middlewares.expressStatic`) to `defineEntry` and the `node/production` server kit. |
 | `SSR_BOOST_SSR_POLICY` | Inspect the selected URL policy and pattern spelling when a page unexpectedly mounts as SPA. |
 | `SSR_BOOST_CACHE_PRIVATE_LEAK` | Restore private/no-store handling and bypass shared cache reads and writes for personalized pages. |
 

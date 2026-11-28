@@ -10,7 +10,17 @@ describe('production CLI dispatch', () => {
       modulePreload: false,
       buildDir: undefined,
     });
-    expect(parseStartOptions(['--host', '--port=8080', '--focus-only', 'client', '--build-dir', 'output directory', '--module-preload'])).toEqual({
+    expect(
+      parseStartOptions([
+        '--host',
+        '--port=8080',
+        '--focus-only',
+        'client',
+        '--build-dir',
+        'output directory',
+        '--module-preload',
+      ]),
+    ).toEqual({
       host: true,
       port: 8080,
       focusOnly: 'client',
@@ -18,6 +28,12 @@ describe('production CLI dispatch', () => {
       buildDir: 'output directory',
     });
     expect(parseStartOptions(['--port', '8080', '--port', '9090'])?.port).toBe(9090);
+  });
+
+  it('reads the managed server in both forms and leaves it unset by default', () => {
+    expect(parseStartOptions([])?.server).toBeUndefined();
+    expect(parseStartOptions(['--server', 'node'])?.server).toBe('node');
+    expect(parseStartOptions(['--server=express'])?.server).toBe('express');
   });
 
   it.each([
@@ -28,6 +44,8 @@ describe('production CLI dispatch', () => {
     ['--build-dir'],
     ['--focus-only', 'invalid'],
     ['--host=false'],
+    ['--server', 'bogus'],
+    ['--server'],
     ['extra-argument'],
   ])('delegates %j to the existing command parser', (...args) => {
     expect(parseStartOptions(args)).toBeUndefined();

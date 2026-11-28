@@ -17,6 +17,7 @@ const parseStartOptions = (args: string[]): IStartActionParams | undefined => {
         'focus-only': { type: 'string', default: 'app' },
         'build-dir': { type: 'string' },
         'module-preload': { type: 'boolean', default: false },
+        server: { type: 'string' },
       },
       allowPositionals: false,
     });
@@ -26,9 +27,13 @@ const parseStartOptions = (args: string[]): IStartActionParams | undefined => {
       'focus-only': focusOnly,
       'build-dir': buildDir,
       'module-preload': isModulePreload,
+      server,
     } = values;
 
-    if (!['all', 'app', 'client', 'server', 'entrypoint'].includes(focusOnly)) {
+    if (
+      !['all', 'app', 'client', 'server', 'entrypoint'].includes(focusOnly) ||
+      (server !== undefined && !['node', 'express'].includes(server))
+    ) {
       return;
     }
 
@@ -38,6 +43,7 @@ const parseStartOptions = (args: string[]): IStartActionParams | undefined => {
       focusOnly: focusOnly as IStartActionParams['focusOnly'],
       buildDir,
       modulePreload: isModulePreload,
+      server: server as IStartActionParams['server'],
     };
   } catch {
     return;
@@ -53,6 +59,7 @@ const runStart = async ({
   focusOnly,
   modulePreload,
   buildDir,
+  server: managedServer,
 }: IStartActionParams): Promise<void> => {
   const { version } = JSON.parse(
     readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -63,7 +70,7 @@ const runStart = async ({
    * Retain the managed server and configuration for interactive shortcuts.
    */
   const command = async (isPrintInfo?: boolean): Promise<void> => {
-    const { server, config } = await runProd({
+    const { server, config, lifecycle } = await runProd({
       version,
       isHost: host,
       isPrintInfo,
@@ -71,10 +78,12 @@ const runStart = async ({
       focusOnly,
       modulePreload,
       buildDir,
+      server: managedServer,
     });
 
     cliContext.server = server;
     cliContext.config = config;
+    cliContext.lifecycle = lifecycle;
   };
 
   cliContext.reboot = command;

@@ -85,8 +85,37 @@ once per process. Production has no accessors or warning overhead.
 
 Use `context.request` for request data, `context.response.headers` and `context.response.status`
 for response metadata before shell readiness, and React Router HTTP helpers such as `redirect()`
-in loaders/actions. Keep Express-specific middleware or response takeover in middleware or the
-earlier `onRequest(req, res)` hook; its arguments are unaffected.
+in loaders/actions. Keep Express-specific middleware or response takeover in Express middleware.
+The earlier `onRequest(req, res)` hook still receives the same arguments, but it is deprecated and
+logs the warning described below.
+
+Express-only entry hooks (`onRequest(req, res)`, `shouldSkip`, `onServerCreated`,
+`onServerStarted` and `middlewares.expressStatic`) keep working in 8.x and log
+[`SSR_BOOST_DEPRECATED_EXPRESS_HOOK`](/reference/diagnostics#ssr_boost_deprecated_express_hook)
+once per hook, in development and production, unless `SSR_BOOST_DIAGNOSTICS=0`. Their
+replacements are `defineEntry` and the [Node server kit](/guide/runtime-adapters); removal is
+planned for **9.0**.
+
+## Process signals and shutdown
+
+The CLI now drains the managed server on `SIGTERM` and `SIGINT`: readiness turns off, new
+connections are refused, open requests finish within `drainTimeoutMs` per phase, and a second signal
+forces the close. With the Express server, an application that subscribes to `SIGTERM` or `SIGINT`
+itself keeps that handling: when a signal arrives, the CLI leaves it alone if any other listener
+for that signal is present, however late it was added and whether it uses `process.on` or
+`process.once`, whether a preloaded module (`node --require`), a library in your entry or
+`onServerStarted` added it. The check is made per
+signal, so an application that handles only `SIGTERM` still gets the managed drain on `SIGINT`.
+Remove your own listener to use the managed drain.
+
+Configuration load errors in `ssr-boost dev` now stop the command with the original error instead of
+falling back to the Express server. Without `--server`, `ssr-boost dev` starts the Express dev Vite
+server and reads the managed server from its plugin options. The Express server keeps that Vite
+server, so an ordinary start evaluates the config file once, as in 8.6, with or without the flag. A
+project that picks the node server closes it first, so its config file is evaluated three times (the
+server pick, HTTPS and the Vite server), or twice with `--server node`. `--reset-cache` resolves the
+config once more before the start, whichever server runs. Keep side effects in it (logging, writing
+files) safe to repeat.
 
 ## Check the upgraded application
 

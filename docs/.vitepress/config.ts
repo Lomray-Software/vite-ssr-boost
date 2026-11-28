@@ -75,6 +75,7 @@ export default defineConfig({
           { text: 'Server Entry', link: '/api/server-entry' },
           { text: 'Request Guard and Admission', link: '/api/request-guard' },
           { text: 'Node Production', link: '/api/node-production' },
+          { text: 'Node Development', link: '/api/node-dev' },
           { text: 'Testing', link: '/api/testing' },
           { text: 'Components And Helpers', link: '/api/components-and-helpers' },
           { text: 'CLI', link: '/api/cli' },
