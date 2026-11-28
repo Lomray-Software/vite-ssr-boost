@@ -3,6 +3,9 @@ import { stripVTControlCharacters } from 'node:util';
 const diagnosticCode = /\b(SSR_BOOST_[A-Z0-9_]+)(?=:|\])/g;
 // The hook follows the code after either delimiter: `CODE: hook` or `[CODE] hook`.
 const hookName = /^[:\]]\s*([\w.]+)/;
+// Color codes in either form, `ESC[38;2;255;0;0m` or `ESC[38:2::255:0:0m`: the util helper
+// leaves the colon form behind.
+const colorCode = /\x1b\[[0-9:;]*m/g;
 
 /**
  * Classify every SSR_BOOST_ code in one process's output: policy lines are informational,
@@ -13,7 +16,7 @@ const countDiagnostics = (output) => {
   const deprecations = new Set();
 
   // A color code ends in a word character, which would defeat the boundary before a code.
-  for (const line of stripVTControlCharacters(output).split('\n')) {
+  for (const line of stripVTControlCharacters(output.replace(colorCode, '')).split('\n')) {
     for (const match of line.matchAll(diagnosticCode)) {
       const [marker, code] = match;
 

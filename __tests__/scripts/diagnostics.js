@@ -108,6 +108,27 @@ describe('template diagnostics count', () => {
   });
 
   /**
+   * Verify colon-form truecolor codes count the same as plain output.
+   */
+  it('counts colon-form colored codes like plain ones', () => {
+    const red = '\x1b[38:2::255:0:0m';
+    const plain = [
+      'SSR_BOOST_HTTP2: refused',
+      'SSR_BOOST_DEPRECATED_EXPRESS_HOOK: onRequest first',
+      'SSR_BOOST_DEPRECATED_EXPRESS_HOOK: onRequest second',
+    ];
+    const colored = plain.map((line) => line.replace('SSR', `${red}SSR`).replace(': ', `: ${red}`));
+
+    expect(countDiagnostics(colored.join('\n'))).toEqual(countDiagnostics(plain.join('\n')));
+    expect(countDiagnostics(colored.join('\n'))).toEqual({
+      policyInfo: 0,
+      expressHookDeprecations: 2,
+      unexpected: 1,
+      repeated: ['onRequest'],
+    });
+  });
+
+  /**
    * Verify output without codes counts nothing.
    */
   it('counts nothing in plain output', () => {
