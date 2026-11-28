@@ -23,8 +23,9 @@ interface ILifecycleOptions {
   /** Opt-in health endpoints; `true` uses `/healthz` and `/readyz`. */
   health?: boolean | IHealthOptions;
   /**
-   * Bound of each drain phase: active responses with onDrain, then onClose.
-   * Past it the remaining sockets are destroyed and a hook still running rejects close().
+   * Bound of each drain phase: active responses and their flush to slow clients with onDrain,
+   * then onClose. Past it the remaining sockets are destroyed and a hook still running rejects
+   * close().
    */
   drainTimeoutMs?: number;
   /**
@@ -80,8 +81,9 @@ interface ILifecycle {
    */
   listen: (port?: number, host?: string) => Promise<AddressInfo | string | null>;
   /**
-   * Stop accepting, finish active responses and resolve once every socket is gone.
-   * Upgraded and tunnelled sockets are destroyed once no HTTP response is active.
+   * Stop accepting, finish active responses, let ended ones flush their socket buffer and resolve
+   * once every socket is gone. Idle keep-alive sockets close at once. Upgraded and tunnelled
+   * sockets are destroyed once no HTTP response is active.
    */
   close: () => Promise<void>;
   /** End the drain now: destroy every socket and stop waiting for onDrain and onClose. */
@@ -239,6 +241,22 @@ const boundedStop = (
   });
 
 /**
+ * Put back an own property shadowed for one synchronous call, or drop the shadow so the
+ * prototype answers again.
+ */
+const restore = <T extends object>(
+  target: T,
+  key: keyof T & string,
+  own: PropertyDescriptor | undefined,
+): void => {
+  if (own) {
+    Object.defineProperty(target, key, own);
+  } else {
+    delete (target as Partial<T>)[key];
+  }
+};
+
+/**
  * Resolve the health probe paths, or undefined when health is off. Server factories call it
  * before they start anything, so invalid options leave nothing running.
  */
@@ -284,6 +302,8 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   let isStopped = false;
   let cancelGrace: (() => void) | undefined;
   let activeResponses = 0;
+  // Responses until they finish: one that ended may still have bytes to flush to its client.
+  const pendingResponses = new Set<ServerResponse>();
   const upgradedSockets = new Set<Duplex>();
   const sockets = new Set<Socket>();
   const deadlines = new Set<IDeadline>();
@@ -325,6 +345,55 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   };
 
   /**
+   * Close idle keep-alive sockets, sparing those whose ended response is still flushing.
+   * Node counts the socket of an ended response as idle and would drop its unsent bytes, so the
+   * sweep holds those sockets for one synchronous pass; the response's finish sweeps them again
+   * and the deadline still destroys them.
+   */
+  const closeIdle = (sweep: () => void = () => server.closeIdleConnections()): void => {
+    const flushing = new Map<Socket, PropertyDescriptor | undefined>();
+
+    pendingResponses.forEach(({ writableEnded, socket }) => {
+      if (writableEnded && socket && !flushing.has(socket)) {
+        flushing.set(socket, Object.getOwnPropertyDescriptor(socket, 'destroy'));
+      }
+    });
+
+    const shadowed: Socket[] = [];
+
+    try {
+      flushing.forEach((_own, socket) => {
+        Object.defineProperty(socket, 'destroy', {
+          configurable: true,
+          writable: true,
+          value: () => socket,
+        });
+        shadowed.push(socket);
+      });
+      sweep();
+    } finally {
+      shadowed.forEach((socket) => restore(socket, 'destroy', flushing.get(socket)));
+    }
+  };
+
+  /**
+   * Stop accepting through server.close(), whose own idle sweep also waits for flushing responses.
+   */
+  const closeServer = (callback: (error?: Error) => void): void => {
+    const own = Object.getOwnPropertyDescriptor(server, 'closeIdleConnections');
+    // A union of two server types makes bind() untyped; both declare the same method.
+    const sweep = server.closeIdleConnections.bind(server) as () => void;
+
+    server.closeIdleConnections = () => closeIdle(sweep);
+
+    try {
+      server.close(callback);
+    } finally {
+      restore(server, 'closeIdleConnections', own);
+    }
+  };
+
+  /**
    * Destroy every socket left, HTTP, upgraded and raw alike.
    */
   const destroyAll = (): void => {
@@ -354,13 +423,15 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
   });
 
   /**
-   * Count a response until it closes and close its keep-alive socket once the drain started.
-   * Prepended so the header is set before an application listener writes the response.
+   * Count a response until it closes and close its keep-alive socket once the drain started and
+   * the response flushed. Prepended so the header is set before an application listener writes
+   * the response.
    * A response handed on from an expectation listener to `request` is counted and released
    * twice, which keeps the count balanced.
    */
-  const trackResponse = (_req: IncomingMessage, res: ServerResponse): void => {
+  const trackResponse = (req: IncomingMessage, res: ServerResponse): void => {
     activeResponses += 1;
+    pendingResponses.add(res);
 
     // A request listener prepended after the lifecycle may have answered already.
     if (closing && !res.headersSent) {
@@ -368,18 +439,34 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
     }
 
     res.once('finish', () => {
+      pendingResponses.delete(res);
+
       if (closing) {
-        server.closeIdleConnections();
+        closeIdle();
       }
     });
-    res.once('close', () => {
+    let isReleased = false;
+
+    const release = (): void => {
+      if (isReleased) {
+        return;
+      }
+
+      isReleased = true;
       activeResponses -= 1;
+      pendingResponses.delete(res);
+      req.socket.off('close', release);
 
       // Tunnels outlive the readiness grace; a stopped server drops them after its last response.
       if (isStopped && activeResponses === 0) {
         destroyUpgraded();
       }
-    });
+    };
+
+    res.once('close', release);
+    // A pipelined response queued behind an unfinished one emits neither finish nor close when
+    // the client drops the connection, so its socket's close releases it.
+    req.socket.once('close', release);
   };
 
   server.prependListener('request', trackResponse);
@@ -625,7 +712,7 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
       isStopped = true;
 
       if (server.listening) {
-        server.close((error) => (error ? fail(error) : done()));
+        closeServer((error) => (error ? fail(error) : done()));
       } else if (hasListened && !isClosed) {
         // A native close() already stopped accepting; its connections still run, so join it.
         server.once('close', () => done());
@@ -644,7 +731,7 @@ const createLifecycle = (server: TLifecycleServer, options: ILifecycleOptions = 
       }
 
       // Every branch sweeps: a tunnel upgraded before the stop holds a native close too.
-      server.closeIdleConnections();
+      closeIdle();
       sweepTunnels();
     });
 

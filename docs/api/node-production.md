@@ -237,12 +237,16 @@ Health probes are opt-in. The live path answers 200 while the process runs; the 
 
 `close()` is idempotent: every caller shares one drain. It stops accepting connections, closes idle
 keep-alive sockets, sends `Connection: close` on responses still in flight and resolves once every
-socket is gone. Upgraded and tunnelled sockets (WebSocket, HMR, `CONNECT`) are tracked too and
+socket is gone. A response that has ended but whose bytes still wait in the socket buffer, sent to a
+client that reads slowly, keeps its socket until Node has handed all of them to the operating
+system, so the process does not exit on a truncated body. A native `server.close()` called outside
+the lifecycle does not get this protection. Upgraded and tunnelled sockets (WebSocket, HMR, `CONNECT`) are tracked too and
 destroyed once no HTTP response is active. A response the application answers from its own
 `checkContinue` or `checkExpectation` listener counts as active too. `onDrain` runs after the
 readiness grace, beside the socket drain, and `onClose` after it.
 
-`drainTimeoutMs` bounds each phase on its own: the socket drain with `onDrain`, then `onClose`.
+`drainTimeoutMs` bounds each phase on its own: the socket drain, flushes to slow clients included,
+with `onDrain`, then `onClose`.
 When a phase runs out, its remaining sockets are destroyed and a hook still running makes `close()`
 reject with a message naming the hook, so a stuck dependency cannot hold the process forever.
 Sockets accepted before the lifecycle was created are not tracked; when they still keep the server

@@ -92,6 +92,43 @@ const upgrade = (server: http.Server): Promise<Socket> =>
     socket.write('GET /hmr HTTP/1.1\r\nHost: test\r\nConnection: Upgrade\r\nUpgrade: test\r\n\r\n');
   });
 
+/**
+ * Request a large body over a raw keep-alive socket and stop reading once the headers arrive,
+ * so most of the response stays buffered on the server until the client resumes.
+ */
+const pausedGet = (
+  server: http.Server,
+): Promise<{ socket: Socket; received: () => number; ended: Promise<number> }> =>
+  new Promise((resolve, reject) => {
+    const socket = net.connect((server.address() as AddressInfo).port, '127.0.0.1');
+    let head = Buffer.alloc(0);
+    let body = -1;
+    const ended = new Promise<number>((done) => socket.once('close', () => done(body)));
+
+    socket.once('error', reject);
+    socket.on('data', (chunk: Buffer) => {
+      if (body >= 0) {
+        body += chunk.length;
+
+        return;
+      }
+
+      head = Buffer.concat([head, chunk]);
+
+      const end = head.indexOf('\r\n\r\n');
+
+      if (end >= 0) {
+        body = head.length - end - 4;
+        socket.pause();
+        resolve({ socket, received: () => body, ended });
+      }
+    });
+    socket.write('GET /large HTTP/1.1\r\nHost: test\r\n\r\n');
+  });
+
+// Larger than any loopback socket buffer tuning, so most of it stays in user space while paused.
+const large = Buffer.alloc(64 * 1024 * 1024, 97);
+
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(
@@ -348,6 +385,142 @@ describe('createLifecycle', () => {
     await lifecycle.close();
     expect(Date.now() - startedAt).toBeLessThan(1000);
     await expect(streamed).rejects.toThrow();
+  });
+
+  it('lets an ended response flush to a paused client before close resolves', async () => {
+    const size = large.length;
+    let flushing: http.ServerResponse | undefined;
+    const { server, lifecycle, url } = await listen((req, res) => {
+      if (req.url === '/large') {
+        flushing = res;
+        res.setHeader('Content-Length', size);
+        res.end(large);
+
+        return;
+      }
+
+      res.end('quick');
+    });
+    const agent = new http.Agent({ keepAlive: true });
+
+    const freed = new Promise((resolve) => agent.once('free', resolve));
+
+    expect(await getText(`${url}/quick`, agent)).toEqual({ status: 200, body: 'quick' });
+    await freed;
+
+    const [idle] = Object.values(agent.freeSockets).flat();
+
+    expect(idle).toBeDefined();
+    const idleClosed = new Promise<void>((resolve) => idle!.once('close', () => resolve()));
+    const paused = await pausedGet(server);
+
+    // The response ended on the server while most of its bytes still wait in the socket buffer.
+    expect(flushing!.writableEnded).toBe(true);
+    expect(flushing!.writableFinished).toBe(false);
+
+    let isClosed = false;
+    const closed = lifecycle.close().then(() => {
+      isClosed = true;
+    });
+
+    // The idle keep-alive goes at once while the ended response still flushes.
+    await idleClosed;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(isClosed).toBe(false);
+    expect(flushing!.writableFinished).toBe(false);
+    expect(paused.received()).toBeLessThan(size);
+
+    paused.socket.resume();
+    expect(await paused.ended).toBe(size);
+    await closed;
+    agent.destroy();
+  });
+
+  it('destroys a socket still flushing to a paused client at the drain deadline', async () => {
+    const size = large.length;
+    const { server, lifecycle } = await listen(
+      (_req, res) => {
+        res.setHeader('Content-Length', size);
+        res.end(large);
+      },
+      (instance) => createLifecycle(instance, { drainTimeoutMs: 100 }),
+    );
+    const paused = await pausedGet(server);
+    const startedAt = Date.now();
+
+    await lifecycle.close();
+    expect(Date.now() - startedAt).toBeLessThan(5000);
+    paused.socket.resume();
+    expect(await paused.ended).toBeLessThan(size);
+  });
+
+  it('destroys a socket still flushing to a paused client on force', async () => {
+    const size = large.length;
+    const { server, lifecycle } = await listen((_req, res) => {
+      res.setHeader('Content-Length', size);
+      res.end(large);
+    });
+    const paused = await pausedGet(server);
+    const closed = lifecycle.close();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    lifecycle.force();
+
+    const startedAt = Date.now();
+
+    await closed;
+    expect(Date.now() - startedAt).toBeLessThan(5000);
+    paused.socket.resume();
+    expect(await paused.ended).toBeLessThan(size);
+  });
+
+  it('releases a pipelined response queued behind one the client dropped', async () => {
+    let lifecycle!: ILifecycle;
+    let onBoth!: () => void;
+    const both = new Promise<void>((resolve) => {
+      onBoth = resolve;
+    });
+    const { server } = await listen(
+      (req, res) => {
+        if (req.url === '/first') {
+          res.write('partial');
+
+          return;
+        }
+
+        onBoth();
+      },
+      (instance) => {
+        lifecycle = createLifecycle(instance, { drainTimeoutMs: 20000 });
+
+        return lifecycle;
+      },
+    );
+
+    server.on('upgrade', (_req, socket: Socket) => {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: test\r\nConnection: Upgrade\r\n\r\n',
+      );
+    });
+
+    const tunnel = await upgrade(server);
+    const tunnelClosed = new Promise((resolve) => tunnel.once('close', resolve));
+    const client = net.connect((server.address() as AddressInfo).port, '127.0.0.1');
+
+    client.write(
+      'GET /first HTTP/1.1\r\nHost: test\r\n\r\nGET /second HTTP/1.1\r\nHost: test\r\n\r\n',
+    );
+    await both;
+    client.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const startedAt = Date.now();
+
+    // The queued response never emits finish or close, so only its socket's close releases it
+    // and lets the drain sweep the tunnel instead of waiting for the deadline.
+    await lifecycle.close();
+    await tunnelClosed;
+    expect(Date.now() - startedAt).toBeLessThan(5000);
   });
 
   it('resolves close for a server that never listened', async () => {
