@@ -14,6 +14,17 @@ const reportStopFailure = (config: ICliContext['config'], error: unknown): void 
 };
 
 /**
+ * Write a shortcut status line as a best effort: the logger is read at the time of the write
+ */
+const reportStatus = (
+  config: ICliContext['config'],
+  message: string,
+  paint: (text: string) => string,
+): void => {
+  logSafely(() => config?.getLogger()?.info(paint(message)), message);
+};
+
+/**
  * Stop server
  */
 const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<boolean> => {
@@ -31,15 +42,23 @@ const stopServer = async ({ server, config, lifecycle }: ICliContext): Promise<b
   }
 
   // stop express server
-  const err = await new Promise((resolve) => {
+  const serverError = await new Promise((resolve) => {
     server?.close(resolve);
   });
 
-  // stop vite server
-  await config?.getVite()?.close();
+  // stop vite server, also after a failed server close
+  let viteError: unknown;
 
-  if (err) {
-    reportStopFailure(config, err);
+  try {
+    await config?.getVite()?.close();
+  } catch (error) {
+    viteError = error || new Error('vite close failed');
+  }
+
+  const failure = serverError || viteError;
+
+  if (failure) {
+    reportStopFailure(config, failure);
 
     return false;
   }
@@ -56,9 +75,8 @@ const shortcuts: NonNullable<IPluginOptions['customShortcuts']> = [
     description: 'restart server',
     action: async (cliContext) => {
       const { reboot, config } = cliContext;
-      const Logger = config?.getLogger();
 
-      Logger?.info(chalk.yellow('\nrestarting server...'));
+      reportStatus(config, '\nrestarting server...', chalk.yellow);
 
       if (!(await stopServer(cliContext))) {
         return;
@@ -70,7 +88,7 @@ const shortcuts: NonNullable<IPluginOptions['customShortcuts']> = [
       }
 
       await reboot?.(false);
-      Logger?.info(chalk.green('server restarted successful.'));
+      reportStatus(config, 'server restarted successful.', chalk.green);
     },
   },
   {

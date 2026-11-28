@@ -220,4 +220,56 @@ describe('cli-shortcuts', () => {
     expect(consoleError.mock.calls[0][0]).toContain('failed to stop dev server: close failed');
     consoleError.mockRestore();
   });
+
+  it('should exit on "q" when the vite close fails after the server closed', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'q')!;
+    const { context, stubs } = createContext();
+
+    stubs.close.rejects(new Error('vite close failed'));
+
+    await expect(shortcut.action(context)).resolves.toBeUndefined();
+
+    expect(stubs.serverClose.calledOnce).toBe(true);
+    expect(stubs.info.lastCall.args[0]).toContain('failed to stop dev server: vite close failed');
+    expect(processStopMock).toHaveBeenCalledOnce();
+  });
+
+  it('should close vite and report the server failure when both closes fail', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'r')!;
+    const { context, stubs } = createContext(new Error('close failed'));
+
+    stubs.close.rejects(new Error('vite close failed'));
+
+    await expect(shortcut.action(context)).resolves.toBeUndefined();
+
+    expect(stubs.close.calledOnce).toBe(true);
+    expect(stubs.info.lastCall.args[0]).toContain('failed to stop dev server: close failed');
+    expect(stubs.reboot.called).toBe(false);
+  });
+
+  it('should restart once on "r" when the logger cannot be read at all', async () => {
+    const shortcut = shortcuts.find(({ key }) => key === 'r')!;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const reboot = sandbox.stub().resolves();
+    const close = sandbox.stub().resolves();
+    const context = {
+      reboot,
+      config: {
+        getLogger: () => {
+          throw new Error('no logger');
+        },
+      },
+      lifecycle: { close },
+    } as unknown as ICliContext;
+
+    await expect(shortcut.action(context)).resolves.toBeUndefined();
+
+    expect(close.calledOnce).toBe(true);
+    expect(reboot.calledOnceWith(false)).toBe(true);
+    expect(consoleError.mock.calls.map(([line]) => line as string)).toEqual([
+      '\nrestarting server...',
+      'server restarted successful.',
+    ]);
+    consoleError.mockRestore();
+  });
 });

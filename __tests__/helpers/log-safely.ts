@@ -16,6 +16,17 @@ describe('logSafely', () => {
     expect(describeError(Object.create(null))).toBe('unknown error');
   });
 
+  it('should describe a value as text when reading its message throws', () => {
+    const error = {
+      get message(): string {
+        throw new Error('no message');
+      },
+      toString: () => 'close failed',
+    };
+
+    expect(describeError(error)).toBe('close failed');
+  });
+
   it('should write through the logger when it works', () => {
     const write = vi.fn();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);

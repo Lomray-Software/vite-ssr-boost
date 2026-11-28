@@ -5,7 +5,15 @@ const describeError = (error: unknown): string => {
   try {
     const message = (error as { message?: unknown } | null | undefined)?.message;
 
-    return typeof message === 'string' ? message : String(error);
+    if (typeof message === 'string') {
+      return message;
+    }
+  } catch {
+    // a throwing message getter still leaves the value's own text to try
+  }
+
+  try {
+    return String(error);
   } catch {
     return 'unknown error';
   }
