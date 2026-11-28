@@ -1095,6 +1095,23 @@ describe('node server', () => {
     expect(error).toHaveBeenCalledWith(expect.stringContaining('close failed'), expect.anything());
   });
 
+  it('should keep the setup error and close its own Vite when the logger cannot be read', async () => {
+    const own = { ...createViteDouble('own-middleware'), close: vi.fn() };
+    const config = {
+      ...createStatefulDevConfig(),
+      getLogger: () => {
+        throw new Error('logger failed');
+      },
+    };
+
+    own.close.mockResolvedValue(undefined);
+    createViteServer.mockResolvedValueOnce(own);
+    prepareServer.onAppCreated.mockRejectedValueOnce(new Error('setup failed'));
+
+    await expect(createServer(config as never)).rejects.toThrow('setup failed');
+    expect(own.close).toHaveBeenCalledOnce();
+  });
+
   it('should leave a supplied dev Vite open when the app setup fails', async () => {
     const supplied = createViteDouble('supplied-middleware');
 

@@ -9,6 +9,7 @@ import getRouteAssets from '@adapters/express/route-assets';
 import adapterNode from '@adapters/node';
 import type { IEntry, IEntryHost } from '@core/entry';
 import type { TSsrHandler } from '@core/types';
+import lazyLogger from '@helpers/lazy-logger';
 import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
 import settleAll from '@helpers/settle-all';
 import stripEntryAsync from '@helpers/strip-entry-async';
@@ -162,14 +163,6 @@ const createDevPreparer =
   };
 
 /**
- * A logger that reads the Vite logger only when it writes, so a failing read stays inside the
- * guarded cleanup log instead of escaping the failure path.
- */
-const getCleanupLogger = (vite: ViteDevServer): IErrorLogger => ({
-  error: (message, options) => vite.config.logger.error(message, options),
-});
-
-/**
  * The mode one dev start runs in: the explicit option, then the inline Vite config.
  */
 const getDevMode = (mode?: string, inlineConfig?: InlineConfig): string =>
@@ -227,7 +220,11 @@ const prepareDev = async ({
     // Vite keeps this object across restarts and swaps only its stack.
     viteMiddleware = vite.middlewares;
   } catch (error) {
-    return rethrowAfterCleanup(error, () => vite.close(), getCleanupLogger(vite));
+    return rethrowAfterCleanup(
+      error,
+      () => vite.close(),
+      lazyLogger(() => vite.config.logger),
+    );
   }
 
   const prepare = createDevPreparer(config, vite);
@@ -395,7 +392,11 @@ const createDevServer = async ({
       listen: lifecycle.listen,
     };
   } catch (error) {
-    return rethrowAfterCleanup(error, () => app.close(), logger ?? getCleanupLogger(app.vite));
+    return rethrowAfterCleanup(
+      error,
+      () => app.close(),
+      logger ?? lazyLogger(() => app.vite.config.logger),
+    );
   }
 };
 

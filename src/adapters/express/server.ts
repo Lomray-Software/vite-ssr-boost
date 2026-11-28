@@ -13,6 +13,7 @@ import PrepareServer from '@adapters/express/prepare-server';
 import type { TRender } from '@adapters/express/render';
 import staticFiles from '@adapters/express/static-files';
 import createDevVite from '@cli/helpers/create-dev-vite';
+import lazyLogger from '@helpers/lazy-logger';
 import printServerInfo from '@helpers/print-server-info';
 import rethrowAfterCleanup from '@helpers/rethrow-after-cleanup';
 import settleAll from '@helpers/settle-all';
@@ -191,7 +192,11 @@ async function createServer(
       });
     }
   } catch (error) {
-    return rethrowAfterCleanup(error, () => ownVite?.close(), config.getLogger());
+    return rethrowAfterCleanup(
+      error,
+      () => ownVite?.close(),
+      lazyLogger(() => config.getLogger()),
+    );
   }
 
   return {
