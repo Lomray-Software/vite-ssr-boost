@@ -1,25 +1,87 @@
 const diagnosticCode = /\b(SSR_BOOST_[A-Z0-9_]+)(?=:|\])/g;
 // The hook follows the code after either delimiter: `CODE: hook` or `[CODE] hook`.
 const hookName = /^[:\]]\s*([\w.]+)/;
-// ECMA-48 control strings (OSC, DCS, SOS, PM, APC) in ESC or C1 form, through BEL or ST. Their
-// payload never reaches the screen as text. An unterminated one is left for the rules below.
-const controlString = /(?:\x1b[\]PX^_]|[\x90\x98\x9d\x9e\x9f])[^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)/g;
-// Control sequences in ESC or C1 form: parameters (colon form included), intermediates, final.
-const controlSequence = /(?:\x1b\[|\x9b)[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g;
-// Two-character escapes such as a charset switch, `ESC ( B`.
-const escapeSequence = /\x1b[\x20-\x2f]*[\x30-\x7e]/g;
-// Any other C0 or C1 control; tabs and line ends stay, as a terminal shows them as space.
-const control = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g;
+
+// Parser states after the DEC VT500 model, reduced to what decides which text is printed.
+const GROUND = 0;
+const ESCAPE = 1;
+const ESCAPE_INTERMEDIATE = 2;
+const CONTROL_SEQUENCE = 3;
+const OPERATING_SYSTEM_COMMAND = 4;
+const CONTROL_STRING = 5;
+
+// C1 introducers of DCS, SOS, PM and APC, and their ESC forms `P`, `X`, `^` and `_`.
+const stringIntroducers = new Set([0x90, 0x98, 0x9e, 0x9f]);
+const escapeStringIntroducers = new Set([0x50, 0x58, 0x5e, 0x5f]);
+
+/**
+ * Whether a code point is a C0 control a terminal shows as space or a line end.
+ */
+const isShownControl = (code) => code === 0x09 || code === 0x0a || code === 0x0d;
+
+/**
+ * The state a C1 control leads to: a control sequence, a control string, or ground for the rest.
+ */
+const enterC1 = (code) => {
+  if (code === 0x9b) return CONTROL_SEQUENCE;
+  if (code === 0x9d) return OPERATING_SYSTEM_COMMAND;
+
+  return stringIntroducers.has(code) ? CONTROL_STRING : GROUND;
+};
+
+/**
+ * The state after a printable byte that follows ESC.
+ */
+const afterEscape = (code) => {
+  if (code === 0x5b) return CONTROL_SEQUENCE;
+  if (code === 0x5d) return OPERATING_SYSTEM_COMMAND;
+  if (escapeStringIntroducers.has(code)) return CONTROL_STRING;
+
+  return code <= 0x2f ? ESCAPE_INTERMEDIATE : GROUND;
+};
 
 /**
  * Remove every terminal control from output, leaving only the text a terminal would print.
+ * Sequences are parsed byte by byte as a terminal does, so CAN and SUB cancel one, ignored C0
+ * bytes inside one leave it whole, and an unfinished one at the end of the output prints nothing.
  */
-const stripTerminalControls = (output) =>
-  output
-    .replace(controlString, '')
-    .replace(controlSequence, '')
-    .replace(escapeSequence, '')
-    .replace(control, '');
+const stripTerminalControls = (output) => {
+  let text = '';
+  let state = GROUND;
+
+  for (const char of output) {
+    const code = char.codePointAt(0);
+
+    // These act from every state, inside a control string too.
+    if (code === 0x18 || code === 0x1a) {
+      state = GROUND;
+    } else if (code === 0x1b) {
+      state = ESCAPE;
+    } else if (code >= 0x80 && code <= 0x9f) {
+      state = enterC1(code);
+    } else if (state === OPERATING_SYSTEM_COMMAND || state === CONTROL_STRING) {
+      // The payload never reaches the screen; BEL ends an OSC only, ST ends any string above.
+      if (code === 0x07 && state === OPERATING_SYSTEM_COMMAND) state = GROUND;
+    } else if (code < 0x20 || code === 0x7f) {
+      // A terminal runs a C0 control without leaving a pending sequence and ignores DEL.
+      if (isShownControl(code)) text += char;
+    } else if (state === ESCAPE) {
+      state = code <= 0x7e ? afterEscape(code) : GROUND;
+      if (code > 0x7e) text += char;
+    } else if (state === ESCAPE_INTERMEDIATE) {
+      if (code >= 0x30) state = GROUND;
+      if (code > 0x7e) text += char;
+    } else if (state === CONTROL_SEQUENCE) {
+      // Parameters and intermediates stay in the sequence; a final byte ends it.
+      if (code >= 0x40) state = GROUND;
+      if (code > 0x7e) text += char;
+    } else {
+      text += char;
+    }
+  }
+
+  return text;
+};
 
 /**
  * Classify every SSR_BOOST_ code in one process's output: policy lines are informational,

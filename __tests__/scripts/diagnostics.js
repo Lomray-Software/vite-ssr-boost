@@ -172,6 +172,46 @@ describe('template diagnostics count', () => {
   });
 
   /**
+   * Verify an unterminated control string prints nothing, and a cancelled one resumes the text.
+   */
+  it('drops an unterminated control string and resumes text after a cancel', () => {
+    expect(countDiagnostics('ready\n\x1b]0;[SSR_BOOST_OTHER]')).toMatchObject({ unexpected: 0 });
+    expect(countDiagnostics('\u009d0;SSR_BOOST_OTHER: title')).toMatchObject({ unexpected: 0 });
+
+    const cancelled = [
+      '\x1b]0;title\x18[SSR_BOOST_OTHER] text\x07',
+      '\x1bPq\x1a' + policy,
+      `${hook}\x1b]0;x\x18`,
+      hook,
+    ];
+
+    expect(countDiagnostics(cancelled.join('\n'))).toEqual({
+      policyInfo: 1,
+      expressHookDeprecations: 2,
+      unexpected: 1,
+      repeated: ['onRequest'],
+    });
+  });
+
+  /**
+   * Verify a C0 byte a terminal ignores inside a control sequence leaves the sequence whole.
+   */
+  it('keeps a control sequence whole around an ignored byte', () => {
+    const wrapped = [
+      '\x1b[3\x001mSSR_BOOST_HTTP2: refused',
+      'SSR_BOOST_DEPRECATED_EXPRESS_HOOK: \x1b[3\x001monRequest first',
+      'SSR_BOOST_DEPRECATED_EXPRESS_HOOK: onRequest second',
+    ];
+
+    expect(countDiagnostics(wrapped.join('\n'))).toEqual({
+      policyInfo: 0,
+      expressHookDeprecations: 2,
+      unexpected: 1,
+      repeated: ['onRequest'],
+    });
+  });
+
+  /**
    * Verify output without codes counts nothing.
    */
   it('counts nothing in plain output', () => {
