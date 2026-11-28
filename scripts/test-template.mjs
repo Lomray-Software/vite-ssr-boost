@@ -572,9 +572,10 @@ const verifyColdStart = async () => {
   } finally {
     await stop(child);
     await closed;
+    // The helper strips every terminal control itself; the util helper leaves some behind.
+    recordDiagnostics(output);
     output = stripVTControlCharacters(output);
     console.info(output);
-    recordDiagnostics(output);
   }
 
   assert.doesNotMatch(

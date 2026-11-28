@@ -129,6 +129,49 @@ describe('template diagnostics count', () => {
   });
 
   /**
+   * Verify C1 control sequences and intermediate bytes are removed like ESC color codes.
+   */
+  it('counts codes and hooks wrapped in any control sequence like plain ones', () => {
+    const plain = [
+      'SSR_BOOST_HTTP2: refused',
+      'SSR_BOOST_DEPRECATED_EXPRESS_HOOK: onRequest first',
+      'SSR_BOOST_DEPRECATED_EXPRESS_HOOK: onRequest second',
+    ];
+    const wrapped = [
+      '\u009b38:2::255:0:0mSSR_BOOST_HTTP2: refused',
+      'SSR_BOOST_DEPRECATED_EXPRESS_HOOK: \x1b[2 qonRequest first',
+      plain[2],
+    ];
+
+    expect(countDiagnostics(wrapped.join('\n'))).toEqual(countDiagnostics(plain.join('\n')));
+    expect(countDiagnostics(wrapped.join('\n'))).toEqual({
+      policyInfo: 0,
+      expressHookDeprecations: 2,
+      unexpected: 1,
+      repeated: ['onRequest'],
+    });
+  });
+
+  /**
+   * Verify a code inside a control string payload is never counted, in ESC or C1 form.
+   */
+  it('ignores codes inside control strings', () => {
+    const titles = [
+      '\x1b]0;[SSR_BOOST_OTHER]\x07ready',
+      '\x1b]0;SSR_BOOST_OTHER: title\x1b\\ready',
+      '\u009d0;[SSR_BOOST_OTHER]\u009cready',
+      `\x1b]8;;https://example.com\x07${policy}\x1b]8;;\x07`,
+    ];
+
+    expect(countDiagnostics(titles.join('\n'))).toEqual({
+      policyInfo: 1,
+      expressHookDeprecations: 0,
+      unexpected: 0,
+      repeated: [],
+    });
+  });
+
+  /**
    * Verify output without codes counts nothing.
    */
   it('counts nothing in plain output', () => {

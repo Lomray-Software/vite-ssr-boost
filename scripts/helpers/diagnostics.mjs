@@ -1,11 +1,25 @@
-import { stripVTControlCharacters } from 'node:util';
-
 const diagnosticCode = /\b(SSR_BOOST_[A-Z0-9_]+)(?=:|\])/g;
 // The hook follows the code after either delimiter: `CODE: hook` or `[CODE] hook`.
 const hookName = /^[:\]]\s*([\w.]+)/;
-// Color codes in either form, `ESC[38;2;255;0;0m` or `ESC[38:2::255:0:0m`: the util helper
-// leaves the colon form behind.
-const colorCode = /\x1b\[[0-9:;]*m/g;
+// ECMA-48 control strings (OSC, DCS, SOS, PM, APC) in ESC or C1 form, through BEL or ST. Their
+// payload never reaches the screen as text. An unterminated one is left for the rules below.
+const controlString = /(?:\x1b[\]PX^_]|[\x90\x98\x9d\x9e\x9f])[^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)/g;
+// Control sequences in ESC or C1 form: parameters (colon form included), intermediates, final.
+const controlSequence = /(?:\x1b\[|\x9b)[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g;
+// Two-character escapes such as a charset switch, `ESC ( B`.
+const escapeSequence = /\x1b[\x20-\x2f]*[\x30-\x7e]/g;
+// Any other C0 or C1 control; tabs and line ends stay, as a terminal shows them as space.
+const control = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g;
+
+/**
+ * Remove every terminal control from output, leaving only the text a terminal would print.
+ */
+const stripTerminalControls = (output) =>
+  output
+    .replace(controlString, '')
+    .replace(controlSequence, '')
+    .replace(escapeSequence, '')
+    .replace(control, '');
 
 /**
  * Classify every SSR_BOOST_ code in one process's output: policy lines are informational,
@@ -15,8 +29,8 @@ const countDiagnostics = (output) => {
   const counts = { policyInfo: 0, expressHookDeprecations: 0, unexpected: 0, repeated: [] };
   const deprecations = new Set();
 
-  // A color code ends in a word character, which would defeat the boundary before a code.
-  for (const line of stripVTControlCharacters(output.replace(colorCode, '')).split('\n')) {
+  // A control ends in a word character, which would defeat the boundary before a code.
+  for (const line of stripTerminalControls(output).split('\n')) {
     for (const match of line.matchAll(diagnosticCode)) {
       const [marker, code] = match;
 
