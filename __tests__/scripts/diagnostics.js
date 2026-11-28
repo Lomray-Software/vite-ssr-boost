@@ -212,6 +212,49 @@ describe('template diagnostics count', () => {
   });
 
   /**
+   * Verify a control that moves the cursor separates the text on each side like a line break.
+   */
+  it('splits text at every cursor move', () => {
+    const moves = [
+      '\x0b',
+      '\x0c',
+      '\x08',
+      '\u0084',
+      '\u0085',
+      '\u008d',
+      '\x1bD',
+      '\x1bE',
+      '\x1bM',
+      '\x1b8',
+      '\x1bc',
+      ...['A', 'B', 'C', 'D', 'E', 'F', 'G', 'I', 'Z', '`', 'a', 'd', 'e', 'u'].map(
+        (final) => `\x1b[2${final}`,
+      ),
+      '\x1b[2;1H',
+      '\u009b3;1f',
+    ];
+    const lines = moves.map((move) => `ready${move}SSR_BOOST_OTHER: refused`);
+
+    expect(countDiagnostics(lines.join('\n'))).toMatchObject({ unexpected: moves.length });
+    expect(
+      countDiagnostics(
+        'SSR_BOOST_DEPRECATED_EXPRESS_HOOK: onRequest first\u0085' +
+          'SSR_BOOST_DEPRECATED_EXPRESS_HOOK: onRequest second',
+      ),
+    ).toMatchObject({ expressHookDeprecations: 2, repeated: ['onRequest'] });
+  });
+
+  /**
+   * Verify a control that keeps the cursor in place, or a private sequence, joins the text.
+   */
+  it('keeps text joined around controls that do not move the cursor', () => {
+    const joined = ['\x1b[1m', '\x1b[2K', '\x1b[?25h', '\x1b[ A', '\x1b#8', '\x07'];
+    const lines = joined.map((control) => `ready${control}SSR_BOOST_OTHER: refused`);
+
+    expect(countDiagnostics(lines.join('\n'))).toMatchObject({ unexpected: 0 });
+  });
+
+  /**
    * Verify output without codes counts nothing.
    */
   it('counts nothing in plain output', () => {
