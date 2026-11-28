@@ -8,7 +8,7 @@ type TNode = DefaultTreeAdapterTypes.ChildNode | DefaultTreeAdapterTypes.Documen
 /**
  * Origin the document, base and src URLs are resolved against; the reserved TLD never resolves.
  */
-const ORIGIN = 'http://document.invalid';
+const ORIGIN = 'https://document.invalid';
 
 /**
  * Prepare an attribute URL as the URL parser does: trim C0 controls and spaces at both ends and

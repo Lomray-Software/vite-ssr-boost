@@ -159,7 +159,7 @@ describe('stripEntryAsync', () => {
   it('should keep async when the base element names a scheme or a host', () => {
     const scripts = '<script src="client.ts" async></script>';
 
-    for (const href of ['http://document.invalid/app/', '//document.invalid/app/']) {
+    for (const href of ['https://document.invalid/app/', '//document.invalid/app/']) {
       const html = `<base href=" ${href}">${scripts}`;
 
       expect(stripEntryAsync(html, '/app/', 'client.ts', '/app/page')).toBe(html);
@@ -193,9 +193,9 @@ describe('stripEntryAsync', () => {
     const scripts = '<script src="client.ts" async></script>';
 
     for (const href of [
-      'ht&#9;tp://document.invalid/app/',
-      'ht\ntp://document.invalid/app/',
-      '\x01http://document.invalid/app/',
+      'ht&#9;tps://document.invalid/app/',
+      'ht\ntps://document.invalid/app/',
+      '\x01https://document.invalid/app/',
       '/\t/document.invalid/app/',
     ]) {
       const html = `<base href="${href}">${scripts}`;
@@ -206,7 +206,7 @@ describe('stripEntryAsync', () => {
 
   it('should keep async on a src whose scheme the URL parser cleans up', () => {
     for (const src of [
-      'ht\ntp://document.invalid/app/client.ts',
+      'ht\ntps://document.invalid/app/client.ts',
       '\x01//document.invalid/app/client.ts',
     ]) {
       const html = `<script src="${src}" async></script>`;
