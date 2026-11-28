@@ -7,7 +7,6 @@ import type { Express, Request } from 'express';
 import type { ViteDevServer } from 'vite';
 import type { IEntrypointOptions, IPrepareRenderOut } from '@adapters/express/entry';
 import type { TRender } from '@adapters/express/render';
-import stripEntryAsync from '@helpers/strip-entry-async';
 import type { TRouteObject } from '@interfaces/route-object';
 import Diagnostics, { isDiagnosticsEnabled, splitHtmlShell } from '@services/diagnostics';
 import type { TExpressHook } from '@services/diagnostics';
@@ -228,6 +227,8 @@ class PrepareServer {
        * Apply Vite transforms and remove async from the entry to preserve plugin preambles.
        */
       const vite = this.getVite()!;
+      // The HTML parser behind the strip is dev tooling, so a production start never loads it.
+      const { default: stripEntryAsync } = await import('@helpers/strip-entry-async');
 
       modifiedHtml = stripEntryAsync(
         await vite.transformIndexHtml(req.originalUrl, this.html, indexFile),
